@@ -57,7 +57,11 @@ func RunSteps(description string, steps ...DeferredStep) bool {
 
 func CommandStep(command *exec.Cmd) DeferredStep {
 	return Step(command.String(), func() (string, error) {
-		return "", command.Run()
+		_, err := command.Output()
+		if exit, ok := err.(*exec.ExitError); ok {
+			err = fmt.Errorf("%s:\n%s", err.Error(), string(exit.Stderr))
+		}
+		return "", err
 	})
 }
 
