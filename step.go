@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 
@@ -67,6 +68,30 @@ func (s DeferredStep) AssignTo(position *string) DeferredStep {
 			r, err := s.f()
 			*position = r
 			return r, err
+		},
+	}
+}
+
+func (s DeferredStep) In(path *string) DeferredStep {
+	return DeferredStep{
+		description: s.description,
+		f: func() (result string, err error) {
+			wd, err := os.Getwd()
+			if err != nil {
+				return "", err
+			}
+			err = os.Chdir(*path)
+			if err != nil {
+				return "", err
+			}
+			defer func() {
+				e := os.Chdir(wd)
+				if err == nil {
+					err = e
+				}
+			}()
+			result, err = s.f()
+			return result, err
 		},
 	}
 }

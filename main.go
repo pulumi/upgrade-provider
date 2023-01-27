@@ -81,7 +81,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			return pullDefault(ctx, path, "origin")
 		}),
 		Step("Upgrade version", func() (string, error) {
-			target, err := getExpectedTarget(ctx, name)
+			target, err = getExpectedTarget(ctx, name)
 			if err == nil {
 				return target.String(), nil
 			}
@@ -135,27 +135,67 @@ func UpgradeProvider(ctx Context, name string) error {
 		)
 	case Forked:
 		var upstreamPath string
+		var previousUpstreamVersion *semver.Version
 		ok = RunSteps("Upgrading Forked Provider",
 			Step("Ensure upstream repo", func() (string, error) {
 				return ensureUpstreamRepo(ctx, goMod.Fork.Old.Path)
 			}).AssignTo(&upstreamPath),
 			Step("Ensure pulumi remote", func() (string, error) {
-				remotes, err := runGitCommand(ctx, upstreamPath, func(b []byte) ([]string, error) {
-					return strings.Split(string(b), "\n"), nil
-				}, "remote")
-				if err != nil {
-					return "", fmt.Errorf("listing remotes: %w", err)
-				}
-				for _, remote := range remotes {
-					if remote == "pulumi" {
-						return "present", nil
+				return ensurePulumiRemote(ctx, strings.TrimPrefix(name, "pulumi-"), upstreamPath)
+			}),
+			CommandStep(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
+			Step("Discover previous upstream version", func() (string, error) {
+				return runGitCommand(ctx, upstreamPath, func(b []byte) (string, error) {
+					lines := strings.Split(string(b), "\n")
+					for _, line := range lines {
+						line = strings.TrimSpace(line)
+						version, err := semver.NewVersion(strings.TrimPrefix(line, "pulumi/upstream-v"))
+						if err != nil {
+							continue
+						}
+						if previousUpstreamVersion == nil || previousUpstreamVersion.LessThan(version) {
+							previousUpstreamVersion = version
+						}
 					}
+					if previousUpstreamVersion == nil {
+						return "", fmt.Errorf("no version found")
+					}
+					return previousUpstreamVersion.String(), nil
+				}, "branch", "--remote", "--list", "pulumi/upstream-v*")
+			}),
+			Step("checkout upstream", func() (string, error) {
+				return runGitCommand(ctx, upstreamPath,
+					func([]byte) (string, error) { return "", nil },
+					"checkout", fmt.Sprintf("pulumi/upstream-v%s", previousUpstreamVersion))
+			}),
+			Step("upstream branch", func() (string, error) {
+				target := "upstream-v" + target.String()
+				branchExists, err := runGitCommand(ctx, upstreamPath, func(b []byte) (bool, error) {
+					lines := strings.Split(string(b), "\n")
+					for _, line := range lines {
+						if strings.TrimSpace(line) == target {
+							return true, nil
+						}
+					}
+					return false, nil
+				}, "branch")
+				if err != nil {
+					return "", err
 				}
-				return runGitCommand(ctx, upstreamPath, func([]byte) (string, error) {
-					return "set", nil
-				}, "remote", "add",
-					fmt.Sprintf("https://github.com/pulumi/terraform-provider-%s.git",
-						strings.TrimPrefix(name, "pulumi-")))
+				if !branchExists {
+					return runGitCommand(ctx, upstreamPath, say("creating "+target),
+						"checkout", "-b", target)
+				}
+				return target + " already exists", nil
+			}),
+			Step("merge upstream branch", func() (string, error) {
+				return runGitCommand(ctx, upstreamPath, say("no conflict"),
+					"merge", "v"+target.String())
+			}),
+			CommandStep(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
+			Step("push upstream", func() (string, error) {
+				return runGitCommand(ctx, upstreamPath, noOp,
+					"push", "pulumi", "upstream-v"+target.String())
 			}),
 		)
 	case "":
@@ -194,6 +234,24 @@ func (rk RepoKind) Shimmed() RepoKind {
 }
 
 var versionSuffix = regexp.MustCompile("/v[2-9]+$")
+
+func ensurePulumiRemote(ctx Context, name, upstreamPath string) (string, error) {
+	remotes, err := runGitCommand(ctx, upstreamPath, func(b []byte) ([]string, error) {
+		return strings.Split(string(b), "\n"), nil
+	}, "remote")
+	if err != nil {
+		return "", fmt.Errorf("listing remotes: %w", err)
+	}
+	for _, remote := range remotes {
+		if remote == "pulumi" {
+			return "'pulumi' already exists", nil
+		}
+	}
+	return runGitCommand(ctx, upstreamPath, func([]byte) (string, error) {
+		return "set to 'pulumi'", nil
+	}, "remote", "add", "pulumi",
+		fmt.Sprintf("https://github.com/pulumi/terraform-provider-%s.git", name))
+}
 
 func checkoutUpgradeBranch(
 	ctx context.Context, path, name string, version *semver.Version,
@@ -358,11 +416,11 @@ func pullDefault(ctx Context, path, remote string) (string, error) {
 	if targetBranch == "" {
 		return "", fmt.Errorf("could not find 'main' or 'master' branch in %#v", branches)
 	}
-	_, err = runGitCommand[struct{}](ctx, path, nil, "checkout", targetBranch)
+	_, err = runGitCommand(ctx, path, noOp, "checkout", targetBranch)
 	if err != nil {
 		return "", fmt.Errorf("checkout out %s: %w", targetBranch, err)
 	}
-	_, err = runGitCommand[struct{}](ctx, path, nil, "pull", remote)
+	_, err = runGitCommand(ctx, path, noOp, "pull", remote)
 	if err != nil {
 		return "", fmt.Errorf("fast-forwarding %s: %w", targetBranch, err)
 	}
@@ -401,6 +459,12 @@ func runGitCommand[T any](
 		return filter(out.Bytes())
 	}
 	return t, cmd.Run()
+}
+func noOp([]byte) (string, error) { return "", nil }
+func say(msg string) func([]byte) (string, error) {
+	return func([]byte) (string, error) {
+		return msg, nil
+	}
 }
 
 func pulumiProviderRepo(ctx Context, name string) (string, error) {
