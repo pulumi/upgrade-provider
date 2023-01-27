@@ -21,6 +21,8 @@ import (
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
+
+	"github.com/pulumi/upgrade-provider/step"
 )
 
 type Context struct {
@@ -73,21 +75,21 @@ func UpgradeProvider(ctx Context, name string) error {
 	var path string
 	var target *semver.Version
 	var goMod *GoMod
-	ok := RunSteps("Discovering Repository",
-		Step("Ensure provider repo", func() (string, error) {
+	ok := step.RunJob("Discovering Repository",
+		step.F("Ensure provider repo", func() (string, error) {
 			return pulumiProviderRepo(ctx, name)
 		}).AssignTo(&path),
-		Step("Set default branch", func() (string, error) {
+		step.F("Set default branch", func() (string, error) {
 			return pullDefault(ctx, "origin")
 		}).In(&path),
-		Step("Upgrade version", func() (string, error) {
+		step.F("Upgrade version", func() (string, error) {
 			target, err = getExpectedTarget(ctx, name)
 			if err == nil {
 				return target.String(), nil
 			}
 			return "", err
 		}),
-		Step("Repo kind", func() (string, error) {
+		step.F("Repo kind", func() (string, error) {
 			goMod, err = repoKind(ctx, path, strings.TrimPrefix(name, "pulumi-"))
 			if err != nil {
 				return "", err
@@ -98,28 +100,28 @@ func UpgradeProvider(ctx Context, name string) error {
 	if !ok {
 		return ErrHandled
 	}
-	cmdMake := func(target string) DeferredStep {
+	cmdMake := func(target string) step.Step {
 		cmd := exec.CommandContext(ctx, "make", target)
-		return CommandStep(cmd)
+		return step.Cmd(cmd)
 	}
-	cmdGitCommit := func(message string) DeferredStep {
+	cmdGitCommit := func(message string) step.Step {
 		cmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
-		return CommandStep(cmd)
+		return step.Cmd(cmd)
 	}
 	var forkedProviderUpstreamCommit string
 	switch goMod.Kind {
 	case Forked:
 		var upstreamPath string
 		var previousUpstreamVersion *semver.Version
-		ok = RunSteps("Upgrading Forked Provider",
-			Step("Ensure upstream repo", func() (string, error) {
+		ok = step.RunJob("Upgrading Forked Provider",
+			step.F("Ensure upstream repo", func() (string, error) {
 				return ensureUpstreamRepo(ctx, goMod.Fork.Old.Path)
 			}).AssignTo(&upstreamPath),
-			Step("Ensure pulumi remote", func() (string, error) {
+			step.F("Ensure pulumi remote", func() (string, error) {
 				return ensurePulumiRemote(ctx, strings.TrimPrefix(name, "pulumi-"))
 			}).In(&upstreamPath),
-			CommandStep(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
-			Step("Discover previous upstream version", func() (string, error) {
+			step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
+			step.F("Discover previous upstream version", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					lines := strings.Split(string(b), "\n")
 					for _, line := range lines {
@@ -138,12 +140,12 @@ func UpgradeProvider(ctx Context, name string) error {
 					return previousUpstreamVersion.String(), nil
 				}, "branch", "--remote", "--list", "pulumi/upstream-v*")
 			}).In(&upstreamPath),
-			Step("checkout upstream", func() (string, error) {
+			step.F("checkout upstream", func() (string, error) {
 				return runGitCommand(ctx,
 					func([]byte) (string, error) { return "", nil },
 					"checkout", fmt.Sprintf("pulumi/upstream-v%s", previousUpstreamVersion))
 			}).In(&upstreamPath),
-			Step("upstream branch", func() (string, error) {
+			step.F("upstream branch", func() (string, error) {
 				target := "upstream-v" + target.String()
 				branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
 					lines := strings.Split(string(b), "\n")
@@ -163,16 +165,16 @@ func UpgradeProvider(ctx Context, name string) error {
 				}
 				return target + " already exists", nil
 			}).In(&upstreamPath),
-			Step("merge upstream branch", func() (string, error) {
+			step.F("merge upstream branch", func() (string, error) {
 				return runGitCommand(ctx, say("no conflict"),
 					"merge", "v"+target.String())
 			}).In(&upstreamPath),
-			CommandStep(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
-			Step("push upstream", func() (string, error) {
+			step.Cmd(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
+			step.F("push upstream", func() (string, error) {
 				return runGitCommand(ctx, noOp,
 					"push", "pulumi", "upstream-v"+target.String())
 			}).In(&upstreamPath),
-			Step("get head commit", func() (string, error) {
+			step.F("get head commit", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					return strings.TrimSpace(string(b)), nil
 				}, "rev-parse", "HEAD")
@@ -181,34 +183,34 @@ func UpgradeProvider(ctx Context, name string) error {
 		fallthrough
 	case Plain:
 		providerPath := filepath.Join(path, "provider")
-		steps := []DeferredStep{
+		steps := []step.Step{
 			checkoutUpgradeBranch(ctx, path, strings.TrimPrefix(name, "pulumi-"), target),
-			CommandStep(exec.CommandContext(ctx,
+			step.Cmd(exec.CommandContext(ctx,
 				"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
-			CommandStep(exec.CommandContext(ctx,
+			step.Cmd(exec.CommandContext(ctx,
 				"go", "get", goMod.Upstream.Path+"@v"+target.String())).In(&providerPath),
 		}
 		if goMod.Kind == Forked {
 			contract.Assert(forkedProviderUpstreamCommit != "")
-			steps = append(steps, CommandStep(exec.CommandContext(ctx,
+			steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 				"go", "mod", "edit", "-replace",
 				goMod.Fork.Old.Path+"="+
 					goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit)).In(&providerPath))
 		}
-		ok = RunSteps("Upgrading Provider",
+		ok = step.RunJob("Upgrading Provider",
 			append(steps,
-				CommandStep(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
+				step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
 				cmdMake("tfgen").In(&path),
-				CommandStep(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
+				step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
 				cmdGitCommit("make tfgen").In(&path),
 				cmdMake("build_sdks").In(&path),
-				CommandStep(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
+				step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
 				cmdGitCommit("make build_sdks").In(&path),
 			)...)
 	case "":
 		panic("Missing repo kind")
 	default:
-		RunSteps("Cannot upgrade " + string(goMod.Kind) + " provider")
+		step.RunJob("Cannot upgrade " + string(goMod.Kind) + " provider")
 		ok = false
 	}
 	if !ok {
@@ -283,9 +285,9 @@ func ensureBranchCheckedOut(ctx Context, branchName string) (string, error) {
 
 func checkoutUpgradeBranch(
 	ctx Context, path, name string, version *semver.Version,
-) DeferredStep {
+) step.Step {
 	branch := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", name, version)
-	return Step("ensure branch", func() (string, error) {
+	return step.F("ensure branch", func() (string, error) {
 		return ensureBranchCheckedOut(ctx, branch)
 	}).In(&path)
 }
