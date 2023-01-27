@@ -100,10 +100,6 @@ func UpgradeProvider(ctx Context, name string) error {
 	if !ok {
 		return ErrHandled
 	}
-	cmdMake := func(target string) step.Step {
-		cmd := exec.CommandContext(ctx, "make", target)
-		return step.Cmd(cmd)
-	}
 	cmdGitCommit := func(message string) step.Step {
 		cmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
 		return step.Cmd(cmd)
@@ -114,14 +110,14 @@ func UpgradeProvider(ctx Context, name string) error {
 		var upstreamPath string
 		var previousUpstreamVersion *semver.Version
 		ok = step.RunJob("Upgrading Forked Provider",
-			step.F("Ensure upstream repo", func() (string, error) {
+			step.F("ensure upstream repo", func() (string, error) {
 				return ensureUpstreamRepo(ctx, goMod.Fork.Old.Path)
 			}).AssignTo(&upstreamPath),
-			step.F("Ensure pulumi remote", func() (string, error) {
+			step.F("ensure pulumi remote", func() (string, error) {
 				return ensurePulumiRemote(ctx, strings.TrimPrefix(name, "pulumi-"))
 			}).In(&upstreamPath),
 			step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
-			step.F("Discover previous upstream version", func() (string, error) {
+			step.F("discover previous upstream version", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					lines := strings.Split(string(b), "\n")
 					for _, line := range lines {
@@ -180,6 +176,9 @@ func UpgradeProvider(ctx Context, name string) error {
 				}, "rev-parse", "HEAD")
 			}).AssignTo(&forkedProviderUpstreamCommit).In(&upstreamPath),
 		)
+		if !ok {
+			return ErrHandled
+		}
 		fallthrough
 	case Plain:
 		providerPath := filepath.Join(path, "provider")
@@ -200,10 +199,11 @@ func UpgradeProvider(ctx Context, name string) error {
 		ok = step.RunJob("Upgrading Provider",
 			append(steps,
 				step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
-				cmdMake("tfgen").In(&path),
+				step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
+				step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&path),
 				step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
 				cmdGitCommit("make tfgen").In(&path),
-				cmdMake("build_sdks").In(&path),
+				step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
 				step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
 				cmdGitCommit("make build_sdks").In(&path),
 			)...)
@@ -494,6 +494,15 @@ func ensureUpstreamRepo(ctx Context, repoPath string) (string, error) {
 	// Strip version
 	if match := versionSuffix.FindStringIndex(repoPath); match != nil {
 		repoPath = repoPath[:match[0]]
+	}
+
+	if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
+		name := strings.TrimPrefix(repo, "terraform-provider-")
+		org, ok := ProviderOrgs[name]
+		if !ok {
+			return "", fmt.Errorf("terraform-providers based path: missing remap for '%s'", name)
+		}
+		repoPath = prefix + "/" + org + "/" + repo
 	}
 
 	// go from github.com/org/repo to $GOPATH/src/github.com/org
