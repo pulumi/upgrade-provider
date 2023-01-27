@@ -74,12 +74,12 @@ func UpgradeProvider(ctx Context, name string) error {
 	var target *semver.Version
 	var goMod *GoMod
 	ok := RunSteps("Discovering Repository",
-		Step("Getting Repo", func() (string, error) {
+		Step("Ensure provider repo", func() (string, error) {
 			return pulumiProviderRepo(ctx, name)
 		}).AssignTo(&path),
 		Step("Set default branch", func() (string, error) {
-			return pullDefault(ctx, path, "origin")
-		}),
+			return pullDefault(ctx, "origin")
+		}).In(&path),
 		Step("Upgrade version", func() (string, error) {
 			target, err = getExpectedTarget(ctx, name)
 			if err == nil {
@@ -116,11 +116,11 @@ func UpgradeProvider(ctx Context, name string) error {
 				return ensureUpstreamRepo(ctx, goMod.Fork.Old.Path)
 			}).AssignTo(&upstreamPath),
 			Step("Ensure pulumi remote", func() (string, error) {
-				return ensurePulumiRemote(ctx, strings.TrimPrefix(name, "pulumi-"), upstreamPath)
-			}),
+				return ensurePulumiRemote(ctx, strings.TrimPrefix(name, "pulumi-"))
+			}).In(&upstreamPath),
 			CommandStep(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
 			Step("Discover previous upstream version", func() (string, error) {
-				return runGitCommand(ctx, upstreamPath, func(b []byte) (string, error) {
+				return runGitCommand(ctx, func(b []byte) (string, error) {
 					lines := strings.Split(string(b), "\n")
 					for _, line := range lines {
 						line = strings.TrimSpace(line)
@@ -137,15 +137,15 @@ func UpgradeProvider(ctx Context, name string) error {
 					}
 					return previousUpstreamVersion.String(), nil
 				}, "branch", "--remote", "--list", "pulumi/upstream-v*")
-			}),
+			}).In(&upstreamPath),
 			Step("checkout upstream", func() (string, error) {
-				return runGitCommand(ctx, upstreamPath,
+				return runGitCommand(ctx,
 					func([]byte) (string, error) { return "", nil },
 					"checkout", fmt.Sprintf("pulumi/upstream-v%s", previousUpstreamVersion))
-			}),
+			}).In(&upstreamPath),
 			Step("upstream branch", func() (string, error) {
 				target := "upstream-v" + target.String()
-				branchExists, err := runGitCommand(ctx, upstreamPath, func(b []byte) (bool, error) {
+				branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
 					lines := strings.Split(string(b), "\n")
 					for _, line := range lines {
 						if strings.TrimSpace(line) == target {
@@ -158,25 +158,25 @@ func UpgradeProvider(ctx Context, name string) error {
 					return "", err
 				}
 				if !branchExists {
-					return runGitCommand(ctx, upstreamPath, say("creating "+target),
+					return runGitCommand(ctx, say("creating "+target),
 						"checkout", "-b", target)
 				}
 				return target + " already exists", nil
-			}),
+			}).In(&upstreamPath),
 			Step("merge upstream branch", func() (string, error) {
-				return runGitCommand(ctx, upstreamPath, say("no conflict"),
+				return runGitCommand(ctx, say("no conflict"),
 					"merge", "v"+target.String())
-			}),
+			}).In(&upstreamPath),
 			CommandStep(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
 			Step("push upstream", func() (string, error) {
-				return runGitCommand(ctx, upstreamPath, noOp,
+				return runGitCommand(ctx, noOp,
 					"push", "pulumi", "upstream-v"+target.String())
-			}),
+			}).In(&upstreamPath),
 			Step("get head commit", func() (string, error) {
-				return runGitCommand(ctx, upstreamPath, func(b []byte) (string, error) {
+				return runGitCommand(ctx, func(b []byte) (string, error) {
 					return strings.TrimSpace(string(b)), nil
 				}, "rev-parse", "HEAD")
-			}).AssignTo(&forkedProviderUpstreamCommit),
+			}).AssignTo(&forkedProviderUpstreamCommit).In(&upstreamPath),
 		)
 		fallthrough
 	case Plain:
@@ -242,8 +242,8 @@ func (rk RepoKind) Shimmed() RepoKind {
 
 var versionSuffix = regexp.MustCompile("/v[2-9]+$")
 
-func ensurePulumiRemote(ctx Context, name, upstreamPath string) (string, error) {
-	remotes, err := runGitCommand(ctx, upstreamPath, func(b []byte) ([]string, error) {
+func ensurePulumiRemote(ctx Context, name string) (string, error) {
+	remotes, err := runGitCommand(ctx, func(b []byte) ([]string, error) {
 		return strings.Split(string(b), "\n"), nil
 	}, "remote")
 	if err != nil {
@@ -254,14 +254,14 @@ func ensurePulumiRemote(ctx Context, name, upstreamPath string) (string, error) 
 			return "'pulumi' already exists", nil
 		}
 	}
-	return runGitCommand(ctx, upstreamPath, func([]byte) (string, error) {
+	return runGitCommand(ctx, func([]byte) (string, error) {
 		return "set to 'pulumi'", nil
 	}, "remote", "add", "pulumi",
 		fmt.Sprintf("https://github.com/pulumi/terraform-provider-%s.git", name))
 }
 
 func ensureBranchCheckedOut(ctx Context, branchName string) (string, error) {
-	branchExists, err := runGitCommand(ctx, "", func(b []byte) (bool, error) {
+	branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
 		lines := strings.Split(string(b), "\n")
 		for _, line := range lines {
 			if strings.TrimSpace(line) == branchName {
@@ -274,10 +274,11 @@ func ensureBranchCheckedOut(ctx Context, branchName string) (string, error) {
 		return "", err
 	}
 	if !branchExists {
-		return runGitCommand(ctx, "", say("creating "+branchName),
+		return runGitCommand(ctx, say("creating "+branchName),
 			"checkout", "-b", branchName)
 	}
-	return branchName + " already exists", nil
+	return runGitCommand(ctx, say("switching to "+branchName),
+		"checkout", branchName)
 }
 
 func checkoutUpgradeBranch(
@@ -411,8 +412,8 @@ func getExpectedTarget(ctx context.Context, name string) (*semver.Version, error
 	return versions[0], nil
 }
 
-func pullDefault(ctx Context, path, remote string) (string, error) {
-	branches, err := runGitCommand(ctx, path, func(out []byte) ([]string, error) {
+func pullDefault(ctx Context, remote string) (string, error) {
+	branches, err := runGitCommand(ctx, func(out []byte) ([]string, error) {
 		var branches []string
 		lines := strings.Split(string(out), "\n")
 		for _, line := range lines {
@@ -443,11 +444,11 @@ func pullDefault(ctx Context, path, remote string) (string, error) {
 	if targetBranch == "" {
 		return "", fmt.Errorf("could not find 'main' or 'master' branch in %#v", branches)
 	}
-	_, err = runGitCommand(ctx, path, noOp, "checkout", targetBranch)
+	_, err = runGitCommand(ctx, noOp, "checkout", targetBranch)
 	if err != nil {
 		return "", fmt.Errorf("checkout out %s: %w", targetBranch, err)
 	}
-	_, err = runGitCommand(ctx, path, noOp, "pull", remote)
+	_, err = runGitCommand(ctx, noOp, "pull", remote)
 	if err != nil {
 		return "", fmt.Errorf("fast-forwarding %s: %w", targetBranch, err)
 	}
@@ -455,25 +456,9 @@ func pullDefault(ctx Context, path, remote string) (string, error) {
 }
 
 func runGitCommand[T any](
-	ctx context.Context, wd string, filter func([]byte) (T, error), args ...string,
+	ctx context.Context, filter func([]byte) (T, error), args ...string,
 ) (result T, err error) {
 	var t T
-	if wd != "" {
-		owd, err := os.Getwd()
-		if err != nil {
-			return t, err
-		}
-		defer func() {
-			e := os.Chdir(owd)
-			if err == nil {
-				err = e
-			}
-		}()
-		err = os.Chdir(wd)
-		if err != nil {
-			return t, err
-		}
-	}
 
 	cmd := exec.CommandContext(ctx, "git", args...)
 	if filter != nil {
@@ -530,7 +515,8 @@ func ensureUpstreamRepo(ctx Context, repoPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("downloading %s: %w", targetURL, err)
 	}
-	return runGitCommand(ctx, expectedLocation, func(out []byte) (string, error) {
-		return expectedLocation, nil
-	}, "status", "--short")
+	// Check that we are in a git repo
+	check := exec.CommandContext(ctx, "git", "status", "--short")
+	check.Dir = expectedLocation
+	return expectedLocation, check.Run()
 }
