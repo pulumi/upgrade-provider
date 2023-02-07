@@ -181,14 +181,38 @@ func UpgradeProvider(ctx Context, name string) error {
 		}
 		fallthrough
 	case Plain:
+		var targetSHA string
 		providerPath := filepath.Join(path, "provider")
 		steps := []step.Step{
 			checkoutUpgradeBranch(ctx, path, strings.TrimPrefix(name, "pulumi-"), target),
 			step.Cmd(exec.CommandContext(ctx,
 				"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
-			step.Cmd(exec.CommandContext(ctx,
-				"go", "get", goMod.Upstream.Path+"@v"+target.String())).In(&providerPath),
 		}
+		if goMod.Kind != Forked {
+			// We have an upstream we don't control, so we need to git it's SHA
+			steps = append(steps,
+				step.F("Lookup Tag SHA", func() (string, error) {
+					return runGitCommand(ctx, func(b []byte) (string, error) {
+						for _, line := range strings.Split(string(b), "\n") {
+							parts := strings.Split(line, "\t")
+							contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values")
+							if parts[1] == "refs/tags/v"+target.String() {
+								return parts[0], nil
+							}
+						}
+						return "", fmt.Errorf("could not find SHA for tag '%s'", target.Original())
+					}, "ls-remote", "--tags", "https://"+modPathWithoutVersion(goMod.Upstream.Path))
+				}).AssignTo(&targetSHA))
+		}
+
+		steps = append(steps, step.Computed(func() step.Step {
+			target := "v" + target.String()
+			if targetSHA != "" {
+				target = targetSHA
+			}
+			return step.Cmd(exec.CommandContext(ctx,
+				"go", "get", goMod.Upstream.Path+"@"+target))
+		}).In(&providerPath))
 		if goMod.Kind == Forked {
 			contract.Assert(forkedProviderUpstreamCommit != "")
 			steps = append(steps, step.Cmd(exec.CommandContext(ctx,
@@ -298,35 +322,68 @@ type GoMod struct {
 	Fork     *modfile.Replace
 }
 
+func modPathWithoutVersion(path string) string {
+	if match := versionSuffix.FindStringIndex(path); match != nil {
+		return path[:match[0]]
+	}
+	return path
+}
+
 func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 	file := filepath.Join(path, "provider", "go.mod")
+
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
+
 	goMod, err := modfile.Parse(file, data, nil)
 	if err != nil {
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
 	tfProviderRepoName := "terraform-provider-" + providerName
 
-	// Find the name of our upstream dependency
-	var upstream *modfile.Require
-	for _, mod := range goMod.Require {
-		path := mod.Mod.Path
-		pathWithoutVersion := path
-		if match := versionSuffix.FindStringIndex(path); match != nil {
-			pathWithoutVersion = path[:match[0]]
+	getUpstream := func(file *modfile.File) (*modfile.Require, error) {
+		// Find the name of our upstream dependency
+		for _, mod := range file.Require {
+			pathWithoutVersion := modPathWithoutVersion(mod.Mod.Path)
+			if strings.HasSuffix(pathWithoutVersion, tfProviderRepoName) {
+				return mod, nil
+			}
 		}
-		if strings.HasSuffix(pathWithoutVersion, tfProviderRepoName) {
-			upstream = mod
-			break
+		return nil, fmt.Errorf("could not find upstream '%s' in go.mod", tfProviderRepoName)
+	}
+
+	var upstream *modfile.Require
+
+	shimDir := filepath.Join(path, "provider", "shim")
+	_, err = os.Stat(shimDir)
+	var shimmed bool
+	if err == nil {
+		shimmed = true
+		modPath := filepath.Join(shimDir, "go.mod")
+		data, err := os.ReadFile(modPath)
+		if err != nil {
+			return nil, err
+		}
+		shimMod, err := modfile.Parse(modPath, data, nil)
+		if err != nil {
+			return nil, fmt.Errorf("shim/go.mod: %w", err)
+		}
+		upstream, err = getUpstream(shimMod)
+		if err != nil {
+			return nil, fmt.Errorf("shim/go.mod: %w", err)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("unexpected error reading '%s': %w", shimDir, err)
+	} else {
+		upstream, err = getUpstream(goMod)
+		if err != nil {
+			return nil, fmt.Errorf("go.mod: %w", err)
 		}
 	}
 
-	if upstream == nil {
-		return nil, fmt.Errorf("could not find upsteam in go.mod")
-	}
+	contract.Assertf(upstream != nil, "upstream cannot be nil")
 
 	// If we find a replace that points to a pulumi hosted repo, that indicates a fork.
 	var fork *modfile.Replace
@@ -359,12 +416,8 @@ func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 		out.Kind = Forked
 	}
 
-	shimDir := filepath.Join(path, "shim")
-	_, err = os.Stat(shimDir)
-	if err == nil {
+	if shimmed {
 		out.Kind = out.Kind.Shimmed()
-	} else if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("unexpected error reading '%s': %w", shimDir, err)
 	}
 
 	return &out, nil
