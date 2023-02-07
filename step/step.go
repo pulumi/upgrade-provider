@@ -15,12 +15,18 @@ import (
 
 // A Step represents an atomic (pass/fail) piece of computation that should be displayed
 // to the user.
-type Step struct {
+type Step interface {
+	In(path *string) Step
+	AssignTo(position *string) Step
+	run() bool
+}
+
+type step struct {
 	description string
 	f           func() (string, error)
 }
 
-func (ds Step) run() bool {
+func (ds step) run() bool {
 	options := []string{"|", "/", "-", "\\", "-"}
 	for i, o := range options {
 		options[i] = o + " " + ds.description
@@ -44,10 +50,10 @@ func (ds Step) run() bool {
 }
 
 // Create a step based around a function.
-func F(description string, step func() (string, error)) Step {
-	return Step{
+func F(description string, action func() (string, error)) Step {
+	return step{
 		description: description,
-		f:           step,
+		f:           action,
 	}
 }
 
@@ -77,8 +83,8 @@ func Cmd(command *exec.Cmd) Step {
 }
 
 // Assign the output value of the step a variable.
-func (s Step) AssignTo(position *string) Step {
-	return Step{
+func (s step) AssignTo(position *string) Step {
+	return step{
 		description: s.description,
 		f: func() (string, error) {
 			r, err := s.f()
@@ -89,8 +95,8 @@ func (s Step) AssignTo(position *string) Step {
 }
 
 // Run the step in the specified directory.
-func (s Step) In(path *string) Step {
-	return Step{
+func (s step) In(path *string) Step {
+	return step{
 		description: s.description,
 		f: func() (result string, err error) {
 			wd, err := os.Getwd()
@@ -111,4 +117,32 @@ func (s Step) In(path *string) Step {
 			return result, err
 		},
 	}
+}
+
+// A Step that can't be fully computed until it is run. This allows constructing a Step
+// that depends on information gathered in other steps.
+func Computed(step func() Step) Step {
+	return unknownStep{f: step}
+}
+
+type unknownStep struct {
+	f func() Step
+}
+
+func (us unknownStep) In(path *string) Step {
+	return unknownStep{
+		f: func() Step {
+			return us.f().In(path)
+		},
+	}
+}
+func (us unknownStep) AssignTo(position *string) Step {
+	return unknownStep{
+		f: func() Step {
+			return us.f().AssignTo(position)
+		},
+	}
+}
+func (us unknownStep) run() bool {
+	return us.f().run()
 }
