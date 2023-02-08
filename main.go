@@ -181,8 +181,11 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 	var targetSHA string
 	providerPath := filepath.Join(path, "provider")
+	branchName := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", name, target)
 	steps := []step.Step{
-		checkoutUpgradeBranch(ctx, path, strings.TrimPrefix(name, "pulumi-"), target),
+		step.F("ensure branch", func() (string, error) {
+			return ensureBranchCheckedOut(ctx, branchName)
+		}).In(&path),
 		step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
 	}
@@ -242,6 +245,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
 			cmdGitCommit("make build_sdks").In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path),
 		)...)
 	if !ok {
 		return ErrHandled
@@ -333,15 +337,6 @@ func ensureBranchCheckedOut(ctx Context, branchName string) (string, error) {
 	}
 	return runGitCommand(ctx, say("switching to "+branchName),
 		"checkout", branchName)
-}
-
-func checkoutUpgradeBranch(
-	ctx Context, path, name string, version *semver.Version,
-) step.Step {
-	branch := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", name, version)
-	return step.F("ensure branch", func() (string, error) {
-		return ensureBranchCheckedOut(ctx, branch)
-	}).In(&path)
 }
 
 type GoMod struct {
