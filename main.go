@@ -75,7 +75,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	var path string
 	var target *semver.Version
 	var goMod *GoMod
-	ok := step.RunJob("Discovering Repository",
+	ok := step.Run(step.Combined("Discovering Repository",
 		step.F("Ensure provider repo", func() (string, error) {
 			return pulumiProviderRepo(ctx, name)
 		}).AssignTo(&path),
@@ -96,19 +96,16 @@ func UpgradeProvider(ctx Context, name string) error {
 			}
 			return string(goMod.Kind), nil
 		}),
-	)
+	))
 	if !ok {
 		return ErrHandled
 	}
-	cmdGitCommit := func(message string) step.Step {
-		cmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
-		return step.Cmd(cmd)
-	}
+
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() {
 		var upstreamPath string
 		var previousUpstreamVersion *semver.Version
-		ok = step.RunJob("Upgrading Forked Provider",
+		ok = step.Run(step.Combined("Upgrading Forked Provider",
 			step.F("ensure upstream repo", func() (string, error) {
 				return ensureUpstreamRepo(ctx, goMod.Fork.Old.Path)
 			}).AssignTo(&upstreamPath),
@@ -174,14 +171,14 @@ func UpgradeProvider(ctx Context, name string) error {
 					return strings.TrimSpace(string(b)), nil
 				}, "rev-parse", "HEAD")
 			}).AssignTo(&forkedProviderUpstreamCommit).In(&upstreamPath),
-		)
+		))
 		if !ok {
 			return ErrHandled
 		}
 	}
 	var targetSHA string
 	providerPath := filepath.Join(path, "provider")
-	branchName := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", name, target)
+	branchName := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", strings.TrimPrefix(name, "pulumi-"), target)
 	steps := []step.Step{
 		step.F("ensure branch", func() (string, error) {
 			return ensureBranchCheckedOut(ctx, branchName)
@@ -235,18 +232,18 @@ func UpgradeProvider(ctx Context, name string) error {
 			"go", "mod", "tidy")).In(&providerPath))
 	}
 
-	ok = step.RunJob("Upgrading Provider",
+	ok = step.Run(step.Combined("Upgrading Provider",
 		append(steps,
 			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
 			step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
 			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-			cmdGitCommit("make tfgen").In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-			cmdGitCommit("make build_sdks").In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path),
-		)...)
+		)...))
 	if !ok {
 		return ErrHandled
 	}
