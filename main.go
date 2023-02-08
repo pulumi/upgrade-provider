@@ -76,9 +76,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	var target *semver.Version
 	var goMod *GoMod
 	ok := step.Run(step.Combined("Discovering Repository",
-		step.F("Ensure provider repo", func() (string, error) {
-			return pulumiProviderRepo(ctx, name)
-		}).AssignTo(&path),
+		pulumiProviderRepos(ctx, name).AssignTo(&path),
 		step.F("Set default branch", func() (string, error) {
 			return pullDefault(ctx, "origin")
 		}).In(&path),
@@ -106,9 +104,7 @@ func UpgradeProvider(ctx Context, name string) error {
 		var upstreamPath string
 		var previousUpstreamVersion *semver.Version
 		ok = step.Run(step.Combined("Upgrading Forked Provider",
-			step.F("ensure upstream repo", func() (string, error) {
-				return ensureUpstreamRepo(ctx, goMod.Fork.Old.Path)
-			}).AssignTo(&upstreamPath),
+			ensureUpstreamRepo(ctx, goMod.Fork.Old.Path).AssignTo(&upstreamPath),
 			step.F("ensure pulumi remote", func() (string, error) {
 				return ensurePulumiRemote(ctx, strings.TrimPrefix(name, "pulumi-"))
 			}).In(&upstreamPath),
@@ -553,54 +549,60 @@ func say(msg string) func([]byte) (string, error) {
 		return msg, nil
 	}
 }
-
-func pulumiProviderRepo(ctx Context, name string) (string, error) {
-	return ensureUpstreamRepo(ctx, path.Join("github.com", "pulumi", name))
-}
-
 func downloadRepo(ctx Context, url, dst string) error {
 	cmd := exec.CommandContext(ctx, "git", "clone", url, dst)
 	return cmd.Run()
 }
 
-func ensureUpstreamRepo(ctx Context, repoPath string) (string, error) {
-	// Strip version
-	if match := versionSuffix.FindStringIndex(repoPath); match != nil {
-		repoPath = repoPath[:match[0]]
-	}
+func pulumiProviderRepos(ctx Context, name string) step.Step {
+	return ensureUpstreamRepo(ctx, path.Join("github.com", "pulumi", name))
+}
 
-	if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
-		name := strings.TrimPrefix(repo, "terraform-provider-")
-		org, ok := ProviderOrgs[name]
-		if !ok {
-			return "", fmt.Errorf("terraform-providers based path: missing remap for '%s'", name)
-		}
-		repoPath = prefix + "/" + org + "/" + repo
-	}
+func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
+	var expectedLocation string
+	var repoExists bool
+	return step.Combined("Ensure '"+repoPath+"'",
+		step.F("Expected Location", func() (string, error) {
+			// Strip version
+			if match := versionSuffix.FindStringIndex(repoPath); match != nil {
+				repoPath = repoPath[:match[0]]
+			}
 
-	// go from github.com/org/repo to $GOPATH/src/github.com/org
-	expectedLocation := filepath.Join(strings.Split(repoPath, "/")...)
-	expectedLocation = filepath.Join(ctx.GoPath, "src", expectedLocation)
-	if info, err := os.Stat(expectedLocation); err == nil {
-		if !info.IsDir() {
-			return "", fmt.Errorf("'%s' not a directory", expectedLocation)
-		}
-		return expectedLocation, nil
-	}
+			if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
+				name := strings.TrimPrefix(repo, "terraform-provider-")
+				org, ok := ProviderOrgs[name]
+				if !ok {
+					return "", fmt.Errorf("terraform-providers based path: missing remap for '%s'", name)
+				}
+				repoPath = prefix + "/" + org + "/" + repo
+			}
 
-	targetDir := filepath.Dir(expectedLocation)
-	err := os.MkdirAll(targetDir, 0700)
-	if err != nil && !os.IsExist(err) {
-		return "", err
-	}
+			// go from github.com/org/repo to $GOPATH/src/github.com/org
+			expectedLocation = filepath.Join(strings.Split(repoPath, "/")...)
+			expectedLocation = filepath.Join(ctx.GoPath, "src", expectedLocation)
+			if info, err := os.Stat(expectedLocation); err == nil {
+				if !info.IsDir() {
+					return "", fmt.Errorf("'%s' not a directory", expectedLocation)
+				}
+				repoExists = true
+			}
+			return expectedLocation, nil
+		}),
+		step.F("Downloading", func() (string, error) {
+			if repoExists {
+				return "skipped", nil
+			}
+			targetDir := filepath.Dir(expectedLocation)
+			err := os.MkdirAll(targetDir, 0700)
+			if err != nil && !os.IsExist(err) {
+				return "", err
+			}
 
-	targetURL := fmt.Sprintf("https://%s.git", repoPath)
-	err = downloadRepo(ctx, targetURL, expectedLocation)
-	if err != nil {
-		return "", fmt.Errorf("downloading %s: %w", targetURL, err)
-	}
-	// Check that we are in a git repo
-	check := exec.CommandContext(ctx, "git", "status", "--short")
-	check.Dir = expectedLocation
-	return expectedLocation, check.Run()
+			targetURL := fmt.Sprintf("https://%s.git", repoPath)
+			return "done", downloadRepo(ctx, targetURL, expectedLocation)
+		}),
+		step.F("Validating", func() (string, error) {
+			return expectedLocation, exec.CommandContext(ctx, "git", "status", "--short").Run()
+		}).In(&expectedLocation),
+	)
 }
