@@ -105,8 +105,7 @@ func UpgradeProvider(ctx Context, name string) error {
 		return step.Cmd(cmd)
 	}
 	var forkedProviderUpstreamCommit string
-	switch goMod.Kind {
-	case Forked:
+	if goMod.Kind.IsForked() {
 		var upstreamPath string
 		var previousUpstreamVersion *semver.Version
 		ok = step.RunJob("Upgrading Forked Provider",
@@ -179,64 +178,71 @@ func UpgradeProvider(ctx Context, name string) error {
 		if !ok {
 			return ErrHandled
 		}
-		fallthrough
-	case Plain:
-		var targetSHA string
-		providerPath := filepath.Join(path, "provider")
-		steps := []step.Step{
-			checkoutUpgradeBranch(ctx, path, strings.TrimPrefix(name, "pulumi-"), target),
-			step.Cmd(exec.CommandContext(ctx,
-				"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
-		}
-		if goMod.Kind != Forked {
-			// We have an upstream we don't control, so we need to git it's SHA
-			steps = append(steps,
-				step.F("Lookup Tag SHA", func() (string, error) {
-					return runGitCommand(ctx, func(b []byte) (string, error) {
-						for _, line := range strings.Split(string(b), "\n") {
-							parts := strings.Split(line, "\t")
-							contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values")
-							if parts[1] == "refs/tags/v"+target.String() {
-								return parts[0], nil
-							}
-						}
-						return "", fmt.Errorf("could not find SHA for tag '%s'", target.Original())
-					}, "ls-remote", "--tags", "https://"+modPathWithoutVersion(goMod.Upstream.Path))
-				}).AssignTo(&targetSHA))
-		}
-
-		steps = append(steps, step.Computed(func() step.Step {
-			target := "v" + target.String()
-			if targetSHA != "" {
-				target = targetSHA
-			}
-			return step.Cmd(exec.CommandContext(ctx,
-				"go", "get", goMod.Upstream.Path+"@"+target))
-		}).In(&providerPath))
-		if goMod.Kind == Forked {
-			contract.Assert(forkedProviderUpstreamCommit != "")
-			steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-				"go", "mod", "edit", "-replace",
-				goMod.Fork.Old.Path+"="+
-					goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit)).In(&providerPath))
-		}
-		ok = step.RunJob("Upgrading Provider",
-			append(steps,
-				step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
-				step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
-				step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&path),
-				step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-				cmdGitCommit("make tfgen").In(&path),
-				step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
-				step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-				cmdGitCommit("make build_sdks").In(&path),
-			)...)
-	case "":
-		panic("Missing repo kind")
-	default:
-		step.RunJob("Cannot upgrade " + string(goMod.Kind) + " provider")
-		ok = false
 	}
+	var targetSHA string
+	providerPath := filepath.Join(path, "provider")
+	steps := []step.Step{
+		checkoutUpgradeBranch(ctx, path, strings.TrimPrefix(name, "pulumi-"), target),
+		step.Cmd(exec.CommandContext(ctx,
+			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
+	}
+	if !goMod.Kind.IsForked() {
+		// We have an upstream we don't control, so we need to git it's SHA
+		steps = append(steps,
+			step.F("Lookup Tag SHA", func() (string, error) {
+				return runGitCommand(ctx, func(b []byte) (string, error) {
+					for _, line := range strings.Split(string(b), "\n") {
+						parts := strings.Split(line, "\t")
+						contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values")
+						if parts[1] == "refs/tags/v"+target.String() {
+							return parts[0], nil
+						}
+					}
+					return "", fmt.Errorf("could not find SHA for tag '%s'", target.Original())
+				}, "ls-remote", "--tags", "https://"+modPathWithoutVersion(goMod.Upstream.Path))
+			}).AssignTo(&targetSHA))
+	}
+
+	// If we have a shimmed provider, we run the upstream update in the shim
+	// directory.
+	goModDir := providerPath
+	if goMod.Kind.IsShimmed() {
+		goModDir = filepath.Join(providerPath, "shim")
+	}
+	steps = append(steps, step.Computed(func() step.Step {
+		target := "v" + target.String()
+		if targetSHA != "" {
+			target = targetSHA
+		}
+		return step.Cmd(exec.CommandContext(ctx,
+			"go", "get", goMod.Upstream.Path+"@"+target))
+	}).In(&goModDir))
+
+	if goMod.Kind.IsForked() {
+		contract.Assert(forkedProviderUpstreamCommit != "")
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "mod", "edit", "-replace",
+			goMod.Fork.Old.Path+"="+
+				goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit)).In(&goModDir))
+	}
+
+	if goMod.Kind.IsShimmed() {
+		// When shimmed, we also run `go mod tidy` in the outer directory.
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "mod", "tidy")).In(&providerPath))
+	}
+
+	ok = step.RunJob("Upgrading Provider",
+		append(steps,
+			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
+			step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
+			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
+			cmdGitCommit("make tfgen").In(&path),
+			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
+			cmdGitCommit("make build_sdks").In(&path),
+		)...)
 	if !ok {
 		return ErrHandled
 	}
@@ -263,6 +269,28 @@ func (rk RepoKind) Shimmed() RepoKind {
 		return ForkedAndShimmed
 	default:
 		return rk
+	}
+}
+
+func (rk RepoKind) IsForked() bool {
+	switch rk {
+	case Forked:
+		fallthrough
+	case ForkedAndShimmed:
+		return true
+	default:
+		return false
+	}
+}
+
+func (rk RepoKind) IsShimmed() bool {
+	switch rk {
+	case Shimmed:
+		fallthrough
+	case ForkedAndShimmed:
+		return true
+	default:
+		return false
 	}
 }
 

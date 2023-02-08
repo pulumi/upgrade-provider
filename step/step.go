@@ -27,7 +27,7 @@ type step struct {
 }
 
 func (ds step) run() bool {
-	options := []string{"|", "/", "-", "\\", "-"}
+	options := []string{"|", "/", "-", "\\"}
 	for i, o := range options {
 		options[i] = o + " " + ds.description
 	}
