@@ -14,7 +14,7 @@ Realistically, we can reduce provider upgrades to 3 operations:
 `upgrade-provider` relies on the command line utilities `gh` and `git` to run, as well as
 all tools necessary for a manual provider upgrade. That generally means `make` and `go`.
 
-`upgrade-provider` takes exactly one option: the provider to upgrade. This corresponds to
+`upgrade-provider` takes exactly one option: the name of the Pulumi repository to upgrade.
 
 A typical run for a forked provider will look like this:
 
@@ -52,7 +52,7 @@ $ ./upgrade-provider pulumi-fastly
 
 ## How it works
 
-`upgrade-provider` executes the same process to upgrade a pulumi provider as a manual upgrade. The basic pipeline goes as follows:
+`upgrade-provider` executes the same process to upgrade a Pulumi provider as a manual upgrade. The basic pipeline goes as follows:
 
 1. Download the pulumi provider repository if its not present.
 2. Check with github to get the version to upgrade to.
@@ -73,6 +73,8 @@ Then the basic provider upgrade is performed:
 3. Upgrade terraform bridge.
 4. Run `make tfgen` and check in the result.
 5. Run `make build_sdks` and check in the result.
+
+If `shim` is a subfolder of `provider`, then upgrades will be performed in `shim`.
 
 ## Project Guidelines
 
