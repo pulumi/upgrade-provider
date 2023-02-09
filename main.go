@@ -219,14 +219,16 @@ func UpgradeProvider(ctx Context, name string) error {
 		// directory, since that is what references the upstream provider.
 		goModDir = filepath.Join(providerPath, "shim")
 	}
-	steps = append(steps, step.Computed(func() step.Step {
-		target := "v" + target.String()
-		if targetSHA != "" {
-			target = targetSHA
-		}
-		return step.Cmd(exec.CommandContext(ctx,
-			"go", "get", goMod.Upstream.Path+"@"+target))
-	}).In(&goModDir))
+	if !goMod.Kind.IsPatched() {
+		steps = append(steps, step.Computed(func() step.Step {
+			target := "v" + target.String()
+			if targetSHA != "" {
+				target = targetSHA
+			}
+			return step.Cmd(exec.CommandContext(ctx,
+				"go", "get", goMod.Upstream.Path+"@"+target))
+		}).In(&goModDir))
+	}
 
 	if goMod.Kind.IsForked() {
 		// If we are running a forked update, we need to replace the reference to the fork
@@ -459,6 +461,10 @@ func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 		}
 		before, after, found := strings.Cut(replace.New.Path, "/"+tfProviderRepoName)
 		if !found || (after != "" && !versionSuffix.MatchString(after)) {
+			if replace.New.Path == "../upstream" {
+				// We have found a patched provider, so we can just exit here.
+				break
+			}
 			return nil, fmt.Errorf("go.mod: replace has incorrect repo: '%s'", replace.New.Path)
 		}
 		repoOrgSeperator := strings.LastIndexByte(before, '/')

@@ -173,6 +173,9 @@ func (c combined) run(prefix string) bool {
 	fmt.Println(description)
 	subPrefix := strings.Repeat(" ", len(prefix))
 	for _, s := range c.steps {
+		if s == nil {
+			continue
+		}
 		if c.path != nil {
 			s = s.In(c.path)
 		}
@@ -187,6 +190,10 @@ func (c combined) run(prefix string) bool {
 	return true
 }
 
+// Run a step, returning if the step succeeded.
 func Run(step Step) bool {
+	if step == nil {
+		return true
+	}
 	return step.run("")
 }
