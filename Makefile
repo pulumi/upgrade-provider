@@ -4,3 +4,6 @@ build: tidy
 
 tidy:
 	go mod tidy
+
+install:
+	go install github.com/pulumi/upgrade-provider

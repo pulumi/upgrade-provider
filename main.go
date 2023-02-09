@@ -183,14 +183,20 @@ func UpgradeProvider(ctx Context, name string) error {
 			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
 	}
 	if goMod.Kind.IsPatched() {
+		// If the provider is patched, we don't use the go module system at all. Instead
+		// we update the module referenced to the new tag.
 		upstreamDir := filepath.Join(path, "upstream")
 		steps = append(steps, step.Combined("update patched provider",
 			step.Cmd(exec.CommandContext(ctx, "git", "fetch", "--tags")).In(&upstreamDir),
 			step.Cmd(exec.CommandContext(ctx, "git", "checkout", "tags/v"+target.String())).In(&upstreamDir),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstrea")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&path),
 		))
 	} else if !goMod.Kind.IsForked() {
-		// We have an upstream we don't control, so we need to git it's SHA
+		// We have an upstream we don't control, so we need to git it's SHA. We do this
+		// instead of using version tags because we can't ensure that the upstream is
+		// versioning their go modules correctly.
+		//
+		// It they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
@@ -206,10 +212,11 @@ func UpgradeProvider(ctx Context, name string) error {
 			}).AssignTo(&targetSHA))
 	}
 
-	// If we have a shimmed provider, we run the upstream update in the shim
-	// directory.
+	// goModDir is the directory of the go.mod where we reference the upstream provider.
 	goModDir := providerPath
 	if goMod.Kind.IsShimmed() {
+		// If we have a shimmed provider, we run the upstream update in the shim
+		// directory, since that is what references the upstream provider.
 		goModDir = filepath.Join(providerPath, "shim")
 	}
 	steps = append(steps, step.Computed(func() step.Step {
@@ -222,6 +229,8 @@ func UpgradeProvider(ctx Context, name string) error {
 	}).In(&goModDir))
 
 	if goMod.Kind.IsForked() {
+		// If we are running a forked update, we need to replace the reference to the fork
+		// with the SHA of the new upstream branch.
 		contract.Assert(forkedProviderUpstreamCommit != "")
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "mod", "edit", "-replace",

@@ -3,18 +3,29 @@
 This repo contains the `upgrade-provider` tool. `upgrade-provider` aims to reduce the
 amount of human intervention necessary for upgrading providers to a limit of zero.
 
-Realistically, we can reduce provider upgrades to 3 operations:
+With our current bridged provider structure, we can reduce provider upgrades to 3 manual
+operations:
 
 - resolving merge dependencies for forked providers
 - manual provider mappings in `resources.go`
 - resolving build conflicts on updates
 
+The rest of an upgrade is formulaic, and can thus be automated. This tool attempts to do
+the rest.
+
+## Installation
+
+We don't currently maintain releases for this tool. To install this tool onto your path,
+clone the repository and run `make install`.
+
 ## Usage
 
 `upgrade-provider` relies on the command line utilities `gh` and `git` to run, as well as
-all tools necessary for a manual provider upgrade. That generally means `make` and `go`.
+all tools necessary for a manual provider upgrade. That generally means `pulumi`, `make`
+and the build toolchain for each released SDK.
 
 `upgrade-provider` takes exactly one option: the name of the Pulumi repository to upgrade.
+There is not setup necessary, nor is it required to have local copies of
 
 A typical run for a forked provider will look like this:
 
@@ -50,9 +61,48 @@ $ ./upgrade-provider pulumi-fastly
 ✓ /usr/local/bin/git commit -m make build_sdks: done
 ```
 
+If the process succeeds, you can go to GH and open a new PR. All local work is done.
+
+### Dealing with manual steps
+
+The process will fail where manual intervention is required. The failed step will have a
+useful error message that should tell you how to address the problem. If a subprocess like
+`git` or `make` fails, its output will be printed.
+
+To fix an error:
+
+- Go to the provider repo and ensure that you are on upgrade branch with no commits (changes are ok).
+- Make the necessary changes in repo. Do not commit.
+- Re-run the tool. It will include your changes on the next attempt.
+
+Repeat as necessary for a working upgrade.
+
 ## How it works
 
-`upgrade-provider` executes the same process to upgrade a Pulumi provider as a manual upgrade. The basic pipeline goes as follows:
+`upgrade-provider` defines pipelines, where a pipeline is a set of synchronous and ordered
+steps. This leverages the `step` module in the repo. The hope is that each pipeline can be
+self-documenting. This is the pipeline for running an upgrade after any `go.mod` fixes are
+already applies:
+
+```go
+ok = step.Run(step.Combined("Upgrading Provider",
+		append(steps,
+			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
+			step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
+			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path),
+		)...))
+```
+
+### Existing Pipelines
+
+`upgrade-provider` executes the same process to upgrade a Pulumi provider as a manual
+upgrade. The basic pipeline goes as follows:
 
 1. Download the pulumi provider repository if its not present.
 2. Check with github to get the version to upgrade to.
