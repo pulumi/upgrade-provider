@@ -17,8 +17,12 @@ import (
 // A Step represents an atomic (pass/fail) piece of computation that should be displayed
 // to the user.
 type Step interface {
+	// Run the command in the directory
 	In(path *string) Step
-	AssignTo(position *string) Step
+	// Assign the output of the commend to the location.
+	AssignTo(lvalue *string) Step
+	// Override the output of the command, and assign the rvalue
+	Return(rvalue *string) Step
 	run(prefix string) bool
 }
 
@@ -26,6 +30,7 @@ type step struct {
 	description string
 	f           func() (string, error)
 	path        *string
+	rvalue      *string
 }
 
 func (ds step) run(prefix string) bool {
@@ -51,6 +56,11 @@ func (ds step) run(prefix string) bool {
 	return err == nil
 }
 
+func (ds step) Return(rvalue *string) Step {
+	ds.rvalue = rvalue
+	return ds
+}
+
 // Create a step based around a function.
 func F(description string, action func() (string, error)) Step {
 	return step{
@@ -61,13 +71,15 @@ func F(description string, action func() (string, error)) Step {
 
 // Create a step from a *exec.Cmd.
 func Cmd(command *exec.Cmd) Step {
+	var output string
 	return F(command.String(), func() (string, error) {
-		_, err := command.Output()
+		out, err := command.Output()
+		output = string(out)
 		if exit, ok := err.(*exec.ExitError); ok {
 			err = fmt.Errorf("%s:\n%s", err.Error(), string(exit.Stderr))
 		}
 		return "", err
-	})
+	}).Return(&output)
 }
 
 // Assign the output value of the step a variable.
@@ -76,7 +88,11 @@ func (s step) AssignTo(position *string) Step {
 		description: s.description,
 		f: func() (string, error) {
 			r, err := s.f()
-			*position = r
+			if s.rvalue != nil {
+				*position = *s.rvalue
+			} else {
+				*position = r
+			}
 			return r, err
 		},
 	}
@@ -135,6 +151,15 @@ func (us unknownStep) AssignTo(position *string) Step {
 		},
 	}
 }
+
+func (us unknownStep) Return(rvalue *string) Step {
+	return unknownStep{
+		f: func() Step {
+			return us.f().Return(rvalue)
+		},
+	}
+}
+
 func (us unknownStep) run(prefix string) bool {
 	return us.f().run(prefix)
 }
@@ -153,6 +178,12 @@ type combined struct {
 
 	path     *string
 	assignTo *string
+	rvalue   *string
+}
+
+func (c combined) Return(rvalue *string) Step {
+	c.rvalue = rvalue
+	return c
 }
 
 func (c combined) In(path *string) Step {
@@ -186,6 +217,9 @@ func (c combined) run(prefix string) bool {
 		if !ok {
 			return false
 		}
+	}
+	if c.assignTo != nil && c.rvalue != nil {
+		*c.assignTo = *c.rvalue
 	}
 	return true
 }

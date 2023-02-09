@@ -77,9 +77,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	var goMod *GoMod
 	ok := step.Run(step.Combined("Discovering Repository",
 		pulumiProviderRepos(ctx, name).AssignTo(&path),
-		step.F("Set default branch", func() (string, error) {
-			return pullDefault(ctx, "origin")
-		}).In(&path),
+		pullDefaultStep(ctx, "origin").In(&path),
 		step.F("Upgrade version", func() (string, error) {
 			target, err = getExpectedTarget(ctx, name)
 			if err == nil {
@@ -541,47 +539,39 @@ func getExpectedTarget(ctx context.Context, name string) (*semver.Version, error
 	return versions[0], nil
 }
 
-func pullDefault(ctx Context, remote string) (string, error) {
-	branches, err := runGitCommand(ctx, func(out []byte) ([]string, error) {
-		var branches []string
-		lines := strings.Split(string(out), "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
+func pullDefaultStep(ctx Context, remote string) step.Step {
+	var lsRemoteHeads string
+	var defaultBranch string
+	return step.Combined("pull default branch",
+		step.Cmd(exec.Command("git", "ls-remote", "--heads", remote)).AssignTo(&lsRemoteHeads),
+		step.F("finding default branch", func() (string, error) {
+			var hasMaster bool
+			lines := strings.Split(lsRemoteHeads, "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				_, ref, found := strings.Cut(line, "\t")
+				contract.Assert(found)
+				branch := strings.TrimPrefix(ref, "refs/heads/")
+				if branch == "master" {
+					hasMaster = true
+				}
+				if branch == "main" {
+					return branch, nil
+				}
 			}
-			_, ref, found := strings.Cut(line, "\t")
-			contract.Assert(found)
-			branch := strings.TrimPrefix(ref, "refs/heads/")
-			branches = append(branches, branch)
-		}
-		return branches, nil
-	}, "ls-remote", "--heads", remote)
-	if err != nil {
-		return "", fmt.Errorf("gathering branches: %w", err)
-	}
-	var targetBranch string
-	for _, branch := range branches {
-		if branch == "main" {
-			targetBranch = branch
-			break
-		}
-		if branch == "master" {
-			targetBranch = branch
-		}
-	}
-	if targetBranch == "" {
-		return "", fmt.Errorf("could not find 'main' or 'master' branch in %#v", branches)
-	}
-	_, err = runGitCommand(ctx, noOp, "checkout", targetBranch)
-	if err != nil {
-		return "", fmt.Errorf("checkout out %s: %w", targetBranch, err)
-	}
-	_, err = runGitCommand(ctx, noOp, "pull", remote)
-	if err != nil {
-		return "", fmt.Errorf("fast-forwarding %s: %w", targetBranch, err)
-	}
-	return targetBranch, nil
+			if hasMaster {
+				return "master", nil
+			}
+			return "", fmt.Errorf("could not find 'master' or 'main' branch")
+		}).AssignTo(&defaultBranch),
+		step.Computed(func() step.Step {
+			return step.Cmd(exec.CommandContext(ctx, "git", "checkout", defaultBranch))
+		}),
+		step.Cmd(exec.CommandContext(ctx, "git", "pull", remote)),
+	).Return(&defaultBranch)
 }
 
 func runGitCommand[T any](
