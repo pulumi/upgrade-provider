@@ -99,10 +99,6 @@ func UpgradeProvider(ctx Context, name string) error {
 		return ErrHandled
 	}
 
-	if goMod.Kind.IsPatched() {
-		return fmt.Errorf("unable to update patched provider")
-	}
-
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() {
 		var upstreamPath string
@@ -186,7 +182,14 @@ func UpgradeProvider(ctx Context, name string) error {
 		step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
 	}
-	if !goMod.Kind.IsForked() {
+	if goMod.Kind.IsPatched() {
+		upstreamDir := filepath.Join(path, "upstream")
+		steps = append(steps, step.Combined("update patched provider",
+			step.Cmd(exec.CommandContext(ctx, "git", "fetch", "--tags")).In(&upstreamDir),
+			step.Cmd(exec.CommandContext(ctx, "git", "checkout", "tags/v"+target.String())).In(&upstreamDir),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstrea")).In(&path),
+		))
+	} else if !goMod.Kind.IsForked() {
 		// We have an upstream we don't control, so we need to git it's SHA
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func() (string, error) {
