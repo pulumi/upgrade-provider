@@ -99,6 +99,10 @@ func UpgradeProvider(ctx Context, name string) error {
 		return ErrHandled
 	}
 
+	if goMod.Kind.IsPatched() {
+		return fmt.Errorf("unable to update patched provider")
+	}
+
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() {
 		var upstreamPath string
@@ -252,10 +256,12 @@ func UpgradeProvider(ctx Context, name string) error {
 type RepoKind string
 
 const (
-	Plain            RepoKind = "plain"
-	Forked                    = "forked"
-	Shimmed                   = "shimmed"
-	ForkedAndShimmed          = "forked & shimmed"
+	Plain             RepoKind = "plain"
+	Forked                     = "forked"
+	Shimmed                    = "shimmed"
+	ForkedAndShimmed           = "forked & shimmed"
+	Patched                    = "patched"
+	PatchedAndShimmed          = "patched & shimmed"
 )
 
 func (rk RepoKind) Shimmed() RepoKind {
@@ -264,6 +270,19 @@ func (rk RepoKind) Shimmed() RepoKind {
 		return Shimmed
 	case Forked:
 		return ForkedAndShimmed
+	default:
+		return rk
+	}
+}
+
+func (rk RepoKind) Patched() RepoKind {
+	switch rk {
+	case Plain:
+		return Patched
+	case Shimmed:
+		return PatchedAndShimmed
+	case Forked, ForkedAndShimmed:
+		panic("Cannot have a forked and patched provider")
 	default:
 		return rk
 	}
@@ -285,6 +304,17 @@ func (rk RepoKind) IsShimmed() bool {
 	case Shimmed:
 		fallthrough
 	case ForkedAndShimmed:
+		return true
+	default:
+		return false
+	}
+}
+
+func (rk RepoKind) IsPatched() bool {
+	switch rk {
+	case Patched:
+		fallthrough
+	case PatchedAndShimmed:
 		return true
 	default:
 		return false
@@ -371,6 +401,13 @@ func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 	}
 
 	var upstream *modfile.Require
+	var patched bool
+	patchDir := filepath.Join(path, "upstream")
+	if _, err := os.Stat(patchDir); err == nil {
+		patched = true
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
 
 	shimDir := filepath.Join(path, "provider", "shim")
 	_, err = os.Stat(shimDir)
@@ -434,6 +471,9 @@ func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 
 	if shimmed {
 		out.Kind = out.Kind.Shimmed()
+	}
+	if patched {
+		out.Kind = out.Kind.Patched()
 	}
 
 	return &out, nil
