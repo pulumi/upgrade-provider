@@ -72,7 +72,11 @@ func F(description string, action func() (string, error)) Step {
 // Create a step from a *exec.Cmd.
 func Cmd(command *exec.Cmd) Step {
 	var output string
-	return F(command.String(), func() (string, error) {
+	description := command.String()
+	if len(description) > 80 {
+		description = description[:80] + "..."
+	}
+	return F(description, func() (string, error) {
 		out, err := command.Output()
 		output = string(out)
 		if exit, ok := err.(*exec.ExitError); ok {
@@ -86,6 +90,8 @@ func Cmd(command *exec.Cmd) Step {
 func (s step) AssignTo(position *string) Step {
 	return step{
 		description: s.description,
+		path:        s.path,
+		rvalue:      s.rvalue,
 		f: func() (string, error) {
 			r, err := s.f()
 			if s.rvalue != nil {
@@ -140,14 +146,22 @@ type unknownStep struct {
 func (us unknownStep) In(path *string) Step {
 	return unknownStep{
 		f: func() Step {
-			return us.f().In(path)
+			s := us.f()
+			if s == nil {
+				return nil
+			}
+			return s.In(path)
 		},
 	}
 }
-func (us unknownStep) AssignTo(position *string) Step {
+func (us unknownStep) AssignTo(lvalue *string) Step {
 	return unknownStep{
 		f: func() Step {
-			return us.f().AssignTo(position)
+			s := us.f()
+			if s == nil {
+				return nil
+			}
+			return s.AssignTo(lvalue)
 		},
 	}
 }
@@ -155,13 +169,21 @@ func (us unknownStep) AssignTo(position *string) Step {
 func (us unknownStep) Return(rvalue *string) Step {
 	return unknownStep{
 		f: func() Step {
-			return us.f().Return(rvalue)
+			s := us.f()
+			if s == nil {
+				return nil
+			}
+			return s.Return(rvalue)
 		},
 	}
 }
 
 func (us unknownStep) run(prefix string) bool {
-	return us.f().run(prefix)
+	s := us.f()
+	if s == nil {
+		return true
+	}
+	return s.run(prefix)
 }
 
 // Run a series of steps with an under a name.

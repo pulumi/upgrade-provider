@@ -59,7 +59,8 @@ func cmd() *cobra.Command {
 }
 
 func main() {
-	cmd().Execute()
+	err := cmd().Execute()
+	contract.IgnoreError(err)
 }
 
 type HandledError struct{}
@@ -73,15 +74,18 @@ func (HandledError) Error() string {
 func UpgradeProvider(ctx Context, name string) error {
 	var err error
 	var path string
+	var upgradeTargets []UpgradeTargetIssue
 	var target *semver.Version
+	var defaultBranch string
 	var goMod *GoMod
 	ok := step.Run(step.Combined("Discovering Repository",
 		pulumiProviderRepos(ctx, name).AssignTo(&path),
-		pullDefaultStep(ctx, "origin").In(&path),
+		pullDefaultBranch(ctx, "origin").In(&path).AssignTo(&defaultBranch),
 		step.F("Upgrade version", func() (string, error) {
-			target, err = getExpectedTarget(ctx, name)
+			upgradeTargets, err = getExpectedTarget(ctx, name)
 			if err == nil {
-				return target.String(), nil
+				target = upgradeTargets[0].Version
+				return upgradeTargets[0].Version.String(), nil
 			}
 			return "", err
 		}),
@@ -103,11 +107,11 @@ func UpgradeProvider(ctx Context, name string) error {
 		var previousUpstreamVersion *semver.Version
 		ok = step.Run(step.Combined("Upgrading Forked Provider",
 			ensureUpstreamRepo(ctx, goMod.Fork.Old.Path).AssignTo(&upstreamPath),
-			step.F("ensure pulumi remote", func() (string, error) {
+			step.F("Ensure Pulumi Remote", func() (string, error) {
 				return ensurePulumiRemote(ctx, strings.TrimPrefix(name, "pulumi-"))
 			}).In(&upstreamPath),
 			step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
-			step.F("discover previous upstream version", func() (string, error) {
+			step.F("Discover Previous Upstream Version", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					lines := strings.Split(string(b), "\n")
 					for _, line := range lines {
@@ -126,12 +130,12 @@ func UpgradeProvider(ctx Context, name string) error {
 					return previousUpstreamVersion.String(), nil
 				}, "branch", "--remote", "--list", "pulumi/upstream-v*")
 			}).In(&upstreamPath),
-			step.F("checkout upstream", func() (string, error) {
+			step.F("Checkout Upstream", func() (string, error) {
 				return runGitCommand(ctx,
 					func([]byte) (string, error) { return "", nil },
 					"checkout", fmt.Sprintf("pulumi/upstream-v%s", previousUpstreamVersion))
 			}).In(&upstreamPath),
-			step.F("upstream branch", func() (string, error) {
+			step.F("Upstream Branch", func() (string, error) {
 				target := "upstream-v" + target.String()
 				branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
 					lines := strings.Split(string(b), "\n")
@@ -151,16 +155,16 @@ func UpgradeProvider(ctx Context, name string) error {
 				}
 				return target + " already exists", nil
 			}).In(&upstreamPath),
-			step.F("merge upstream branch", func() (string, error) {
+			step.F("Merge Upstream Branch", func() (string, error) {
 				return runGitCommand(ctx, say("no conflict"),
 					"merge", "v"+target.String())
 			}).In(&upstreamPath),
 			step.Cmd(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
-			step.F("push upstream", func() (string, error) {
+			step.F("Push Upstream", func() (string, error) {
 				return runGitCommand(ctx, noOp,
 					"push", "pulumi", "upstream-v"+target.String())
 			}).In(&upstreamPath),
-			step.F("get head commit", func() (string, error) {
+			step.F("Get Head Commit", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					return strings.TrimSpace(string(b)), nil
 				}, "rev-parse", "HEAD")
@@ -174,9 +178,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	providerPath := filepath.Join(path, "provider")
 	branchName := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", strings.TrimPrefix(name, "pulumi-"), target)
 	steps := []step.Step{
-		step.F("ensure branch", func() (string, error) {
-			return ensureBranchCheckedOut(ctx, branchName)
-		}).In(&path),
+		ensureBranchCheckedOut(ctx, branchName).In(&path),
 		step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
 	}
@@ -254,7 +256,17 @@ func UpgradeProvider(ctx Context, name string) error {
 			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path),
+			step.Combined("Open PR",
+				step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path),
+				step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
+					"--assignee", "@me",
+					"--base", defaultBranch,
+					"--head", branchName,
+					"--title", fmt.Sprintf("Upgrade terraform-provider-%s to v%s",
+						strings.TrimPrefix(name, "pulumi-"), target),
+					"--body", prBody(upgradeTargets),
+				)).In(&path),
+			),
 		)...))
 	if !ok {
 		return ErrHandled
@@ -269,11 +281,11 @@ type RepoKind string
 
 const (
 	Plain             RepoKind = "plain"
-	Forked                     = "forked"
-	Shimmed                    = "shimmed"
-	ForkedAndShimmed           = "forked & shimmed"
-	Patched                    = "patched"
-	PatchedAndShimmed          = "patched & shimmed"
+	Forked            RepoKind = "forked"
+	Shimmed           RepoKind = "shimmed"
+	ForkedAndShimmed  RepoKind = "forked & shimmed"
+	Patched           RepoKind = "patched"
+	PatchedAndShimmed RepoKind = "patched & shimmed"
 )
 
 func (rk RepoKind) Shimmed() RepoKind {
@@ -353,25 +365,41 @@ func ensurePulumiRemote(ctx Context, name string) (string, error) {
 		fmt.Sprintf("https://github.com/pulumi/terraform-provider-%s.git", name))
 }
 
-func ensureBranchCheckedOut(ctx Context, branchName string) (string, error) {
-	branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
-		lines := strings.Split(string(b), "\n")
-		for _, line := range lines {
-			if strings.TrimSpace(line) == branchName {
-				return true, nil
+func ensureBranchCheckedOut(ctx Context, branchName string) step.Step {
+	var branches string
+	var alreadyExists bool
+	var alreadyCurrent bool
+	return step.Combined("Ensure Branch",
+		step.Cmd(exec.CommandContext(ctx, "git", "branch")).AssignTo(&branches),
+		step.F("Already exists", func() (string, error) {
+			lines := strings.Split(branches, "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == branchName {
+					alreadyExists = true
+					return "yes", nil
+				}
+				if line == "* "+branchName {
+					alreadyCurrent = true
+					return "yes, current branch", nil
+				}
 			}
-		}
-		return false, nil
-	}, "branch")
-	if err != nil {
-		return "", err
-	}
-	if !branchExists {
-		return runGitCommand(ctx, say("creating "+branchName),
-			"checkout", "-b", branchName)
-	}
-	return runGitCommand(ctx, say("switching to "+branchName),
-		"checkout", branchName)
+			return "no", nil
+		}),
+
+		step.Computed(func() step.Step {
+			if alreadyExists || alreadyCurrent {
+				return nil
+			}
+			return step.Cmd(exec.CommandContext(ctx, "git", "checkout", "-b", branchName))
+		}),
+		step.Computed(func() step.Step {
+			if alreadyCurrent {
+				return nil
+			}
+			return step.Cmd(exec.CommandContext(ctx, "git", "checkout", branchName))
+		}),
+	)
 }
 
 type GoMod struct {
@@ -495,13 +523,18 @@ func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 	return &out, nil
 }
 
-func getExpectedTarget(ctx context.Context, name string) (*semver.Version, error) {
+type UpgradeTargetIssue struct {
+	Version *semver.Version `json:"-"`
+	Number  int             `json:"number"`
+}
+
+func getExpectedTarget(ctx context.Context, name string) ([]UpgradeTargetIssue, error) {
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--author=pulumi-bot",
 		"--repo=pulumi/"+name,
 		"--limit=100",
-		"--json=title")
+		"--json=title,number")
 	bytes := new(bytes.Buffer)
 	getIssues.Stdout = bytes
 	err := getIssues.Run()
@@ -509,13 +542,14 @@ func getExpectedTarget(ctx context.Context, name string) (*semver.Version, error
 		return nil, err
 	}
 	titles := []struct {
-		Title string `json:"title"`
+		Title  string `json:"title"`
+		Number int    `json:"number"`
 	}{}
 	err = json.Unmarshal(bytes.Bytes(), &titles)
 	if err != nil {
 		return nil, err
 	}
-	var versions []*semver.Version
+	var versions []UpgradeTargetIssue
 	for _, title := range titles {
 		_, nameToVersion, found := strings.Cut(title.Title, "Upgrade terraform-provider-")
 		if !found {
@@ -527,19 +561,22 @@ func getExpectedTarget(ctx context.Context, name string) (*semver.Version, error
 		}
 		v, err := semver.NewVersion(version)
 		if err == nil {
-			versions = append(versions, v)
+			versions = append(versions, UpgradeTargetIssue{
+				Version: v,
+				Number:  title.Number,
+			})
 		}
 	}
 	if len(versions) == 0 {
 		return nil, fmt.Errorf("no upgrade found")
 	}
 	sort.Slice(versions, func(i, j int) bool {
-		return versions[j].LessThan(versions[i])
+		return versions[j].Version.LessThan(versions[i].Version)
 	})
-	return versions[0], nil
+	return versions, nil
 }
 
-func pullDefaultStep(ctx Context, remote string) step.Step {
+func pullDefaultBranch(ctx Context, remote string) step.Step {
 	var lsRemoteHeads string
 	var defaultBranch string
 	return step.Combined("pull default branch",
@@ -653,4 +690,15 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 			return expectedLocation, exec.CommandContext(ctx, "git", "status", "--short").Run()
 		}).In(&expectedLocation),
 	)
+}
+
+func prBody(upgradeTargets []UpgradeTargetIssue) string {
+	b := new(strings.Builder)
+	fmt.Fprintf(b, "This PR was generated by the upgrade-provider tool.\n")
+
+	fmt.Fprintf(b, "\n---\n\n")
+	for _, t := range upgradeTargets {
+		fmt.Fprintf(b, "Fixes #%d\n", t.Number)
+	}
+	return b.String()
 }

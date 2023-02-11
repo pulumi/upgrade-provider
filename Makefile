@@ -7,3 +7,6 @@ tidy:
 
 install:
 	go install github.com/pulumi/upgrade-provider
+
+lint:
+	golangci-lint run
