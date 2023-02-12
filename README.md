@@ -30,35 +30,43 @@ There is not setup necessary, nor is it required to have local copies of
 A typical run for a forked provider will look like this:
 
 ```
-$ ./upgrade-provider pulumi-fastly
+❯ ./upgrade-provider pulumi-snowflake
 ---- Discovering Repository ----
-✓ Getting Repo: /Users/ianwahbe/go/src/github.com/pulumi/pulumi-fastly
-✓ Set default branch: master
-✓ Upgrade version: 3.0.4
-✓ Repo kind: forked
----- Upgrading Forked Provider ----
-✓ Ensure upstream repo: /Users/ianwahbe/go/src/github.com/fastly/terraform-provider-fastly
-✓ Ensure pulumi remote: 'pulumi' already exists
-✓ /usr/local/bin/git fetch pulumi: done
-✓ Discover previous upstream version: 3.0.4
-✓ checkout upstream: done
-✓ upstream branch: upstream-v3.0.4 already exists
-✓ merge upstream branch: no conflict
-✓ /usr/local/bin/go build .: done
-✓ push upstream: done
-✓ get head commit: 27251e78c400e684bae5225c5394b85743ebf28b
+- Ensure 'github.com/pulumi/pulumi-snowflake'
+  - ✓ Expected Location: /Users/ianwahbe/go/src/github.com/pulumi/pulumi-snowflake
+  - ✓ Downloading: done
+  - ✓ Validating: /Users/ianwahbe/go/src/github.com/pulumi/pulumi-snowflake
+- pull default branch
+  - ✓ /usr/local/bin/git ls-remote --heads origin: done
+  - ✓ finding default branch: master
+  - ✓ /usr/local/bin/git checkout master: done
+  - ✓ /usr/local/bin/git pull origin: done
+- ✓ Upgrade version: 0.56.3
+- ✓ Repo kind: plain
 ---- Upgrading Provider ----
-✓ ensure branch: switching to upgrade-terraform-provider-fastly-to-v3.0.4
-✓ /usr/local/bin/go get -u github.com/pulumi/pulumi-terraform-bridge/v3: done
-✓ /usr/local/bin/go get github.com/fastly/terraform-provider-fastly@v3.0.4: done
-✓ /usr/local/bin/go mod edit -replace github.com/fastly/terraform-provider-fastly=github.com/pulumi/terraform-provider-fastly@27251e78c400e684bae5225c5394b85743ebf28b: done
-✓ /usr/local/bin/go mod tidy: done
-✓ /usr/bin/make tfgen: done
-✓ /usr/local/bin/git add --all: done
-✓ /usr/local/bin/git commit -m make tfgen: done
-✓ /usr/bin/make build_sdks: done
-✓ /usr/local/bin/git add --all: done
-✓ /usr/local/bin/git commit -m make build_sdks: done
+- Ensure Branch
+  - ✓ /usr/local/bin/git branch: done
+  - ✓ Already exists: no
+  - ✓ /usr/local/bin/git checkout -b upgrade-terraform-provider-snowflake-to-v0.56.3: done
+  - ✓ /usr/local/bin/git checkout upgrade-terraform-provider-snowflake-to-v0.56.3: done
+- ✓ /usr/local/bin/go get -u github.com/pulumi/pulumi-terraform-bridge/v3: done
+- ✓ Lookup Tag SHA: 9c69643a31d91d0f3d249f7aea3beeefc53880ae
+- ✓ /usr/local/bin/go get github.com/Snowflake-Labs/terraform-provider-snowflake@9c6...: done
+- ✓ /usr/local/bin/go mod tidy: done
+- ✓ /Users/ianwahbe/go/bin/pulumi plugin rm --all --yes: done
+- ✓ /usr/bin/make tfgen: done
+- ✓ /usr/local/bin/git add --all: done
+- ✓ /usr/local/bin/git commit -m make tfgen: done
+- ✓ /usr/bin/make build_sdks: done
+- ✓ /usr/local/bin/git add --all: done
+- ✓ /usr/local/bin/git commit -m make build_sdks: done
+- Open PR
+  - ✓ /usr/local/bin/git push --set-upstream origin upgrade-terraform-provider-snowfla...: done
+  - ✓ /usr/local/bin/gh pr create --assignee @me --base master --head upgrade-terrafor...: done
+  - Self Assign Issues
+    - ✓ /usr/local/bin/gh issue edit 183 --add-assignee @me: done
+    - ✓ /usr/local/bin/gh issue edit 182 --add-assignee @me: done
+    - ✓ /usr/local/bin/gh issue edit 181 --add-assignee @me: done
 ```
 
 If the process succeeds, you can go to GH and open a new PR. All local work is done.
