@@ -78,6 +78,10 @@ func UpgradeProvider(ctx Context, name string) error {
 	var target *semver.Version
 	var defaultBranch string
 	var goMod *GoMod
+	upstreamProviderName := strings.TrimPrefix(name, "pulumi-")
+	if s, ok := ProviderName[upstreamProviderName]; ok {
+		upstreamProviderName = s
+	}
 	ok := step.Run(step.Combined("Discovering Repository",
 		pulumiProviderRepos(ctx, name).AssignTo(&path),
 		pullDefaultBranch(ctx, "origin").In(&path).AssignTo(&defaultBranch),
@@ -90,7 +94,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			return "", err
 		}),
 		step.F("Repo kind", func() (string, error) {
-			goMod, err = repoKind(ctx, path, strings.TrimPrefix(name, "pulumi-"))
+			goMod, err = repoKind(ctx, path, upstreamProviderName)
 			if err != nil {
 				return "", err
 			}
@@ -176,7 +180,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 	var targetSHA string
 	providerPath := filepath.Join(path, "provider")
-	branchName := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", strings.TrimPrefix(name, "pulumi-"), target)
+	branchName := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", upstreamProviderName, target)
 	steps := []step.Step{
 		ensureBranchCheckedOut(ctx, branchName).In(&path),
 		step.Cmd(exec.CommandContext(ctx,
@@ -262,10 +266,22 @@ func UpgradeProvider(ctx Context, name string) error {
 					"--assignee", "@me",
 					"--base", defaultBranch,
 					"--head", branchName,
+					"--reviewer", "pulumi/Ecosystem",
 					"--title", fmt.Sprintf("Upgrade terraform-provider-%s to v%s",
-						strings.TrimPrefix(name, "pulumi-"), target),
+						upstreamProviderName, target),
 					"--body", prBody(upgradeTargets),
 				)).In(&path),
+				// This PR will close issues, so we assign the issues to @me, just like
+				// the PR itself.
+				step.Computed(func() step.Step {
+					issues := make([]step.Step, len(upgradeTargets))
+					for i, t := range upgradeTargets {
+						issues[i] = step.Cmd(exec.CommandContext(ctx,
+							"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
+							"--add-assignee", "@me")).In(&path)
+					}
+					return step.Combined("Self Assign Issues", issues...)
+				}),
 			),
 		)...))
 	if !ok {
