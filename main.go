@@ -134,10 +134,9 @@ func UpgradeProvider(ctx Context, name string) error {
 					return previousUpstreamVersion.String(), nil
 				}, "branch", "--remote", "--list", "pulumi/upstream-v*")
 			}).In(&upstreamPath),
-			step.F("Checkout Upstream", func() (string, error) {
-				return runGitCommand(ctx,
-					func([]byte) (string, error) { return "", nil },
-					"checkout", fmt.Sprintf("pulumi/upstream-v%s", previousUpstreamVersion))
+			step.Computed(func() step.Step {
+				return step.Cmd(exec.CommandContext(ctx,
+					"git", "checkout", "pulumi/upstream-v"+previousUpstreamVersion.String()))
 			}).In(&upstreamPath),
 			step.F("Upstream Branch", func() (string, error) {
 				target := "upstream-v" + target.String()
@@ -159,15 +158,11 @@ func UpgradeProvider(ctx Context, name string) error {
 				}
 				return target + " already exists", nil
 			}).In(&upstreamPath),
-			step.F("Merge Upstream Branch", func() (string, error) {
-				return runGitCommand(ctx, say("no conflict"),
-					"merge", "v"+target.String())
-			}).In(&upstreamPath),
+			step.Cmd(exec.CommandContext(ctx,
+				"git", "merge", "v"+target.String())).In(&upstreamPath),
 			step.Cmd(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
-			step.F("Push Upstream", func() (string, error) {
-				return runGitCommand(ctx, noOp,
-					"push", "pulumi", "upstream-v"+target.String())
-			}).In(&upstreamPath),
+			step.Cmd(exec.CommandContext(ctx,
+				"git", "push", "pulumi", "upstream-v"+target.String())).In(&upstreamPath),
 			step.F("Get Head Commit", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					return strings.TrimSpace(string(b)), nil
