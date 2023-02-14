@@ -37,6 +37,7 @@ func cmd() *cobra.Command {
 		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
 		Args:  cobra.ExactArgs(1),
 		Run: func(_ *cobra.Command, args []string) {
+			os.Setenv("GOWORK", "off")
 			gopath, ok := os.LookupEnv("GOPATH")
 			if !ok {
 				gopath = build.Default.GOPATH
@@ -116,10 +117,15 @@ func UpgradeProvider(ctx Context, name string) error {
 	if goMod.Kind.IsForked() {
 		var upstreamPath string
 		var previousUpstreamVersion *semver.Version
+		fmt.Println("oldpath", goMod.Fork.Old.Path)
 		ok = step.Run(step.Combined("Upgrading Forked Provider",
 			ensureUpstreamRepo(ctx, goMod.Fork.Old.Path).AssignTo(&upstreamPath),
 			step.F("Ensure Pulumi Remote", func() (string, error) {
-				return ensurePulumiRemote(ctx, strings.TrimPrefix(name, "pulumi-"))
+				remoteName := strings.TrimPrefix(name, "pulumi-")
+				if s, ok := ForkedName[remoteName]; ok {
+					remoteName = s
+				}
+				return ensurePulumiRemote(ctx, remoteName)
 			}).In(&upstreamPath),
 			step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
 			step.F("Discover Previous Upstream Version", func() (string, error) {
@@ -454,7 +460,7 @@ func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 	if err != nil {
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
-	tfProviderRepoName := "terraform-provider-" + providerName
+	tfProviderRepoName := getTfProviderRepoName(providerName)
 
 	getUpstream := func(file *modfile.File) (*modfile.Require, error) {
 		// Find the name of our upstream dependency
@@ -514,6 +520,7 @@ func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 		}
 		before, after, found := strings.Cut(replace.New.Path, "/"+tfProviderRepoName)
 		if !found || (after != "" && !versionSuffix.MatchString(after)) {
+			fmt.Println(after)
 			if replace.New.Path == "../upstream" {
 				// We have found a patched provider, so we can just exit here.
 				break
@@ -728,4 +735,11 @@ func prBody(upgradeTargets []UpgradeTargetIssue) string {
 		fmt.Fprintf(b, "Fixes #%d\n", t.Number)
 	}
 	return b.String()
+}
+
+func getTfProviderRepoName(providerName string) string {
+	if tfRepoName, ok := ProviderName[providerName]; ok {
+		providerName = tfRepoName
+	}
+	return "terraform-provider-" + providerName
 }
