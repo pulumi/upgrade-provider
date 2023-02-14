@@ -53,6 +53,9 @@ func (ds step) run(prefix string) bool {
 	}
 	spinner.Stop()
 	fmt.Printf(" %s: %s\n", ds.description, result)
+	if strings.Contains(ds.description, "git commit -m") {
+		return true
+	}
 	return err == nil
 }
 

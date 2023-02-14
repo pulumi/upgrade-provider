@@ -117,17 +117,17 @@ func UpgradeProvider(ctx Context, name string) error {
 	if goMod.Kind.IsForked() {
 		var upstreamPath string
 		var previousUpstreamVersion *semver.Version
-		fmt.Println("oldpath", goMod.Fork.Old.Path)
 		ok = step.Run(step.Combined("Upgrading Forked Provider",
 			ensureUpstreamRepo(ctx, goMod.Fork.Old.Path).AssignTo(&upstreamPath),
 			step.F("Ensure Pulumi Remote", func() (string, error) {
 				remoteName := strings.TrimPrefix(name, "pulumi-")
-				if s, ok := ForkedName[remoteName]; ok {
+				if s, ok := ProviderName[remoteName]; ok {
 					remoteName = s
 				}
 				return ensurePulumiRemote(ctx, remoteName)
 			}).In(&upstreamPath),
 			step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
+			step.Cmd(exec.Command("git", "fetch", "--all", "--tags")).In(&upstreamPath),
 			step.F("Discover Previous Upstream Version", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					lines := strings.Split(string(b), "\n")
@@ -520,7 +520,6 @@ func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 		}
 		before, after, found := strings.Cut(replace.New.Path, "/"+tfProviderRepoName)
 		if !found || (after != "" && !versionSuffix.MatchString(after)) {
-			fmt.Println(after)
 			if replace.New.Path == "../upstream" {
 				// We have found a patched provider, so we can just exit here.
 				break
