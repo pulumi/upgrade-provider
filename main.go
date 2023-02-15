@@ -640,7 +640,7 @@ func runGitCommand[T any](
 	}
 	return t, cmd.Run()
 }
-func noOp([]byte) (string, error) { return "", nil }
+
 func say(msg string) func([]byte) (string, error) {
 	return func([]byte) (string, error) {
 		return msg, nil
