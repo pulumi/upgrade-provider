@@ -37,9 +37,6 @@ func cmd() *cobra.Command {
 		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
 		Args:  cobra.ExactArgs(1),
 		Run: func(_ *cobra.Command, args []string) {
-			if err := os.Setenv("GOWORK", "off"); err != nil {
-				return fmt.Errorf("disabling go workspaces: %w", err)
-			}
 			gopath, ok := os.LookupEnv("GOPATH")
 			if !ok {
 				gopath = build.Default.GOPATH
@@ -129,7 +126,7 @@ func UpgradeProvider(ctx Context, name string) error {
 				return ensurePulumiRemote(ctx, remoteName)
 			}).In(&upstreamPath),
 			step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
-			step.Cmd(exec.Command("git", "fetch", "--all", "--tags")).In(&upstreamPath),
+			step.Cmd(exec.Command("git", "fetch", "origin", "--tags")).In(&upstreamPath),
 			step.F("Discover Previous Upstream Version", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					lines := strings.Split(string(b), "\n")
@@ -278,7 +275,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks", "--allow-empty")).In(&path),
 			step.Combined("Open PR",
 				step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path),
 				step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
