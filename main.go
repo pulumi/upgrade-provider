@@ -191,7 +191,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&path),
 		))
 	} else if !goMod.Kind.IsForked() {
-		// We have an upstream we don't control, so we need to git it's SHA. We do this
+		// We have an upstream we don't control, so we need to get it's SHA. We do this
 		// instead of using version tags because we can't ensure that the upstream is
 		// versioning their go modules correctly.
 		//
@@ -240,9 +240,10 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	if goMod.Kind.IsShimmed() {
-		// When shimmed, we also run `go mod tidy` in the outer directory.
+		// When shimmed, we also run `go mod tidy` in the shim directory, and we want to
+		// run that before running `go mod tidy` in the main `provider` directory.
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "mod", "tidy")).In(&providerPath))
+			"go", "mod", "tidy")).In(&goModDir))
 	}
 
 	ok = step.Run(step.Combined("Upgrading Provider",
@@ -639,7 +640,7 @@ func runGitCommand[T any](
 	}
 	return t, cmd.Run()
 }
-func noOp([]byte) (string, error) { return "", nil }
+
 func say(msg string) func([]byte) (string, error) {
 	return func([]byte) (string, error) {
 		return msg, nil
