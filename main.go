@@ -37,7 +37,9 @@ func cmd() *cobra.Command {
 		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
 		Args:  cobra.ExactArgs(1),
 		Run: func(_ *cobra.Command, args []string) {
-			os.Setenv("GOWORK", "off")
+			if err := os.Setenv("GOWORK", "off"); err != nil {
+				return fmt.Errorf("disabling go workspaces: %w", err)
+			}
 			gopath, ok := os.LookupEnv("GOPATH")
 			if !ok {
 				gopath = build.Default.GOPATH
