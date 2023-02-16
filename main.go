@@ -82,7 +82,14 @@ func UpgradeProvider(ctx Context, name string) error {
 	if s, ok := ProviderName[upstreamProviderName]; ok {
 		upstreamProviderName = s
 	}
-	ok := step.Run(step.Combined("Discovering Repository",
+
+	ok := step.Run(step.Combined("Setting Up Environment",
+		step.Env("GOWORK", "off")))
+	if !ok {
+		return ErrHandled
+	}
+
+	ok = step.Run(step.Combined("Discovering Repository",
 		pulumiProviderRepos(ctx, name).AssignTo(&path),
 		pullDefaultBranch(ctx, "origin").In(&path).AssignTo(&defaultBranch),
 		step.F("Upgrade version", func() (string, error) {
