@@ -86,6 +86,13 @@ func Cmd(command *exec.Cmd) Step {
 	}).Return(&output)
 }
 
+// Set an environmental variable.
+func Env(key, value string) Step {
+	return F(fmt.Sprintf("%s=%q", key, value), func() (string, error) {
+		return "", os.Setenv(key, value)
+	})
+}
+
 // Assign the output value of the step a variable.
 func (s step) AssignTo(position *string) Step {
 	return step{
