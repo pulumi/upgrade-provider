@@ -233,10 +233,18 @@ func UpgradeProvider(ctx Context, name string) error {
 		// If we are running a forked update, we need to replace the reference to the fork
 		// with the SHA of the new upstream branch.
 		contract.Assert(forkedProviderUpstreamCommit != "")
-		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "mod", "edit", "-replace",
-			goMod.Fork.Old.Path+"="+
-				goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit)).In(&goModDir))
+
+		replaceIn := func(dir *string) {
+			steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+				"go", "mod", "edit", "-replace",
+				goMod.Fork.Old.Path+"="+
+					goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit)).In(dir))
+		}
+
+		replaceIn(&goModDir)
+		if goMod.Kind.IsShimmed() {
+			replaceIn(&providerPath)
+		}
 	}
 
 	if goMod.Kind.IsShimmed() {
