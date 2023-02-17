@@ -5,5 +5,6 @@ var ProviderOrgs = map[string]string{
 }
 
 var ProviderName = map[string]string{
-	"f5bigip": "bigip",
+	"f5bigip":        "bigip",
+	"confluentcloud": "confluent",
 }

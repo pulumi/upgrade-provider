@@ -119,9 +119,14 @@ func UpgradeProvider(ctx Context, name string) error {
 		ok = step.Run(step.Combined("Upgrading Forked Provider",
 			ensureUpstreamRepo(ctx, goMod.Fork.Old.Path).AssignTo(&upstreamPath),
 			step.F("Ensure Pulumi Remote", func() (string, error) {
-				return ensurePulumiRemote(ctx, strings.TrimPrefix(name, "pulumi-"))
+				remoteName := strings.TrimPrefix(name, "pulumi-")
+				if s, ok := ProviderName[remoteName]; ok {
+					remoteName = s
+				}
+				return ensurePulumiRemote(ctx, remoteName)
 			}).In(&upstreamPath),
 			step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
+			step.Cmd(exec.Command("git", "fetch", "origin", "--tags")).In(&upstreamPath),
 			step.F("Discover Previous Upstream Version", func() (string, error) {
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					lines := strings.Split(string(b), "\n")
@@ -270,7 +275,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks", "--allow-empty")).In(&path),
 			step.Combined("Open PR",
 				step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path),
 				step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
@@ -454,7 +459,7 @@ func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
 	if err != nil {
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
-	tfProviderRepoName := "terraform-provider-" + providerName
+	tfProviderRepoName := getTfProviderRepoName(providerName)
 
 	getUpstream := func(file *modfile.File) (*modfile.Require, error) {
 		// Find the name of our upstream dependency
@@ -728,4 +733,11 @@ func prBody(upgradeTargets []UpgradeTargetIssue) string {
 		fmt.Fprintf(b, "Fixes #%d\n", t.Number)
 	}
 	return b.String()
+}
+
+func getTfProviderRepoName(providerName string) string {
+	if tfRepoName, ok := ProviderName[providerName]; ok {
+		providerName = tfRepoName
+	}
+	return "terraform-provider-" + providerName
 }
