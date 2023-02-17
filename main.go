@@ -145,28 +145,32 @@ func UpgradeProvider(ctx Context, name string) error {
 				return step.Cmd(exec.CommandContext(ctx,
 					"git", "checkout", "pulumi/upstream-v"+previousUpstreamVersion.String()))
 			}).In(&upstreamPath),
-			step.F("Upstream Branch", func() (string, error) {
+			step.Computed(func() step.Step {
 				target := "upstream-v" + target.String()
-				branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
-					lines := strings.Split(string(b), "\n")
+				var branches string
+				targetExists := func() bool {
+					lines := strings.Split(branches, "\n")
 					for _, line := range lines {
 						if strings.TrimSpace(line) == target {
-							return true, nil
+							return true
 						}
 					}
-					return false, nil
-				}, "branch")
-				if err != nil {
-					return "", err
+					return false
 				}
-				if !branchExists {
-					return runGitCommand(ctx, say("creating "+target),
-						"checkout", "-b", target)
-				}
-				return target + " already exists", nil
+				return step.Combined("Checkout Upstream Branch",
+					step.Cmd(exec.CommandContext(ctx, "git", "branch")).AssignTo(&branches),
+					step.Computed(func() step.Step {
+						if targetExists() {
+							return step.Cmd(exec.CommandContext(ctx, "git", "checkout", target))
+						}
+						return step.Cmd(exec.CommandContext(ctx, "git", "checkout", "-b", target))
+					}),
+				)
 			}).In(&upstreamPath),
-			step.Cmd(exec.CommandContext(ctx,
-				"git", "merge", "v"+target.String())).In(&upstreamPath),
+			step.Combined("Merge v"+target.String()+" into upstream-v"+target.String(),
+				step.Cmd(exec.CommandContext(ctx, "git", "fetch", "origin", "--tags")),
+				step.Cmd(exec.CommandContext(ctx, "git", "merge", "v"+target.String())),
+			).In(&upstreamPath),
 			step.Cmd(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
 			step.Cmd(exec.CommandContext(ctx,
 				"git", "push", "pulumi", "upstream-v"+target.String())).In(&upstreamPath),
@@ -656,11 +660,6 @@ func runGitCommand[T any](
 	return t, cmd.Run()
 }
 
-func say(msg string) func([]byte) (string, error) {
-	return func([]byte) (string, error) {
-		return msg, nil
-	}
-}
 func downloadRepo(ctx Context, url, dst string) error {
 	cmd := exec.CommandContext(ctx, "git", "clone", url, dst)
 	return cmd.Run()
