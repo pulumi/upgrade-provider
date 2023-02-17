@@ -84,7 +84,9 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	ok := step.Run(step.Combined("Setting Up Environment",
-		step.Env("GOWORK", "off")))
+		step.Env("GOWORK", "off"),
+		step.Env("PULUMI_MISSING_DOCS_ERROR", "true"),
+	))
 	if !ok {
 		return ErrHandled
 	}
