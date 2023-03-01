@@ -192,6 +192,12 @@ func UpgradeProvider(ctx Context, name string) error {
 	branchName := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", upstreamProviderName, target)
 	steps := []step.Step{
 		ensureBranchCheckedOut(ctx, branchName).In(&path),
+		step.Computed(func() step.Step {
+			if goMod.Kind.IsPatched() {
+				return step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&path)
+			}
+			return nil
+		}),
 		step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
 	}
@@ -201,6 +207,9 @@ func UpgradeProvider(ctx Context, name string) error {
 		upstreamDir := filepath.Join(path, "upstream")
 		steps = append(steps, step.Combined("update patched provider",
 			step.Cmd(exec.CommandContext(ctx, "git", "fetch", "--tags")).In(&upstreamDir),
+			// We need to remove any patches to so we can cleanly pull the next upstream version.
+			// Changes are re-applied when we next run `make tfgen`.
+			step.Cmd(exec.CommandContext(ctx, "git", "reset", "HEAD", "--hard")).In(&upstreamDir),
 			step.Cmd(exec.CommandContext(ctx, "git", "checkout", "tags/v"+target.String())).In(&upstreamDir),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&path),
 		))
@@ -232,7 +241,12 @@ func UpgradeProvider(ctx Context, name string) error {
 		// directory, since that is what references the upstream provider.
 		goModDir = filepath.Join(providerPath, "shim")
 	}
-	if !goMod.Kind.IsPatched() {
+
+	// If a provider is patched or forked, then there is no meaningful version to
+	// update. Because Go includes major versions as part of its module path, making
+	// this correct can break on major version updates. We just leave it if its not
+	// necessary to touch.
+	if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
 		steps = append(steps, step.Computed(func() step.Step {
 			target := "v" + target.String()
 			if targetSHA != "" {
