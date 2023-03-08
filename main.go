@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"go/build"
 	"os"
 	"os/exec"
 	"path"
@@ -20,7 +18,6 @@ import (
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
-	"github.com/spf13/cobra"
 
 	"github.com/pulumi/upgrade-provider/step"
 )
@@ -31,35 +28,8 @@ type Context struct {
 	GoPath string
 }
 
-func cmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "upgrade-provider",
-		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
-		Args:  cobra.ExactArgs(1),
-		Run: func(_ *cobra.Command, args []string) {
-			gopath, ok := os.LookupEnv("GOPATH")
-			if !ok {
-				gopath = build.Default.GOPATH
-			}
-			context := Context{
-				Context: context.Background(),
-				GoPath:  gopath,
-			}
-
-			err := UpgradeProvider(context, args[0])
-			if errors.Is(err, ErrHandled) {
-				os.Exit(1)
-			}
-			if err != nil {
-				fmt.Printf("error: %s\n", err.Error())
-				os.Exit(1)
-			}
-		},
-	}
-}
-
 func main() {
-	err := cmd().Execute()
+	err := rootCmd.Execute()
 	contract.IgnoreError(err)
 }
 
