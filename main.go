@@ -128,12 +128,25 @@ func (HandledError) Error() string {
 	return "Program failed and displayed the error to the user"
 }
 
+type ProviderRepo struct {
+	// The path to the repository root
+	root string
+	// The default git branch of the repository
+	defaultBranch string
+	// The working branch of the repository
+	workingBranch string
+}
+
+func (p ProviderRepo) providerDir() *string {
+	dir := filepath.Join(p.root, "provider")
+	return &dir
+}
+
 func UpgradeProvider(ctx Context, name string) error {
 	var err error
-	var path string
+	var repo ProviderRepo
 	var upgradeTargets []UpgradeTargetIssue
 	var target *semver.Version
-	var defaultBranch string
 	var goMod *GoMod
 	upstreamProviderName := strings.TrimPrefix(name, "pulumi-")
 	if s, ok := ProviderName[upstreamProviderName]; ok {
@@ -149,8 +162,9 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	ok = step.Run(step.Combined("Discovering Repository",
-		pulumiProviderRepos(ctx, name).AssignTo(&path),
-		pullDefaultBranch(ctx, "origin").In(&path).AssignTo(&defaultBranch),
+		pulumiProviderRepos(ctx, name).AssignTo(&repo.root),
+		pullDefaultBranch(ctx, "origin").In(&repo.root).
+			AssignTo(&repo.defaultBranch),
 		step.Computed(func() step.Step {
 			if !ctx.UpgradeProviderVersion {
 				return nil
@@ -165,7 +179,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			})
 		}),
 		step.F("Repo kind", func() (string, error) {
-			goMod, err = repoKind(ctx, path, upstreamProviderName)
+			goMod, err = repoKind(ctx, repo, upstreamProviderName)
 			if err != nil {
 				return "", err
 			}
@@ -185,48 +199,47 @@ func UpgradeProvider(ctx Context, name string) error {
 		}
 	}
 	var targetSHA string
-	providerPath := filepath.Join(path, "provider")
-
-	var branchName string
 	if ctx.UpgradeProviderVersion {
-		branchName = fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", upstreamProviderName, target)
+		repo.workingBranch = fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s",
+			upstreamProviderName, target)
 	} else if ctx.UpgradeBridgeVersion {
 		// TODO: Specify version
-		branchName = "upgrade-pulumi-terraform-bridge"
+		repo.workingBranch = "upgrade-pulumi-terraform-bridge"
 	} else {
 		return fmt.Errorf("calculating branch name: unknown action")
 	}
 	steps := []step.Step{
-		ensureBranchCheckedOut(ctx, branchName).In(&path),
+		ensureBranchCheckedOut(ctx, repo.workingBranch).In(&repo.root),
 		step.Computed(func() step.Step {
 			if goMod.Kind.IsPatched() {
-				return step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&path)
+				return step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root)
 			}
 			return nil
 		}),
 	}
 	if ctx.UpgradeBridgeVersion {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath))
+			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).
+			In(repo.providerDir()))
 	}
 
 	if ctx.UpgradeProviderVersion {
-		steps = append(steps, upgradeProviderVersion(ctx, goMod, target, path,
-			providerPath, targetSHA, forkedProviderUpstreamCommit))
+		steps = append(steps, upgradeProviderVersion(ctx, goMod, target, repo,
+			targetSHA, forkedProviderUpstreamCommit))
 	}
 
 	ok = step.Run(step.Combined("Update Artifacts",
 		append(steps,
-			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
+			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&repo.root),
 			step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
-			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks", "--allow-empty")).In(&path),
-			informGitHub(ctx, target, upgradeTargets, branchName,
-				defaultBranch, path, upstreamProviderName),
+			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks", "--allow-empty")).In(&repo.root),
+			informGitHub(ctx, target, upgradeTargets,
+				repo, upstreamProviderName),
 		)...))
 	if !ok {
 		return ErrHandled
@@ -373,7 +386,8 @@ func modPathWithoutVersion(path string) string {
 	return path
 }
 
-func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
+func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoMod, error) {
+	path := repo.root
 	file := filepath.Join(path, "provider", "go.mod")
 
 	data, err := os.ReadFile(file)
@@ -759,26 +773,26 @@ func upgradeUpstreamFork(ctx Context, name string, target *semver.Version, goMod
 
 func upgradeProviderVersion(
 	ctx Context, goMod *GoMod, target *semver.Version,
-	path, providerPath, targetSHA, forkedProviderUpstreamCommit string,
+	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
 	steps := []step.Step{}
 	if goMod.Kind.IsPatched() {
 		// If the provider is patched, we don't use the go module system at all. Instead
 		// we update the module referenced to the new tag.
-		upstreamDir := filepath.Join(path, "upstream")
+		upstreamDir := filepath.Join(repo.root, "upstream")
 		steps = append(steps, step.Combined("update patched provider",
 			step.Cmd(exec.CommandContext(ctx, "git", "fetch", "--tags")).In(&upstreamDir),
 			// We need to remove any patches to so we can cleanly pull the next upstream version.
 			step.Cmd(exec.CommandContext(ctx, "git", "reset", "HEAD", "--hard")).In(&upstreamDir),
 			step.Cmd(exec.CommandContext(ctx, "git", "checkout", "tags/v"+target.String())).In(&upstreamDir),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&repo.root),
 			// We re-apply changes, eagerly.
 			//
 			// Failure to perform this step can lead to failures later, for
 			// example, wee might have a patched in shim dir that is not yet
 			// restored, causing `go mod tidy` to fail, even where `make
 			// provider` would succeed.
-			step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root),
 		))
 	} else if !goMod.Kind.IsForked() {
 		// We have an upstream we don't control, so we need to get it's SHA. We do this
@@ -802,11 +816,11 @@ func upgradeProviderVersion(
 	}
 
 	// goModDir is the directory of the go.mod where we reference the upstream provider.
-	goModDir := providerPath
+	goModDir := *repo.providerDir()
 	if goMod.Kind.IsShimmed() {
 		// If we have a shimmed provider, we run the upstream update in the shim
 		// directory, since that is what references the upstream provider.
-		goModDir = filepath.Join(providerPath, "shim")
+		goModDir = filepath.Join(*repo.providerDir(), "shim")
 	}
 
 	// If a provider is patched or forked, then there is no meaningful version to
@@ -838,7 +852,7 @@ func upgradeProviderVersion(
 
 		replaceIn(&goModDir)
 		if goMod.Kind.IsShimmed() {
-			replaceIn(&providerPath)
+			replaceIn(repo.providerDir())
 		}
 	}
 
@@ -854,9 +868,10 @@ func upgradeProviderVersion(
 
 func informGitHub(
 	ctx Context, target *semver.Version, upgradeTargets []UpgradeTargetIssue,
-	branchName, defaultBranch, path, upstreamProviderName string,
+	repo ProviderRepo, upstreamProviderName string,
 ) step.Step {
-	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path)
+	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
+		"origin", repo.workingBranch)).In(&repo.root)
 
 	var prTitle string
 	if ctx.UpgradeProviderVersion {
@@ -870,12 +885,12 @@ func informGitHub(
 	}
 	createPR := step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
 		"--assignee", "@me",
-		"--base", defaultBranch,
-		"--head", branchName,
+		"--base", repo.defaultBranch,
+		"--head", repo.workingBranch,
 		"--reviewer", "pulumi/Ecosystem",
 		"--title", prTitle,
 		"--body", prBody(upgradeTargets),
-	)).In(&path)
+	)).In(&repo.root)
 	return step.Combined("GitHub",
 		pushBranch,
 		createPR,
@@ -892,7 +907,7 @@ func informGitHub(
 			for i, t := range upgradeTargets {
 				issues[i] = step.Cmd(exec.CommandContext(ctx,
 					"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-					"--add-assignee", "@me")).In(&path)
+					"--add-assignee", "@me")).In(&repo.root)
 			}
 			return step.Combined("Self Assign Issues", issues...)
 		}),
