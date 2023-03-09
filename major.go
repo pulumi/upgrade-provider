@@ -9,6 +9,14 @@ import (
 	"strings"
 )
 
+// More ideas what to auto-fix based on pulumi-tls.
+//
+// TODO examples go.mod need to ref sdk v5.0.0 instead of v4.5.0; use go mod edit -droprequire, go mod edit -require
+// TODO examples/go.mod should not ref provider/v4 but ref provider/v5; use go mod edit similarly
+// TODO README.md and sdk/python/README.md should edit go get references.
+// TODO Makefile edit PROVIDER_PATH := provider/v4 to PROVIDER_PATH := provider/v5
+// TODO .goreleaser.yml, .goreleaser.preprelease.yml also need editing
+
 func major(name, newMajorVersion string) error {
 	mu := majorUtil{}
 	info := mu.currentProvider(name)
