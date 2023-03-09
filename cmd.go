@@ -40,7 +40,7 @@ var majorCmd = &cobra.Command{
 	Short: `Perform code edits necessary during a major version upgrade. Pass a short name and the new major version like "tls" "v5"`,
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return major(args[1], args[0])
+		return major(args[0], args[1])
 	},
 }
 

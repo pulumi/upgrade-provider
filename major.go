@@ -61,6 +61,13 @@ func (u *majorUtil) fixupGoFile(prov majorProviderInfo, ver, file string) error 
 		return err
 	}
 
+	replaceSdkPkg := fmt.Sprintf("%q -> %q",
+		fmt.Sprintf("%s/%s", sdk, prov.major),
+		fmt.Sprintf("%s/%s", sdk, ver))
+	if err := u.gofmtr(replaceSdkPkg, file); err != nil {
+		return err
+	}
+
 	return nil
 }
 
