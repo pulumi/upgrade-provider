@@ -31,6 +31,8 @@ type Context struct {
 	GoPath string
 
 	MaxVersion *semver.Version
+
+	UpgradeBridgeVersion bool
 }
 
 func cmd() *cobra.Command {
@@ -74,6 +76,8 @@ func cmd() *cobra.Command {
 		`Upgrade the provider to the passed in version.
 
 If the passed version does not exist, an error is signaled.`)
+	cmd.PersistentFlags().BoolVar(&context.UpgradeBridgeVersion, "upgrade-bridge", true,
+		"If `pulumi-terraform-bridge` should be updated.")
 
 	return cmd
 }
@@ -218,8 +222,10 @@ func UpgradeProvider(ctx Context, name string) error {
 			}
 			return nil
 		}),
-		step.Cmd(exec.CommandContext(ctx,
-			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
+	}
+	if ctx.UpgradeBridgeVersion {
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath))
 	}
 	if goMod.Kind.IsPatched() {
 		// If the provider is patched, we don't use the go module system at all. Instead
