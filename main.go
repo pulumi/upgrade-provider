@@ -145,6 +145,7 @@ func (p ProviderRepo) providerDir() *string {
 func UpgradeProvider(ctx Context, name string) error {
 	var err error
 	var repo ProviderRepo
+	var targetBridgeVersion string
 	var upgradeTargets []UpgradeTargetIssue
 	var target *semver.Version
 	var goMod *GoMod
@@ -161,31 +162,50 @@ func UpgradeProvider(ctx Context, name string) error {
 		return ErrHandled
 	}
 
-	ok = step.Run(step.Combined("Discovering Repository",
+	discoverSteps := []step.Step{
 		pulumiProviderRepos(ctx, name).AssignTo(&repo.root),
 		pullDefaultBranch(ctx, "origin").In(&repo.root).
 			AssignTo(&repo.defaultBranch),
-		step.Computed(func() step.Step {
-			if !ctx.UpgradeProviderVersion {
-				return nil
-			}
-			return step.F("Upgrade version", func() (string, error) {
+	}
+
+	if ctx.UpgradeProviderVersion {
+		discoverSteps = append(discoverSteps,
+			step.F("Target Provider Version", func() (string, error) {
 				upgradeTargets, err = getExpectedTarget(ctx, name)
 				if err == nil {
 					target = upgradeTargets[0].Version
 					return upgradeTargets[0].Version.String(), nil
 				}
 				return "", err
-			})
-		}),
-		step.F("Repo kind", func() (string, error) {
-			goMod, err = repoKind(ctx, repo, upstreamProviderName)
-			if err != nil {
-				return "", err
-			}
-			return string(goMod.Kind), nil
-		}),
-	))
+			}))
+	}
+
+	discoverSteps = append(discoverSteps, step.F("Repo kind", func() (string, error) {
+		goMod, err = repoKind(ctx, repo, upstreamProviderName)
+		if err != nil {
+			return "", err
+		}
+		return string(goMod.Kind), nil
+	}))
+
+	if ctx.UpgradeBridgeVersion {
+		discoverSteps = append(discoverSteps,
+			step.F("Target Bridge Version", func() (string, error) {
+				resultBytes, err := exec.CommandContext(ctx, "gh", "repo", "view",
+					"pulumi/pulumi-terraform-bridge", "--json=latestRelease").Output()
+				if err != nil {
+					return "", err
+				}
+				result := map[string]any{}
+				err = json.Unmarshal(resultBytes, &result)
+				if err != nil {
+					return "", err
+				}
+				return result["latestRelease"].(map[string]any)["tagName"].(string), nil
+			}).AssignTo(&targetBridgeVersion))
+	}
+
+	ok = step.Run(step.Combined("Discovering Repository", discoverSteps...))
 	if !ok {
 		return ErrHandled
 	}
@@ -198,13 +218,16 @@ func UpgradeProvider(ctx Context, name string) error {
 			return ErrHandled
 		}
 	}
+
 	var targetSHA string
 	if ctx.UpgradeProviderVersion {
 		repo.workingBranch = fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s",
 			upstreamProviderName, target)
 	} else if ctx.UpgradeBridgeVersion {
-		// TODO: Specify version
-		repo.workingBranch = "upgrade-pulumi-terraform-bridge"
+		contract.Assertf(targetBridgeVersion != "",
+			"We are upgrading the bridge, so we must have a target version")
+		repo.workingBranch = fmt.Sprintf("upgrade-pulumi-terraform-bridge-to-%s",
+			targetBridgeVersion)
 	} else {
 		return fmt.Errorf("calculating branch name: unknown action")
 	}
@@ -219,7 +242,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 	if ctx.UpgradeBridgeVersion {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).
+			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
 			In(repo.providerDir()))
 	}
 
@@ -239,7 +262,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks", "--allow-empty")).In(&repo.root),
 			informGitHub(ctx, target, upgradeTargets,
-				repo, upstreamProviderName),
+				repo, upstreamProviderName, targetBridgeVersion),
 		)...))
 	if !ok {
 		return ErrHandled
@@ -868,7 +891,7 @@ func upgradeProviderVersion(
 
 func informGitHub(
 	ctx Context, target *semver.Version, upgradeTargets []UpgradeTargetIssue,
-	repo ProviderRepo, upstreamProviderName string,
+	repo ProviderRepo, upstreamProviderName, targetBridgeVersion string,
 ) step.Step {
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
@@ -878,8 +901,7 @@ func informGitHub(
 		prTitle = fmt.Sprintf("Upgrade terraform-provider-%s to v%s",
 			upstreamProviderName, target)
 	} else if ctx.UpgradeBridgeVersion {
-		// TODO Specify bridge version
-		prTitle = "Upgrade pulumi-terraform-bridge"
+		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
 	} else {
 		panic("Unknown action")
 	}
