@@ -18,6 +18,14 @@ func major(name, newMajorVersion string) error {
 	if err := mu.renameGoModules(info, newMajorVersion); err != nil {
 		return err
 	}
+	if err := mu.fixReplace(
+		fmt.Sprintf("%s/%s", info.prefix, info.major),
+		fmt.Sprintf("%s/%s", info.prefix, newMajorVersion),
+		"../provider",
+		"examples/go.mod",
+	); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -53,6 +61,37 @@ func (u *majorUtil) renameGoModules(prov majorProviderInfo, ver string) error {
 		return err
 	}
 	return nil
+}
+
+func (u *majorUtil) fixReplace(replaceOld, replaceNew, replaceTo, gomodFile string) error {
+	if err := u.dropReplace(replaceOld, gomodFile); err != nil {
+		return err
+	}
+	if err := u.addReplace(replaceNew, replaceTo, gomodFile); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *majorUtil) dropReplace(replaceFrom, gomodFile string) error {
+	dir := filepath.Dir(gomodFile)
+	fmt.Printf("cd %s && go mod edit -dropreplace %s\n", dir, replaceFrom)
+	cmd := exec.Command("go", "mod", "edit", "-dropreplace", replaceFrom)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (u *majorUtil) addReplace(replaceFrom, replaceTo, gomodFile string) error {
+	dir := filepath.Dir(gomodFile)
+	replaceSpec := fmt.Sprintf("%s=%s", replaceFrom, replaceTo)
+	fmt.Printf("cd %s && go mod edit -replace %s\n", dir, replaceSpec)
+	cmd := exec.Command("go", "mod", "edit", "-replace", replaceSpec)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func (u *majorUtil) renameGoModule(newModName, gomodFile string) error {
