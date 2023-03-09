@@ -29,33 +29,53 @@ type Context struct {
 	context.Context
 
 	GoPath string
+
+	MaxVersion *semver.Version
 }
 
 func cmd() *cobra.Command {
-	return &cobra.Command{
+	var maxVersion string
+	gopath, ok := os.LookupEnv("GOPATH")
+	if !ok {
+		gopath = build.Default.GOPATH
+	}
+	context := Context{
+		Context: context.Background(),
+		GoPath:  gopath,
+	}
+
+	exitOnError := func(err error) {
+		if err == nil {
+			return
+		}
+		if !errors.Is(err, ErrHandled) {
+			fmt.Printf("error: %s\n", err.Error())
+		}
+		os.Exit(1)
+	}
+
+	cmd := &cobra.Command{
 		Use:   "upgrade-provider",
 		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
 		Args:  cobra.ExactArgs(1),
 		Run: func(_ *cobra.Command, args []string) {
-			gopath, ok := os.LookupEnv("GOPATH")
-			if !ok {
-				gopath = build.Default.GOPATH
-			}
-			context := Context{
-				Context: context.Background(),
-				GoPath:  gopath,
+			var err error
+			if maxVersion != "" {
+				context.MaxVersion, err = semver.NewVersion(maxVersion)
+				exitOnError(err)
 			}
 
-			err := UpgradeProvider(context, args[0])
-			if errors.Is(err, ErrHandled) {
-				os.Exit(1)
-			}
-			if err != nil {
-				fmt.Printf("error: %s\n", err.Error())
-				os.Exit(1)
-			}
+			err = UpgradeProvider(context, args[0])
+			exitOnError(err)
 		},
 	}
+
+	cmd.PersistentFlags().StringVar(&maxVersion, "upgrade-to", "",
+		`Upgrade the provider to the passed in version.
+
+If the passed version does not exist, an error is signaled.`)
+
+	return cmd
 }
 
 func main() {
@@ -208,10 +228,16 @@ func UpgradeProvider(ctx Context, name string) error {
 		steps = append(steps, step.Combined("update patched provider",
 			step.Cmd(exec.CommandContext(ctx, "git", "fetch", "--tags")).In(&upstreamDir),
 			// We need to remove any patches to so we can cleanly pull the next upstream version.
-			// Changes are re-applied when we next run `make tfgen`.
 			step.Cmd(exec.CommandContext(ctx, "git", "reset", "HEAD", "--hard")).In(&upstreamDir),
 			step.Cmd(exec.CommandContext(ctx, "git", "checkout", "tags/v"+target.String())).In(&upstreamDir),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&path),
+			// We re-apply changes, eagerly.
+			//
+			// Failure to perform this step can lead to failures later, For
+			// example, wee might have a patched in shim dir that is not yet
+			// restored, causing `go mod tidy` to fail, even where `make
+			// provider` would succeed.
+			step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&path),
 		))
 	} else if !goMod.Kind.IsForked() {
 		// We have an upstream we don't control, so we need to get it's SHA. We do this
@@ -576,7 +602,7 @@ type UpgradeTargetIssue struct {
 	Number  int             `json:"number"`
 }
 
-func getExpectedTarget(ctx context.Context, name string) ([]UpgradeTargetIssue, error) {
+func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, error) {
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--author=pulumi-bot",
@@ -597,7 +623,9 @@ func getExpectedTarget(ctx context.Context, name string) ([]UpgradeTargetIssue, 
 	if err != nil {
 		return nil, err
 	}
+
 	var versions []UpgradeTargetIssue
+	var versionConstrained bool
 	for _, title := range titles {
 		_, nameToVersion, found := strings.Cut(title.Title, "Upgrade terraform-provider-")
 		if !found {
@@ -609,6 +637,10 @@ func getExpectedTarget(ctx context.Context, name string) ([]UpgradeTargetIssue, 
 		}
 		v, err := semver.NewVersion(version)
 		if err == nil {
+			if !(ctx.MaxVersion == nil || ctx.MaxVersion.Equal(v) || ctx.MaxVersion.GreaterThan(v)) {
+				versionConstrained = true
+				continue
+			}
 			versions = append(versions, UpgradeTargetIssue{
 				Version: v,
 				Number:  title.Number,
@@ -616,11 +648,20 @@ func getExpectedTarget(ctx context.Context, name string) ([]UpgradeTargetIssue, 
 		}
 	}
 	if len(versions) == 0 {
-		return nil, fmt.Errorf("no upgrade found")
+		var extra string
+		if versionConstrained {
+			extra = "(a version was found but it was greater then the specified max)"
+		}
+		return nil, fmt.Errorf("no upgrade found%s", extra)
 	}
 	sort.Slice(versions, func(i, j int) bool {
 		return versions[j].Version.LessThan(versions[i].Version)
 	})
+
+	if ctx.MaxVersion != nil && !versions[0].Version.Equal(ctx.MaxVersion) {
+		return nil, fmt.Errorf("possible upgrades exist, but non match %s", ctx.MaxVersion)
+	}
+
 	return versions, nil
 }
 
