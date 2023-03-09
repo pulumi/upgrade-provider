@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -12,6 +13,9 @@ func major(name, newMajorVersion string) error {
 	mu := majorUtil{}
 	info := mu.currentProvider(name)
 	if err := mu.fixupGoFiles(info, newMajorVersion); err != nil {
+		return err
+	}
+	if err := mu.renameGoModules(info, newMajorVersion); err != nil {
 		return err
 	}
 	return nil
@@ -36,6 +40,29 @@ func (u *majorUtil) fixupGoFiles(prov majorProviderInfo, ver string) error {
 		}
 	}
 	return nil
+}
+
+func (u *majorUtil) renameGoModules(prov majorProviderInfo, ver string) error {
+	if err := u.renameGoModule(fmt.Sprintf("%s/%s", prov.prefix, ver), "provider/go.mod"); err != nil {
+		return err
+	}
+	if err := u.renameGoModule(fmt.Sprintf("%s/sdk/%s", strings.TrimSuffix(prov.prefix, "/provider"), ver), "sdk/go.mod"); err != nil {
+		return err
+	}
+	if err := u.renameGoModule(fmt.Sprintf("%s/examples/%s", strings.TrimSuffix(prov.prefix, "/provider"), ver), "examples/go.mod"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *majorUtil) renameGoModule(newModName, gomodFile string) error {
+	dir := filepath.Dir(gomodFile)
+	fmt.Printf("cd %s && go mod edit -module %s\n", dir, newModName)
+	cmd := exec.Command("go", "mod", "edit", "-module", newModName)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func (u *majorUtil) fixupGoFile(prov majorProviderInfo, ver, file string) error {
