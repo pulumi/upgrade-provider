@@ -233,7 +233,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&path),
 			// We re-apply changes, eagerly.
 			//
-			// Failure to perform this step can lead to failures later, For
+			// Failure to perform this step can lead to failures later, for
 			// example, wee might have a patched in shim dir that is not yet
 			// restored, causing `go mod tidy` to fail, even where `make
 			// provider` would succeed.
