@@ -206,7 +206,7 @@ type combined struct {
 	steps       []Step
 
 	path     *string
-	assignTo *string
+	assignTo []*string
 	rvalue   *string
 }
 
@@ -221,7 +221,7 @@ func (c combined) In(path *string) Step {
 }
 
 func (c combined) AssignTo(position *string) Step {
-	c.assignTo = position
+	c.assignTo = append(c.assignTo, position)
 	return c
 }
 
@@ -239,16 +239,20 @@ func (c combined) run(prefix string) bool {
 		if c.path != nil {
 			s = s.In(c.path)
 		}
-		if c.assignTo != nil {
-			s = s.AssignTo(c.assignTo)
+		if c.rvalue == nil {
+			for _, lvalue := range c.assignTo {
+				s = s.AssignTo(lvalue)
+			}
 		}
 		ok := s.run(subPrefix + "- ")
 		if !ok {
 			return false
 		}
 	}
-	if c.assignTo != nil && c.rvalue != nil {
-		*c.assignTo = *c.rvalue
+	if c.rvalue != nil {
+		for _, lvalue := range c.assignTo {
+			*lvalue = *c.rvalue
+		}
 	}
 	return true
 }

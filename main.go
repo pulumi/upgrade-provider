@@ -31,6 +31,9 @@ type Context struct {
 	GoPath string
 
 	MaxVersion *semver.Version
+
+	UpgradeBridgeVersion   bool
+	UpgradeProviderVersion bool
 }
 
 func cmd() *cobra.Command {
@@ -39,6 +42,8 @@ func cmd() *cobra.Command {
 	if !ok {
 		gopath = build.Default.GOPATH
 	}
+	var upgradeKind string
+
 	context := Context{
 		Context: context.Background(),
 		GoPath:  gopath,
@@ -58,22 +63,54 @@ func cmd() *cobra.Command {
 		Use:   "upgrade-provider",
 		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
 		Args:  cobra.ExactArgs(1),
-		Run: func(_ *cobra.Command, args []string) {
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+			// Validate that maxVersion is a valid version
 			var err error
 			if maxVersion != "" {
 				context.MaxVersion, err = semver.NewVersion(maxVersion)
-				exitOnError(err)
+				if err != nil {
+					return fmt.Errorf("--provider-version=%s: %w",
+						maxVersion, err)
+				}
 			}
 
-			err = UpgradeProvider(context, args[0])
+			// Validate the kind switch
+			switch upgradeKind {
+			case "all":
+				context.UpgradeBridgeVersion = true
+				context.UpgradeProviderVersion = true
+			case "bridge":
+				context.UpgradeBridgeVersion = true
+			case "provider":
+				context.UpgradeProviderVersion = true
+			default:
+				return fmt.Errorf(
+					"--kind=%s invalid. Must be one of `all`, `bridge` or `provider`.",
+					upgradeKind)
+			}
+
+			if context.MaxVersion != nil && !context.UpgradeProviderVersion {
+				return fmt.Errorf(
+					"cannot specify the provider version unless the provider will be upgraded")
+			}
+
+			return nil
+		},
+		Run: func(_ *cobra.Command, args []string) {
+			err := UpgradeProvider(context, args[0])
 			exitOnError(err)
 		},
 	}
 
-	cmd.PersistentFlags().StringVar(&maxVersion, "upgrade-to", "",
+	cmd.PersistentFlags().StringVar(&maxVersion, "provider-version", "",
 		`Upgrade the provider to the passed in version.
 
 If the passed version does not exist, an error is signaled.`)
+	cmd.PersistentFlags().StringVar(&upgradeKind, "kind", "all",
+		`The kind of upgrade to perform:
+- "all":     Upgrade the upstream provider and the bridge.
+- "bridge":  Upgrade the bridge only.
+- "provider: Upgrade the upstream provider only.`)
 
 	return cmd
 }
@@ -91,12 +128,26 @@ func (HandledError) Error() string {
 	return "Program failed and displayed the error to the user"
 }
 
+type ProviderRepo struct {
+	// The path to the repository root
+	root string
+	// The default git branch of the repository
+	defaultBranch string
+	// The working branch of the repository
+	workingBranch string
+}
+
+func (p ProviderRepo) providerDir() *string {
+	dir := filepath.Join(p.root, "provider")
+	return &dir
+}
+
 func UpgradeProvider(ctx Context, name string) error {
 	var err error
-	var path string
+	var repo ProviderRepo
+	var targetBridgeVersion string
 	var upgradeTargets []UpgradeTargetIssue
 	var target *semver.Version
-	var defaultBranch string
 	var goMod *GoMod
 	upstreamProviderName := strings.TrimPrefix(name, "pulumi-")
 	if s, ok := ProviderName[upstreamProviderName]; ok {
@@ -111,242 +162,111 @@ func UpgradeProvider(ctx Context, name string) error {
 		return ErrHandled
 	}
 
-	ok = step.Run(step.Combined("Discovering Repository",
-		pulumiProviderRepos(ctx, name).AssignTo(&path),
-		pullDefaultBranch(ctx, "origin").In(&path).AssignTo(&defaultBranch),
-		step.F("Upgrade version", func() (string, error) {
-			upgradeTargets, err = getExpectedTarget(ctx, name)
-			if err == nil {
-				target = upgradeTargets[0].Version
-				return upgradeTargets[0].Version.String(), nil
-			}
-			return "", err
-		}),
-		step.F("Repo kind", func() (string, error) {
-			goMod, err = repoKind(ctx, path, upstreamProviderName)
-			if err != nil {
+	discoverSteps := []step.Step{
+		pulumiProviderRepos(ctx, name).AssignTo(&repo.root),
+		pullDefaultBranch(ctx, "origin").In(&repo.root).
+			AssignTo(&repo.defaultBranch),
+	}
+
+	if ctx.UpgradeProviderVersion {
+		discoverSteps = append(discoverSteps,
+			step.F("Target Provider Version", func() (string, error) {
+				upgradeTargets, err = getExpectedTarget(ctx, name)
+				if err == nil {
+					target = upgradeTargets[0].Version
+					return upgradeTargets[0].Version.String(), nil
+				}
 				return "", err
-			}
-			return string(goMod.Kind), nil
-		}),
-	))
+			}))
+	}
+
+	discoverSteps = append(discoverSteps, step.F("Repo kind", func() (string, error) {
+		goMod, err = repoKind(ctx, repo, upstreamProviderName)
+		if err != nil {
+			return "", err
+		}
+		return string(goMod.Kind), nil
+	}))
+
+	if ctx.UpgradeBridgeVersion {
+		discoverSteps = append(discoverSteps,
+			step.F("Target Bridge Version", func() (string, error) {
+				resultBytes, err := exec.CommandContext(ctx, "gh", "repo", "view",
+					"pulumi/pulumi-terraform-bridge", "--json=latestRelease").Output()
+				if err != nil {
+					return "", err
+				}
+				result := map[string]any{}
+				err = json.Unmarshal(resultBytes, &result)
+				if err != nil {
+					return "", err
+				}
+				return result["latestRelease"].(map[string]any)["tagName"].(string), nil
+			}).AssignTo(&targetBridgeVersion))
+	}
+
+	ok = step.Run(step.Combined("Discovering Repository", discoverSteps...))
 	if !ok {
 		return ErrHandled
 	}
 
 	var forkedProviderUpstreamCommit string
-	if goMod.Kind.IsForked() {
-		var upstreamPath string
-		var previousUpstreamVersion *semver.Version
-		ok = step.Run(step.Combined("Upgrading Forked Provider",
-			ensureUpstreamRepo(ctx, goMod.Fork.Old.Path).AssignTo(&upstreamPath),
-			step.F("Ensure Pulumi Remote", func() (string, error) {
-				remoteName := strings.TrimPrefix(name, "pulumi-")
-				if s, ok := ProviderName[remoteName]; ok {
-					remoteName = s
-				}
-				return ensurePulumiRemote(ctx, remoteName)
-			}).In(&upstreamPath),
-			step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
-			step.Cmd(exec.Command("git", "fetch", "origin", "--tags")).In(&upstreamPath),
-			step.F("Discover Previous Upstream Version", func() (string, error) {
-				return runGitCommand(ctx, func(b []byte) (string, error) {
-					lines := strings.Split(string(b), "\n")
-					for _, line := range lines {
-						line = strings.TrimSpace(line)
-						version, err := semver.NewVersion(strings.TrimPrefix(line, "pulumi/upstream-v"))
-						if err != nil {
-							continue
-						}
-						if previousUpstreamVersion == nil || previousUpstreamVersion.LessThan(version) {
-							previousUpstreamVersion = version
-						}
-					}
-					if previousUpstreamVersion == nil {
-						return "", fmt.Errorf("no version found")
-					}
-					return previousUpstreamVersion.String(), nil
-				}, "branch", "--remote", "--list", "pulumi/upstream-v*")
-			}).In(&upstreamPath),
-			step.Computed(func() step.Step {
-				return step.Cmd(exec.CommandContext(ctx,
-					"git", "checkout", "pulumi/upstream-v"+previousUpstreamVersion.String()))
-			}).In(&upstreamPath),
-			step.F("Upstream Branch", func() (string, error) {
-				target := "upstream-v" + target.String()
-				branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
-					lines := strings.Split(string(b), "\n")
-					for _, line := range lines {
-						if strings.TrimSpace(line) == target {
-							return true, nil
-						}
-					}
-					return false, nil
-				}, "branch")
-				if err != nil {
-					return "", err
-				}
-				if !branchExists {
-					return runGitCommand(ctx, say("creating "+target),
-						"checkout", "-b", target)
-				}
-				return target + " already exists", nil
-			}).In(&upstreamPath),
-			step.Cmd(exec.CommandContext(ctx,
-				"git", "merge", "v"+target.String())).In(&upstreamPath),
-			step.Cmd(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
-			step.Cmd(exec.CommandContext(ctx,
-				"git", "push", "pulumi", "upstream-v"+target.String())).In(&upstreamPath),
-			step.F("Get Head Commit", func() (string, error) {
-				return runGitCommand(ctx, func(b []byte) (string, error) {
-					return strings.TrimSpace(string(b)), nil
-				}, "rev-parse", "HEAD")
-			}).AssignTo(&forkedProviderUpstreamCommit).In(&upstreamPath),
-		))
+	if goMod.Kind.IsForked() && ctx.UpgradeBridgeVersion {
+		ok = step.Run(upgradeUpstreamFork(ctx, name, target, goMod).
+			AssignTo(&forkedProviderUpstreamCommit))
 		if !ok {
 			return ErrHandled
 		}
 	}
+
 	var targetSHA string
-	providerPath := filepath.Join(path, "provider")
-	branchName := fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s", upstreamProviderName, target)
+	if ctx.UpgradeProviderVersion {
+		repo.workingBranch = fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s",
+			upstreamProviderName, target)
+	} else if ctx.UpgradeBridgeVersion {
+		contract.Assertf(targetBridgeVersion != "",
+			"We are upgrading the bridge, so we must have a target version")
+		repo.workingBranch = fmt.Sprintf("upgrade-pulumi-terraform-bridge-to-%s",
+			targetBridgeVersion)
+	} else {
+		return fmt.Errorf("calculating branch name: unknown action")
+	}
 	steps := []step.Step{
-		ensureBranchCheckedOut(ctx, branchName).In(&path),
+		ensureBranchCheckedOut(ctx, repo.workingBranch).In(&repo.root),
 		step.Computed(func() step.Step {
 			if goMod.Kind.IsPatched() {
-				return step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&path)
+				return step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root)
 			}
 			return nil
 		}),
-		step.Cmd(exec.CommandContext(ctx,
-			"go", "get", "-u", "github.com/pulumi/pulumi-terraform-bridge/v3")).In(&providerPath),
 	}
-	if goMod.Kind.IsPatched() {
-		// If the provider is patched, we don't use the go module system at all. Instead
-		// we update the module referenced to the new tag.
-		upstreamDir := filepath.Join(path, "upstream")
-		steps = append(steps, step.Combined("update patched provider",
-			step.Cmd(exec.CommandContext(ctx, "git", "fetch", "--tags")).In(&upstreamDir),
-			// We need to remove any patches to so we can cleanly pull the next upstream version.
-			step.Cmd(exec.CommandContext(ctx, "git", "reset", "HEAD", "--hard")).In(&upstreamDir),
-			step.Cmd(exec.CommandContext(ctx, "git", "checkout", "tags/v"+target.String())).In(&upstreamDir),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&path),
-			// We re-apply changes, eagerly.
-			//
-			// Failure to perform this step can lead to failures later, for
-			// example, wee might have a patched in shim dir that is not yet
-			// restored, causing `go mod tidy` to fail, even where `make
-			// provider` would succeed.
-			step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&path),
-		))
-	} else if !goMod.Kind.IsForked() {
-		// We have an upstream we don't control, so we need to get it's SHA. We do this
-		// instead of using version tags because we can't ensure that the upstream is
-		// versioning their go modules correctly.
-		//
-		// It they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
-		steps = append(steps,
-			step.F("Lookup Tag SHA", func() (string, error) {
-				return runGitCommand(ctx, func(b []byte) (string, error) {
-					for _, line := range strings.Split(string(b), "\n") {
-						parts := strings.Split(line, "\t")
-						contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values")
-						if parts[1] == "refs/tags/v"+target.String() {
-							return parts[0], nil
-						}
-					}
-					return "", fmt.Errorf("could not find SHA for tag '%s'", target.Original())
-				}, "ls-remote", "--tags", "https://"+modPathWithoutVersion(goMod.Upstream.Path))
-			}).AssignTo(&targetSHA))
-	}
-
-	// goModDir is the directory of the go.mod where we reference the upstream provider.
-	goModDir := providerPath
-	if goMod.Kind.IsShimmed() {
-		// If we have a shimmed provider, we run the upstream update in the shim
-		// directory, since that is what references the upstream provider.
-		goModDir = filepath.Join(providerPath, "shim")
-	}
-
-	// If a provider is patched or forked, then there is no meaningful version to
-	// update. Because Go includes major versions as part of its module path, making
-	// this correct can break on major version updates. We just leave it if its not
-	// necessary to touch.
-	if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
-		steps = append(steps, step.Computed(func() step.Step {
-			target := "v" + target.String()
-			if targetSHA != "" {
-				target = targetSHA
-			}
-			return step.Cmd(exec.CommandContext(ctx,
-				"go", "get", goMod.Upstream.Path+"@"+target))
-		}).In(&goModDir))
-	}
-
-	if goMod.Kind.IsForked() {
-		// If we are running a forked update, we need to replace the reference to the fork
-		// with the SHA of the new upstream branch.
-		contract.Assert(forkedProviderUpstreamCommit != "")
-
-		replaceIn := func(dir *string) {
-			steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-				"go", "mod", "edit", "-replace",
-				goMod.Fork.Old.Path+"="+
-					goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit)).In(dir))
-		}
-
-		replaceIn(&goModDir)
-		if goMod.Kind.IsShimmed() {
-			replaceIn(&providerPath)
-		}
-	}
-
-	if goMod.Kind.IsShimmed() {
-		// When shimmed, we also run `go mod tidy` in the shim directory, and we want to
-		// run that before running `go mod tidy` in the main `provider` directory.
+	if ctx.UpgradeBridgeVersion {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "mod", "tidy")).In(&goModDir))
+			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
+			In(repo.providerDir()))
 	}
 
-	ok = step.Run(step.Combined("Upgrading Provider",
+	if ctx.UpgradeProviderVersion {
+		steps = append(steps, upgradeProviderVersion(ctx, goMod, target, repo,
+			targetSHA, forkedProviderUpstreamCommit))
+	}
+
+	ok = step.Run(step.Combined("Update Artifacts",
 		append(steps,
-			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
+			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
 			step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
-			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks", "--allow-empty")).In(&path),
-			step.Combined("Open PR",
-				step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path),
-				step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
-					"--assignee", "@me",
-					"--base", defaultBranch,
-					"--head", branchName,
-					"--reviewer", "pulumi/Ecosystem",
-					"--title", fmt.Sprintf("Upgrade terraform-provider-%s to v%s",
-						upstreamProviderName, target),
-					"--body", prBody(upgradeTargets),
-				)).In(&path),
-				// This PR will close issues, so we assign the issues to @me, just like
-				// the PR itself.
-				step.Computed(func() step.Step {
-					issues := make([]step.Step, len(upgradeTargets))
-					for i, t := range upgradeTargets {
-						issues[i] = step.Cmd(exec.CommandContext(ctx,
-							"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-							"--add-assignee", "@me")).In(&path)
-					}
-					return step.Combined("Self Assign Issues", issues...)
-				}),
-			),
+			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks", "--allow-empty")).In(&repo.root),
+			informGitHub(ctx, target, upgradeTargets,
+				repo, upstreamProviderName, targetBridgeVersion),
 		)...))
 	if !ok {
 		return ErrHandled
 	}
-
-	contract.Ignore(target)
 
 	return nil
 }
@@ -489,7 +409,8 @@ func modPathWithoutVersion(path string) string {
 	return path
 }
 
-func repoKind(ctx context.Context, path, providerName string) (*GoMod, error) {
+func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoMod, error) {
+	path := repo.root
 	file := filepath.Join(path, "provider", "go.mod")
 
 	data, err := os.ReadFile(file)
@@ -776,9 +697,9 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 			return "done", downloadRepo(ctx, targetURL, expectedLocation)
 		}),
 		step.F("Validating", func() (string, error) {
-			return expectedLocation, exec.CommandContext(ctx, "git", "status", "--short").Run()
+			return "done", exec.CommandContext(ctx, "git", "status", "--short").Run()
 		}).In(&expectedLocation),
-	)
+	).Return(&expectedLocation)
 }
 
 func prBody(upgradeTargets []UpgradeTargetIssue) string {
@@ -797,4 +718,220 @@ func getTfProviderRepoName(providerName string) string {
 		providerName = tfRepoName
 	}
 	return "terraform-provider-" + providerName
+}
+
+// Upgrade the upstream fork of a pulumi provider.
+//
+// The SHA of the new upstream branch is returned.
+func upgradeUpstreamFork(ctx Context, name string, target *semver.Version, goMod *GoMod) step.Step {
+	var forkedProviderUpstreamCommit string
+	var upstreamPath string
+	var previousUpstreamVersion *semver.Version
+	return step.Combined("Upgrading Forked Provider",
+		ensureUpstreamRepo(ctx, goMod.Fork.Old.Path).AssignTo(&upstreamPath),
+		step.F("Ensure Pulumi Remote", func() (string, error) {
+			remoteName := strings.TrimPrefix(name, "pulumi-")
+			if s, ok := ProviderName[remoteName]; ok {
+				remoteName = s
+			}
+			return ensurePulumiRemote(ctx, remoteName)
+		}).In(&upstreamPath),
+		step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
+		step.Cmd(exec.Command("git", "fetch", "origin", "--tags")).In(&upstreamPath),
+		step.F("Discover Previous Upstream Version", func() (string, error) {
+			return runGitCommand(ctx, func(b []byte) (string, error) {
+				lines := strings.Split(string(b), "\n")
+				for _, line := range lines {
+					line = strings.TrimSpace(line)
+					version, err := semver.NewVersion(strings.TrimPrefix(line, "pulumi/upstream-v"))
+					if err != nil {
+						continue
+					}
+					if previousUpstreamVersion == nil || previousUpstreamVersion.LessThan(version) {
+						previousUpstreamVersion = version
+					}
+				}
+				if previousUpstreamVersion == nil {
+					return "", fmt.Errorf("no version found")
+				}
+				return previousUpstreamVersion.String(), nil
+			}, "branch", "--remote", "--list", "pulumi/upstream-v*")
+		}).In(&upstreamPath),
+		step.Computed(func() step.Step {
+			return step.Cmd(exec.CommandContext(ctx,
+				"git", "checkout", "pulumi/upstream-v"+previousUpstreamVersion.String()))
+		}).In(&upstreamPath),
+		step.F("Upstream Branch", func() (string, error) {
+			target := "upstream-v" + target.String()
+			branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
+				lines := strings.Split(string(b), "\n")
+				for _, line := range lines {
+					if strings.TrimSpace(line) == target {
+						return true, nil
+					}
+				}
+				return false, nil
+			}, "branch")
+			if err != nil {
+				return "", err
+			}
+			if !branchExists {
+				return runGitCommand(ctx, say("creating "+target),
+					"checkout", "-b", target)
+			}
+			return target + " already exists", nil
+		}).In(&upstreamPath),
+		step.Cmd(exec.CommandContext(ctx,
+			"git", "merge", "v"+target.String())).In(&upstreamPath),
+		step.Cmd(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
+		step.Cmd(exec.CommandContext(ctx,
+			"git", "push", "pulumi", "upstream-v"+target.String())).In(&upstreamPath),
+		step.F("Get Head Commit", func() (string, error) {
+			return runGitCommand(ctx, func(b []byte) (string, error) {
+				return strings.TrimSpace(string(b)), nil
+			}, "rev-parse", "HEAD")
+		}).AssignTo(&forkedProviderUpstreamCommit).In(&upstreamPath),
+	).Return(&forkedProviderUpstreamCommit)
+}
+
+func upgradeProviderVersion(
+	ctx Context, goMod *GoMod, target *semver.Version,
+	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
+) step.Step {
+	steps := []step.Step{}
+	if goMod.Kind.IsPatched() {
+		// If the provider is patched, we don't use the go module system at all. Instead
+		// we update the module referenced to the new tag.
+		upstreamDir := filepath.Join(repo.root, "upstream")
+		steps = append(steps, step.Combined("update patched provider",
+			step.Cmd(exec.CommandContext(ctx, "git", "fetch", "--tags")).In(&upstreamDir),
+			// We need to remove any patches to so we can cleanly pull the next upstream version.
+			step.Cmd(exec.CommandContext(ctx, "git", "reset", "HEAD", "--hard")).In(&upstreamDir),
+			step.Cmd(exec.CommandContext(ctx, "git", "checkout", "tags/v"+target.String())).In(&upstreamDir),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&repo.root),
+			// We re-apply changes, eagerly.
+			//
+			// Failure to perform this step can lead to failures later, for
+			// example, wee might have a patched in shim dir that is not yet
+			// restored, causing `go mod tidy` to fail, even where `make
+			// provider` would succeed.
+			step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root),
+		))
+	} else if !goMod.Kind.IsForked() {
+		// We have an upstream we don't control, so we need to get it's SHA. We do this
+		// instead of using version tags because we can't ensure that the upstream is
+		// versioning their go modules correctly.
+		//
+		// It they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
+		steps = append(steps,
+			step.F("Lookup Tag SHA", func() (string, error) {
+				return runGitCommand(ctx, func(b []byte) (string, error) {
+					for _, line := range strings.Split(string(b), "\n") {
+						parts := strings.Split(line, "\t")
+						contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values")
+						if parts[1] == "refs/tags/v"+target.String() {
+							return parts[0], nil
+						}
+					}
+					return "", fmt.Errorf("could not find SHA for tag '%s'", target.Original())
+				}, "ls-remote", "--tags", "https://"+modPathWithoutVersion(goMod.Upstream.Path))
+			}).AssignTo(&targetSHA))
+	}
+
+	// goModDir is the directory of the go.mod where we reference the upstream provider.
+	goModDir := *repo.providerDir()
+	if goMod.Kind.IsShimmed() {
+		// If we have a shimmed provider, we run the upstream update in the shim
+		// directory, since that is what references the upstream provider.
+		goModDir = filepath.Join(*repo.providerDir(), "shim")
+	}
+
+	// If a provider is patched or forked, then there is no meaningful version to
+	// update. Because Go includes major versions as part of its module path, making
+	// this correct can break on major version updates. We just leave it if its not
+	// necessary to touch.
+	if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
+		steps = append(steps, step.Computed(func() step.Step {
+			target := "v" + target.String()
+			if targetSHA != "" {
+				target = targetSHA
+			}
+			return step.Cmd(exec.CommandContext(ctx,
+				"go", "get", goMod.Upstream.Path+"@"+target))
+		}).In(&goModDir))
+	}
+
+	if goMod.Kind.IsForked() {
+		// If we are running a forked update, we need to replace the reference to the fork
+		// with the SHA of the new upstream branch.
+		contract.Assert(forkedProviderUpstreamCommit != "")
+
+		replaceIn := func(dir *string) {
+			steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+				"go", "mod", "edit", "-replace",
+				goMod.Fork.Old.Path+"="+
+					goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit)).In(dir))
+		}
+
+		replaceIn(&goModDir)
+		if goMod.Kind.IsShimmed() {
+			replaceIn(repo.providerDir())
+		}
+	}
+
+	if goMod.Kind.IsShimmed() {
+		// When shimmed, we also run `go mod tidy` in the shim directory, and we want to
+		// run that before running `go mod tidy` in the main `provider` directory.
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "mod", "tidy")).In(&goModDir))
+	}
+
+	return step.Combined("Update TF Provider", steps...)
+}
+
+func informGitHub(
+	ctx Context, target *semver.Version, upgradeTargets []UpgradeTargetIssue,
+	repo ProviderRepo, upstreamProviderName, targetBridgeVersion string,
+) step.Step {
+	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
+		"origin", repo.workingBranch)).In(&repo.root)
+
+	var prTitle string
+	if ctx.UpgradeProviderVersion {
+		prTitle = fmt.Sprintf("Upgrade terraform-provider-%s to v%s",
+			upstreamProviderName, target)
+	} else if ctx.UpgradeBridgeVersion {
+		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
+	} else {
+		panic("Unknown action")
+	}
+	createPR := step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
+		"--assignee", "@me",
+		"--base", repo.defaultBranch,
+		"--head", repo.workingBranch,
+		"--reviewer", "pulumi/Ecosystem",
+		"--title", prTitle,
+		"--body", prBody(upgradeTargets),
+	)).In(&repo.root)
+	return step.Combined("GitHub",
+		pushBranch,
+		createPR,
+		step.Computed(func() step.Step {
+			// If we are only upgrading the bridge, we wont have a list of
+			// issues.
+			if !ctx.UpgradeProviderVersion {
+				return nil
+			}
+
+			// This PR will close issues, so we assign the issues to @me, just like
+			// the PR itself.
+			issues := make([]step.Step, len(upgradeTargets))
+			for i, t := range upgradeTargets {
+				issues[i] = step.Cmd(exec.CommandContext(ctx,
+					"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
+					"--add-assignee", "@me")).In(&repo.root)
+			}
+			return step.Combined("Self Assign Issues", issues...)
+		}),
+	)
 }
