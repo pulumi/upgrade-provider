@@ -697,9 +697,9 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 			return "done", downloadRepo(ctx, targetURL, expectedLocation)
 		}),
 		step.F("Validating", func() (string, error) {
-			return expectedLocation, exec.CommandContext(ctx, "git", "status", "--short").Run()
+			return "done", exec.CommandContext(ctx, "git", "status", "--short").Run()
 		}).In(&expectedLocation),
-	)
+	).Return(&expectedLocation)
 }
 
 func prBody(upgradeTargets []UpgradeTargetIssue) string {
