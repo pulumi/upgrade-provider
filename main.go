@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
+	"gopkg.in/yaml.v3"
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
@@ -268,7 +269,8 @@ func UpgradeProvider(ctx Context, name string) error {
 		defer func() {
 			esc := "\u001B["
 			fmt.Printf("\n\n%[1]s1m%[1]s33mMajor Version Updates are not fully automated!%[1]sm\n", esc)
-			fmt.Printf("Steps 1..9 have been automated. You need to complete steps 10..12.\n")
+			fmt.Printf("Steps 1..9, 12 and 13 have been automated. Step 11 can be skipped.\n")
+			fmt.Printf("%[1]s1mYou%[1]sm need to complete Step 10: Updating README.md and sdk/python/README.md in a follow up commit.\n", esc)
 			fmt.Printf("Steps are listed at\n\t" +
 				"https://github.com/pulumi/platform-providers-team/blob/main/playbooks/tf-provider-major-version-update.md\n")
 		}()
@@ -1129,7 +1131,90 @@ func majorVersionBump(ctx Context, repo ProviderRepo) step.Step {
 			return "", fmt.Errorf("requires manual update")
 		}),
 		step.Env("VERSION_PREFIX", repo.currentVersion.IncMajor().String()),
+		addVersionPrefixToGHWorkflows(ctx, repo).In(&repo.root),
 	)
+}
+
+func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.Step {
+	addPrefix := func(path string) error {
+		stat, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var doc yaml.Node
+		err = yaml.Unmarshal(b, &doc)
+		if err != nil {
+			return err
+		}
+		contract.Assert(doc.Kind == yaml.DocumentNode)
+
+		// We have parsed the document node, now lets find the "env" key under it.
+		var env *yaml.Node
+		for _, child := range doc.Content {
+			if child.Kind != yaml.MappingNode {
+				continue
+			}
+			if child.Content[0].Value != "env" {
+				continue
+			}
+			env = child
+			break
+		}
+		if env == nil {
+			// If the env node doesn't exist, we create it
+			env = &yaml.Node{
+				Kind: yaml.MappingNode,
+				Content: []*yaml.Node{
+					{
+						Kind:  yaml.ScalarNode,
+						Value: "env",
+					},
+					{Kind: yaml.MappingNode},
+				},
+			}
+			doc.Content = append(doc.Content, env)
+		}
+
+		versionPrefix := fmt.Sprintf(`"%s"`, repo.currentVersion.IncMajor().String())
+
+		var fixed bool
+		for i, child := range env.Content {
+			if child.Value != "VERSION_PREFIX" {
+				continue
+			}
+			env.Content[i+1].Value = versionPrefix
+			fixed = true
+			break
+		}
+
+		// If we didn't find a VERSION_PREFIX node, we add one.
+		if !fixed {
+			env.Content = append(env.Content,
+				&yaml.Node{Value: "VERSION_PREFIX"},
+				&yaml.Node{Value: versionPrefix},
+			)
+
+		}
+
+		updated, err := yaml.Marshal(doc)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(path, updated, stat.Mode())
+	}
+
+	var steps []step.Step
+	for _, f := range []string{".github/master.yml", ".github/main.yml", ".github/run-acceptance-tests.yml"} {
+		f := f
+		steps = append(steps, step.F(f, func() (string, error) {
+			return "", addPrefix(f)
+		}))
+	}
+	return step.Combined("VERSION_PREFIX workflows", steps...)
 }
 
 func updateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
