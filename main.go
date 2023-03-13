@@ -144,7 +144,7 @@ type ProviderRepo struct {
 	workingBranch string
 
 	// The highest version tag released on the repo
-	CurrentVersion *semver.Version
+	currentVersion *semver.Version
 }
 
 func (p ProviderRepo) providerDir() *string {
@@ -214,16 +214,15 @@ func UpgradeProvider(ctx Context, name string) error {
 			}).AssignTo(&targetBridgeVersion))
 	}
 
-	var currentVersion *semver.Version
 	if ctx.MajorVersionBump {
 		discoverSteps = append(discoverSteps,
 			step.F("Current Major Version", func() (string, error) {
 				var err error
-				currentVersion, err = latestRelease(ctx, "pulumi/"+name)
+				repo.currentVersion, err = latestRelease(ctx, "pulumi/"+name)
 				if err != nil {
 					return "", err
 				}
-				return fmt.Sprintf("%d", currentVersion.Major()), nil
+				return fmt.Sprintf("%d", repo.currentVersion.Major()), nil
 			}))
 	}
 
@@ -264,7 +263,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	if ctx.MajorVersionBump {
-		steps = append(steps, majorVersionBump(ctx, repo, currentVersion))
+		steps = append(steps, majorVersionBump(ctx, repo))
 
 		defer func() {
 			esc := "\u001B["
@@ -301,10 +300,10 @@ func UpgradeProvider(ctx Context, name string) error {
 			return updateFile("Update module in sdk/go.mod", "sdk/go.mod", func(b []byte) ([]byte, error) {
 				base := "module github.com/pulumi/" + name + "/sdk"
 				old := base
-				if currentVersion.Major() > 1 {
-					old += fmt.Sprintf("/v%d", currentVersion.Major())
+				if repo.currentVersion.Major() > 1 {
+					old += fmt.Sprintf("/v%d", repo.currentVersion.Major())
 				}
-				new := base + fmt.Sprintf("/v%d", currentVersion.Major()+1)
+				new := base + fmt.Sprintf("/v%d", repo.currentVersion.Major()+1)
 				return bytes.ReplaceAll(b, []byte(old), []byte(new)), nil
 			}).In(&repo.root)
 		}),
@@ -762,12 +761,16 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 	).Return(&expectedLocation)
 }
 
-func prBody(ctx Context, upgradeTargets UpstreamVersions, targetBridge, upstreamProviderName string) string {
+func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, targetBridge, upstreamProviderName string) string {
 	b := new(strings.Builder)
 	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n",
 		strings.Join(os.Args[1:], " "))
 
 	fmt.Fprintf(b, "\n---\n\n")
+
+	if ctx.MajorVersionBump {
+		fmt.Fprintf(b, "Updating major version from %s to %s.\n", repo.currentVersion, repo.currentVersion.IncMajor())
+	}
 
 	if ctx.UpgradeProviderVersion {
 		fmt.Fprintf(b, "Upgrading upstream provider %s to %s.\n",
@@ -985,7 +988,7 @@ func informGitHub(
 		"--head", repo.workingBranch,
 		"--reviewer", "pulumi/Ecosystem",
 		"--title", prTitle,
-		"--body", prBody(ctx, target, targetBridgeVersion, upstreamProviderName),
+		"--body", prBody(ctx, repo, target, targetBridgeVersion, upstreamProviderName),
 	)).In(&repo.root)
 	return step.Combined("GitHub",
 		pushBranch,
@@ -1029,8 +1032,8 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 	return semver.NewVersion(result.Latest.TagName)
 }
 
-func majorVersionBump(ctx Context, repo ProviderRepo, currentVersion *semver.Version) step.Step {
-	if currentVersion.Major() == 0 {
+func majorVersionBump(ctx Context, repo ProviderRepo) step.Step {
+	if repo.currentVersion.Major() == 0 {
 		// None of these steps are necessary or appropriate when moving from
 		// version 0.x to 1.0 because Go modules only require a version suffix for
 		// versions >= 2.0.
@@ -1038,11 +1041,11 @@ func majorVersionBump(ctx Context, repo ProviderRepo, currentVersion *semver.Ver
 	}
 
 	prev := "provider"
-	if currentVersion.Major() > 1 {
-		prev += fmt.Sprintf("/v%d", currentVersion.Major())
+	if repo.currentVersion.Major() > 1 {
+		prev += fmt.Sprintf("/v%d", repo.currentVersion.Major())
 	}
 
-	nextMajorVersion := fmt.Sprintf("v%d", currentVersion.Major()+1)
+	nextMajorVersion := fmt.Sprintf("v%d", repo.currentVersion.Major()+1)
 
 	// Replace s in file, where {} is interpolated into the old and new provider
 	// component of the path.
@@ -1125,7 +1128,7 @@ func majorVersionBump(ctx Context, repo ProviderRepo, currentVersion *semver.Ver
 			}
 			return "", fmt.Errorf("requires manual update")
 		}),
-		step.Env("VERSION_PREFIX", currentVersion.IncMajor().String()),
+		step.Env("VERSION_PREFIX", repo.currentVersion.IncMajor().String()),
 	)
 }
 
