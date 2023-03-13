@@ -1113,6 +1113,10 @@ func majorVersionBump(ctx Context, repo ProviderRepo) step.Step {
 
 			}
 			err := filepath.Walk(*repo.providerDir(), fn)
+			if err != nil {
+				return "", err
+			}
+			err = filepath.Walk(filepath.Join(repo.root, "examples"), fn)
 			return fmt.Sprintf("Updated %d files", filesUpdated), err
 		}),
 		step.F("info.TFProviderModuleVersion", func() (string, error) {
