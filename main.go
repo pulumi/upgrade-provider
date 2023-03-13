@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"go/build"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -32,8 +33,10 @@ type Context struct {
 
 	MaxVersion *semver.Version
 
-	UpgradeBridgeVersion   bool
+	UpgradeBridgeVersion bool
+
 	UpgradeProviderVersion bool
+	MajorVersionBump       bool
 }
 
 func cmd() *cobra.Command {
@@ -106,6 +109,10 @@ func cmd() *cobra.Command {
 		`Upgrade the provider to the passed in version.
 
 If the passed version does not exist, an error is signaled.`)
+
+	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
+		`Upgrade the provider to a new major version.`)
+
 	cmd.PersistentFlags().StringVar(&upgradeKind, "kind", "all",
 		`The kind of upgrade to perform:
 - "all":     Upgrade the upstream provider and the bridge.
@@ -135,6 +142,9 @@ type ProviderRepo struct {
 	defaultBranch string
 	// The working branch of the repository
 	workingBranch string
+
+	// The highest version tag released on the repo
+	CurrentVersion *semver.Version
 }
 
 func (p ProviderRepo) providerDir() *string {
@@ -196,18 +206,25 @@ func UpgradeProvider(ctx Context, name string) error {
 	if ctx.UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Target Bridge Version", func() (string, error) {
-				resultBytes, err := exec.CommandContext(ctx, "gh", "repo", "view",
-					"pulumi/pulumi-terraform-bridge", "--json=latestRelease").Output()
+				latest, err := latestRelease(ctx, "pulumi/pulumi-terraform-bridge")
 				if err != nil {
 					return "", err
 				}
-				result := map[string]any{}
-				err = json.Unmarshal(resultBytes, &result)
-				if err != nil {
-					return "", err
-				}
-				return result["latestRelease"].(map[string]any)["tagName"].(string), nil
+				return latest.Original(), nil
 			}).AssignTo(&targetBridgeVersion))
+	}
+
+	var currentVersion *semver.Version
+	if ctx.MajorVersionBump {
+		discoverSteps = append(discoverSteps,
+			step.F("Current Major Version", func() (string, error) {
+				var err error
+				currentVersion, err = latestRelease(ctx, "pulumi/"+name)
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("%d", currentVersion.Major()), nil
+			}))
 	}
 
 	ok = step.Run(step.Combined("Discovering Repository", discoverSteps...))
@@ -245,6 +262,19 @@ func UpgradeProvider(ctx Context, name string) error {
 			return nil
 		}),
 	}
+
+	if ctx.MajorVersionBump {
+		steps = append(steps, majorVersionBump(ctx, repo, currentVersion))
+
+		defer func() {
+			esc := "\u001B["
+			fmt.Printf("\n\n%[1]s1m%[1]s33mMajor Version Updates are not fully automated!%[1]sm\n", esc)
+			fmt.Printf("Steps 1..9 have been automated. You need to complete steps 10..12.\n")
+			fmt.Printf("Steps are listed at\n\t" +
+				"https://github.com/pulumi/platform-providers-team/blob/main/playbooks/tf-provider-major-version-update.md\n")
+		}()
+	}
+
 	if ctx.UpgradeBridgeVersion {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
@@ -256,20 +286,44 @@ func UpgradeProvider(ctx Context, name string) error {
 			targetSHA, forkedProviderUpstreamCommit))
 	}
 
-	ok = step.Run(step.Combined("Update Artifacts",
-		append(steps,
-			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
-			step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
-			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&repo.root),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&repo.root),
-			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&repo.root),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m",
-				"make build_sdks", "--allow-empty")).In(&repo.root),
-			informGitHub(ctx, upgradeTargets, repo, upstreamProviderName,
-				targetBridgeVersion),
-		)...))
+	artifacts := append(steps,
+		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
+		step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
+		step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&repo.root),
+		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&repo.root),
+		step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&repo.root),
+		step.Computed(func() step.Step {
+			if !ctx.MajorVersionBump {
+				return nil
+			}
+
+			return updateFile("Update module in sdk/go.mod", "sdk/go.mod", func(b []byte) ([]byte, error) {
+				base := "module github.com/pulumi/" + name + "/sdk"
+				old := base
+				if currentVersion.Major() > 1 {
+					old += fmt.Sprintf("/v%d", currentVersion.Major())
+				}
+				new := base + fmt.Sprintf("/v%d", currentVersion.Major()+1)
+				return bytes.ReplaceAll(b, []byte(old), []byte(new)), nil
+			}).In(&repo.root)
+		}),
+		step.Computed(func() step.Step {
+			if !ctx.MajorVersionBump {
+				return nil
+			}
+			dir := filepath.Join(repo.root, "sdk")
+			return step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).
+				In(&dir)
+		}),
+		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m",
+			"make build_sdks", "--allow-empty")).In(&repo.root),
+		informGitHub(ctx, upgradeTargets, repo, upstreamProviderName,
+			targetBridgeVersion),
+	)
+
+	ok = step.Run(step.Combined("Update Artifacts", artifacts...))
 	if !ok {
 		return ErrHandled
 	}
@@ -954,4 +1008,141 @@ func informGitHub(
 			return step.Combined("Self Assign Issues", issues...)
 		}),
 	)
+}
+
+func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
+	resultBytes, err := exec.CommandContext(ctx, "gh", "repo", "view",
+		repo, "--json=latestRelease").Output()
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Latest struct {
+			TagName string `json:"tagName"`
+		} `json:"latestRelease"`
+	}
+	err = json.Unmarshal(resultBytes, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return semver.NewVersion(result.Latest.TagName)
+}
+
+func majorVersionBump(ctx Context, repo ProviderRepo, currentVersion *semver.Version) step.Step {
+	if currentVersion.Major() == 0 {
+		// None of these steps are necessary or appropriate when moving from
+		// version 0.x to 1.0 because Go modules only require a version suffix for
+		// versions >= 2.0.
+		return nil
+	}
+
+	prev := "provider"
+	if currentVersion.Major() > 1 {
+		prev += fmt.Sprintf("/v%d", currentVersion.Major())
+	}
+
+	nextMajorVersion := fmt.Sprintf("v%d", currentVersion.Major()+1)
+
+	// Replace s in file, where {} is interpolated into the old and new provider
+	// component of the path.
+	replaceInFile := func(desc, path, s string) step.Step {
+		return updateFile(desc+" in "+path, path, func(src []byte) ([]byte, error) {
+			old := strings.ReplaceAll(s, "{}", prev)
+			new := strings.ReplaceAll(s, "{}", "provider/"+nextMajorVersion)
+
+			return bytes.ReplaceAll(src, []byte(old), []byte(new)), nil
+		})
+	}
+
+	name := filepath.Base(repo.root)
+	return step.Combined("Increment Major Version",
+		step.F("Next major version", func() (string, error) {
+			// This step displays the next major version to the user.
+			return nextMajorVersion, nil
+		}),
+		replaceInFile("Update PROVIDER_PATH", "Makefile",
+			"PROVIDER_PATH := {}").In(&repo.root),
+		replaceInFile("Update -X Version", ".goreleaser.yml",
+			"github.com/pulumi/"+name+"/{}/pkg").In(&repo.root),
+		replaceInFile("Update -X Version", ".goreleaser.prerelease.yml",
+			"github.com/pulumi/"+name+"/{}/pkg").In(&repo.root),
+		replaceInFile("Update Go Module", "go.mod",
+			"module github.com/pulumi/"+name+"/{}").In(repo.providerDir()),
+		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
+		step.F("Update Go Imports", func() (string, error) {
+			var filesUpdated int
+			var fn filepath.WalkFunc = func(path string, info fs.FileInfo, err error) error {
+				if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") {
+					return err
+				}
+
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+
+				new := bytes.ReplaceAll(data,
+					[]byte("github.com/pulumi/"+name+"/"+prev),
+					[]byte("github.com/pulumi/"+name+"/"+"provider/"+nextMajorVersion),
+				)
+
+				// If the length changed, then something changed
+				updated := len(data) != len(new)
+				if !updated {
+					// If the length stayed the same, we can check
+					// each bit.
+					for i := 0; i < len(data); i++ {
+						if data[i] != new[i] {
+							updated = true
+							break
+						}
+					}
+				}
+
+				if updated {
+					filesUpdated++
+					return os.WriteFile(path, new, info.Mode().Perm())
+				}
+				return nil
+
+			}
+			err := filepath.Walk(*repo.providerDir(), fn)
+			return fmt.Sprintf("Updated %d files", filesUpdated), err
+		}),
+		step.F("info.TFProviderModuleVersion", func() (string, error) {
+			b, err := os.ReadFile(filepath.Join(*repo.providerDir(), "resources.go"))
+			if err != nil {
+				return "", err
+			}
+			r, err := regexp.Compile("TFProviderModuleVersion: \"(.*)\",")
+			if err != nil {
+				return "", err
+			}
+			field := r.Find(b)
+			if field == nil {
+				return "not present", nil
+			}
+			return "", fmt.Errorf("requires manual update")
+		}),
+		step.Env("VERSION_PREFIX", currentVersion.IncMajor().String()),
+	)
+}
+
+func updateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
+	return step.F(desc, func() (string, error) {
+		stats, err := os.Stat(path)
+		if err != nil {
+			return "", err
+		}
+		bytes, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		bytes, err = f(bytes)
+		if err != nil {
+			return "", err
+		}
+		return "", os.WriteFile(path, bytes, stats.Mode().Perm())
+	})
 }
