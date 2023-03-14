@@ -264,7 +264,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	if ctx.MajorVersionBump {
-		steps = append(steps, majorVersionBump(ctx, repo))
+		steps = append(steps, majorVersionBump(ctx, goMod, upgradeTargets, repo))
 
 		defer func() {
 			esc := "\u001B["
@@ -733,7 +733,7 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 				repoPath = prefix + "/" + org + "/" + repo
 			}
 
-			// go from github.com/org/repo to $GOPATH/src/github.com/org
+			// from github.com/org/repo to $GOPATH/src/github.com/org
 			expectedLocation = filepath.Join(strings.Split(repoPath, "/")...)
 			expectedLocation = filepath.Join(ctx.GoPath, "src", expectedLocation)
 			if info, err := os.Stat(expectedLocation); err == nil {
@@ -1046,7 +1046,7 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 	return semver.NewVersion(result.Latest.TagName)
 }
 
-func majorVersionBump(ctx Context, repo ProviderRepo) step.Step {
+func majorVersionBump(ctx Context, goMod *GoMod, targets UpstreamVersions, repo ProviderRepo) step.Step {
 	if repo.currentVersion.Major() == 0 {
 		// None of these steps are necessary or appropriate when moving from
 		// version 0.x to 1.0 because Go modules only require a version suffix for
@@ -1103,6 +1103,19 @@ func majorVersionBump(ctx Context, repo ProviderRepo) step.Step {
 					[]byte("github.com/pulumi/"+name+"/"+prev),
 					[]byte("github.com/pulumi/"+name+"/"+"provider/"+nextMajorVersion),
 				)
+
+				if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
+					if idx := versionSuffix.FindStringIndex(goMod.Upstream.Path); idx != nil {
+						newUpstream := fmt.Sprintf("%s/v%d",
+							goMod.Upstream.Path[:idx[0]],
+							targets.Latest().Major(),
+						)
+						new = bytes.ReplaceAll(data,
+							[]byte(goMod.Upstream.Path),
+							[]byte(newUpstream),
+						)
+					}
+				}
 
 				// If the length changed, then something changed
 				updated := len(data) != len(new)
