@@ -1149,8 +1149,8 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 		if err != nil {
 			return err
 		}
-		var doc yaml.Node
-		err = yaml.Unmarshal(b, &doc)
+		doc := new(yaml.Node)
+		err = yaml.Unmarshal(b, doc)
 		if err != nil {
 			return err
 		}
@@ -1165,22 +1165,22 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 			if child.Content[0].Value != "env" {
 				continue
 			}
-			env = child
+			env = child.Content[1]
 			break
 		}
 		if env == nil {
 			// If the env node doesn't exist, we create it
-			env = &yaml.Node{
+			env = &yaml.Node{Kind: yaml.MappingNode}
+			doc.Content = append(doc.Content, &yaml.Node{
 				Kind: yaml.MappingNode,
 				Content: []*yaml.Node{
 					{
 						Kind:  yaml.ScalarNode,
 						Value: "env",
 					},
-					{Kind: yaml.MappingNode},
+					env,
 				},
-			}
-			doc.Content = append(doc.Content, env)
+			})
 		}
 
 		versionPrefix := fmt.Sprintf(`"%s"`, repo.currentVersion.IncMajor().String())
@@ -1197,23 +1197,28 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 
 		// If we didn't find a VERSION_PREFIX node, we add one.
 		if !fixed {
-			env.Content = append(env.Content,
-				&yaml.Node{Value: "VERSION_PREFIX"},
-				&yaml.Node{Value: versionPrefix},
-			)
+			env.Content = append([]*yaml.Node{
+				{Value: "VERSION_PREFIX", Kind: yaml.ScalarNode},
+				{Value: versionPrefix, Kind: yaml.ScalarNode},
+			}, env.Content...)
 
 		}
 
-		updated, err := yaml.Marshal(doc)
-		if err != nil {
-			return err
+		updated := new(bytes.Buffer)
+		enc := yaml.NewEncoder(updated)
+		enc.SetIndent(2) // TODO Round trip correctly
+		if err := enc.Encode(doc); err != nil {
+			return fmt.Errorf("Failed to marshal: %w", err)
 		}
-		return os.WriteFile(path, updated, stat.Mode())
+		if err := enc.Close(); err != nil {
+			return fmt.Errorf("Failed to flush encoder: %w", err)
+		}
+		return os.WriteFile(path, updated.Bytes(), stat.Mode())
 	}
 
 	var steps []step.Step
-	for _, f := range []string{".github/master.yml", ".github/main.yml", ".github/run-acceptance-tests.yml"} {
-		f := f
+	for _, f := range []string{"master.yml", "main.yml", "run-acceptance-tests.yml"} {
+		f := filepath.Join(".github", "workflows", f)
 		steps = append(steps, step.F(f, func() (string, error) {
 			return "", addPrefix(f)
 		}))
