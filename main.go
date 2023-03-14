@@ -1209,7 +1209,7 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 			})
 		}
 
-		versionPrefix := fmt.Sprintf(`"%s"`, repo.currentVersion.IncMajor().String())
+		versionPrefix := repo.currentVersion.IncMajor().String()
 
 		var fixed bool
 		for i, child := range env.Content {
