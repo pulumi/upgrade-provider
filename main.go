@@ -1144,7 +1144,8 @@ func majorVersionBump(ctx Context, repo ProviderRepo) step.Step {
 			if field == nil {
 				return "not present", nil
 			}
-			return "", fmt.Errorf("requires manual update")
+			// Escape codes are Bold, Yellow, and Reset respectively
+			return "\u001B[1m\u001B[33mrequires manual update\u001B[m", nil
 		}),
 		step.Env("VERSION_PREFIX", repo.currentVersion.IncMajor().String()),
 		addVersionPrefixToGHWorkflows(ctx, repo).In(&repo.root),
