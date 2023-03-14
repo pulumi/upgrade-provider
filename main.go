@@ -233,7 +233,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	var forkedProviderUpstreamCommit string
-	if goMod.Kind.IsForked() && ctx.UpgradeBridgeVersion {
+	if goMod.Kind.IsForked() && ctx.UpgradeProviderVersion {
 		ok = step.Run(upgradeUpstreamFork(ctx, name, upgradeTargets.Latest(), goMod).
 			AssignTo(&forkedProviderUpstreamCommit))
 		if !ok {
