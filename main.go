@@ -264,7 +264,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	if ctx.MajorVersionBump {
-		steps = append(steps, majorVersionBump(ctx, repo))
+		steps = append(steps, majorVersionBump(ctx, goMod, upgradeTargets, repo))
 
 		defer func() {
 			esc := "\u001B["
@@ -400,7 +400,7 @@ func (rk RepoKind) IsPatched() bool {
 	}
 }
 
-var versionSuffix = regexp.MustCompile("/v[2-9]+$")
+var versionSuffix = regexp.MustCompile("/v[2-9][0-9]*$")
 
 func ensurePulumiRemote(ctx Context, name string) (string, error) {
 	remotes, err := runGitCommand(ctx, func(b []byte) ([]string, error) {
@@ -733,7 +733,7 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 				repoPath = prefix + "/" + org + "/" + repo
 			}
 
-			// go from github.com/org/repo to $GOPATH/src/github.com/org
+			// from github.com/org/repo to $GOPATH/src/github.com/org
 			expectedLocation = filepath.Join(strings.Split(repoPath, "/")...)
 			expectedLocation = filepath.Join(ctx.GoPath, "src", expectedLocation)
 			if info, err := os.Stat(expectedLocation); err == nil {
@@ -931,12 +931,24 @@ func upgradeProviderVersion(
 	// necessary to touch.
 	if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
 		steps = append(steps, step.Computed(func() step.Step {
-			target := "v" + target.String()
+			targetV := "v" + target.String()
 			if targetSHA != "" {
-				target = targetSHA
+				targetV = targetSHA
 			}
+
+			upstreamPath := goMod.Upstream.Path
+			// We do this only when we already have a version suffix, since
+			// that confirms that we have a correctly versioned provider.
+			if indx := versionSuffix.FindStringIndex(upstreamPath); indx != nil {
+				// If we have a version suffix, and we are doing a major
+				// version bump, we need to apply the new suffix.
+				upstreamPath = fmt.Sprintf("%s/v%d",
+					upstreamPath[:indx[0]],
+					target.Major())
+			}
+
 			return step.Cmd(exec.CommandContext(ctx,
-				"go", "get", goMod.Upstream.Path+"@"+target))
+				"go", "get", upstreamPath+"@"+targetV))
 		}).In(&goModDir))
 	}
 
@@ -1034,7 +1046,7 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 	return semver.NewVersion(result.Latest.TagName)
 }
 
-func majorVersionBump(ctx Context, repo ProviderRepo) step.Step {
+func majorVersionBump(ctx Context, goMod *GoMod, targets UpstreamVersions, repo ProviderRepo) step.Step {
 	if repo.currentVersion.Major() == 0 {
 		// None of these steps are necessary or appropriate when moving from
 		// version 0.x to 1.0 because Go modules only require a version suffix for
@@ -1092,6 +1104,19 @@ func majorVersionBump(ctx Context, repo ProviderRepo) step.Step {
 					[]byte("github.com/pulumi/"+name+"/"+"provider/"+nextMajorVersion),
 				)
 
+				if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
+					if idx := versionSuffix.FindStringIndex(goMod.Upstream.Path); idx != nil {
+						newUpstream := fmt.Sprintf("%s/v%d",
+							goMod.Upstream.Path[:idx[0]],
+							targets.Latest().Major(),
+						)
+						new = bytes.ReplaceAll(data,
+							[]byte(goMod.Upstream.Path),
+							[]byte(newUpstream),
+						)
+					}
+				}
+
 				// If the length changed, then something changed
 				updated := len(data) != len(new)
 				if !updated {
@@ -1132,7 +1157,8 @@ func majorVersionBump(ctx Context, repo ProviderRepo) step.Step {
 			if field == nil {
 				return "not present", nil
 			}
-			return "", fmt.Errorf("requires manual update")
+			// Escape codes are Bold, Yellow, and Reset respectively
+			return "\u001B[1m\u001B[33mrequires manual update\u001B[m", nil
 		}),
 		step.Env("VERSION_PREFIX", repo.currentVersion.IncMajor().String()),
 		addVersionPrefixToGHWorkflows(ctx, repo).In(&repo.root),
@@ -1149,8 +1175,8 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 		if err != nil {
 			return err
 		}
-		var doc yaml.Node
-		err = yaml.Unmarshal(b, &doc)
+		doc := new(yaml.Node)
+		err = yaml.Unmarshal(b, doc)
 		if err != nil {
 			return err
 		}
@@ -1165,25 +1191,25 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 			if child.Content[0].Value != "env" {
 				continue
 			}
-			env = child
+			env = child.Content[1]
 			break
 		}
 		if env == nil {
 			// If the env node doesn't exist, we create it
-			env = &yaml.Node{
+			env = &yaml.Node{Kind: yaml.MappingNode}
+			doc.Content = append(doc.Content, &yaml.Node{
 				Kind: yaml.MappingNode,
 				Content: []*yaml.Node{
 					{
 						Kind:  yaml.ScalarNode,
 						Value: "env",
 					},
-					{Kind: yaml.MappingNode},
+					env,
 				},
-			}
-			doc.Content = append(doc.Content, env)
+			})
 		}
 
-		versionPrefix := fmt.Sprintf(`"%s"`, repo.currentVersion.IncMajor().String())
+		versionPrefix := repo.currentVersion.IncMajor().String()
 
 		var fixed bool
 		for i, child := range env.Content {
@@ -1197,23 +1223,28 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 
 		// If we didn't find a VERSION_PREFIX node, we add one.
 		if !fixed {
-			env.Content = append(env.Content,
-				&yaml.Node{Value: "VERSION_PREFIX"},
-				&yaml.Node{Value: versionPrefix},
-			)
+			env.Content = append([]*yaml.Node{
+				{Value: "VERSION_PREFIX", Kind: yaml.ScalarNode},
+				{Value: versionPrefix, Kind: yaml.ScalarNode},
+			}, env.Content...)
 
 		}
 
-		updated, err := yaml.Marshal(doc)
-		if err != nil {
-			return err
+		updated := new(bytes.Buffer)
+		enc := yaml.NewEncoder(updated)
+		enc.SetIndent(2) // TODO Round trip correctly
+		if err := enc.Encode(doc); err != nil {
+			return fmt.Errorf("Failed to marshal: %w", err)
 		}
-		return os.WriteFile(path, updated, stat.Mode())
+		if err := enc.Close(); err != nil {
+			return fmt.Errorf("Failed to flush encoder: %w", err)
+		}
+		return os.WriteFile(path, updated.Bytes(), stat.Mode())
 	}
 
 	var steps []step.Step
-	for _, f := range []string{".github/master.yml", ".github/main.yml", ".github/run-acceptance-tests.yml"} {
-		f := f
+	for _, f := range []string{"master.yml", "main.yml", "run-acceptance-tests.yml"} {
+		f := filepath.Join(".github", "workflows", f)
 		steps = append(steps, step.F(f, func() (string, error) {
 			return "", addPrefix(f)
 		}))
