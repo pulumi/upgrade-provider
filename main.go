@@ -400,7 +400,7 @@ func (rk RepoKind) IsPatched() bool {
 	}
 }
 
-var versionSuffix = regexp.MustCompile("/v[2-9]+$")
+var versionSuffix = regexp.MustCompile("/v[2-9][0-9]*$")
 
 func ensurePulumiRemote(ctx Context, name string) (string, error) {
 	remotes, err := runGitCommand(ctx, func(b []byte) ([]string, error) {
@@ -931,12 +931,24 @@ func upgradeProviderVersion(
 	// necessary to touch.
 	if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
 		steps = append(steps, step.Computed(func() step.Step {
-			target := "v" + target.String()
+			targetV := "v" + target.String()
 			if targetSHA != "" {
-				target = targetSHA
+				targetV = targetSHA
 			}
+
+			upstreamPath := goMod.Upstream.Path
+			// We do this only when we already have a version suffix, since
+			// that confirms that we have a correctly versioned provider.
+			if indx := versionSuffix.FindStringIndex(upstreamPath); indx != nil {
+				// If we have a version suffix, and we are doing a major
+				// version bump, we need to apply the new suffix.
+				upstreamPath = fmt.Sprintf("%s/v%d",
+					upstreamPath[:indx[0]],
+					target.Major())
+			}
+
 			return step.Cmd(exec.CommandContext(ctx,
-				"go", "get", goMod.Upstream.Path+"@"+target))
+				"go", "get", upstreamPath+"@"+targetV))
 		}).In(&goModDir))
 	}
 
