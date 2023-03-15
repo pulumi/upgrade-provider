@@ -255,12 +255,6 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 	steps := []step.Step{
 		ensureBranchCheckedOut(ctx, repo.workingBranch).In(&repo.root),
-		step.Computed(func() step.Step {
-			if goMod.Kind.IsPatched() {
-				return step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root)
-			}
-			return nil
-		}),
 	}
 
 	if ctx.MajorVersionBump {
@@ -276,15 +270,21 @@ func UpgradeProvider(ctx Context, name string) error {
 		}()
 	}
 
+	if ctx.UpgradeProviderVersion {
+		steps = append(steps, upgradeProviderVersion(ctx, goMod, upgradeTargets.Latest(), repo,
+			targetSHA, forkedProviderUpstreamCommit))
+	} else if goMod.Kind.IsPatched() {
+		// If we are upgrading the provider version, then the upgrade will leave
+		// `upstream` in a usable state. Otherwise, we need to call `make
+		// upstream` to ensure that the module is valid (for `go get` and `go mod
+		// tidy`.
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root))
+	}
+
 	if ctx.UpgradeBridgeVersion {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
 			In(repo.providerDir()))
-	}
-
-	if ctx.UpgradeProviderVersion {
-		steps = append(steps, upgradeProviderVersion(ctx, goMod, upgradeTargets.Latest(), repo,
-			targetSHA, forkedProviderUpstreamCommit))
 	}
 
 	artifacts := append(steps,
@@ -883,6 +883,9 @@ func upgradeProviderVersion(
 		// we update the module referenced to the new tag.
 		upstreamDir := filepath.Join(repo.root, "upstream")
 		steps = append(steps, step.Combined("update patched provider",
+			step.Cmd(exec.CommandContext(ctx,
+				"git", "submodule", "update", "--force", "--init",
+			)).In(&upstreamDir),
 			step.Cmd(exec.CommandContext(ctx, "git", "fetch", "--tags")).In(&upstreamDir),
 			// We need to remove any patches to so we can cleanly pull the next upstream version.
 			step.Cmd(exec.CommandContext(ctx, "git", "reset", "HEAD", "--hard")).In(&upstreamDir),
