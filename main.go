@@ -189,11 +189,21 @@ func UpgradeProvider(ctx Context, name string) error {
 	if ctx.UpgradeProviderVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Target Provider Version", func() (string, error) {
-				upgradeTargets, err = getExpectedTarget(ctx, name)
-				if err == nil {
-					return upgradeTargets.Latest().String(), nil
+				var msg string
+				upgradeTargets, msg, err = getExpectedTarget(ctx, name)
+				if err != nil {
+					return "", err
 				}
-				return "", err
+
+				// If we have upgrades to perform, we list the new version we will target
+				if len(upgradeTargets) > 0 {
+					return upgradeTargets.Latest().String() + msg, nil
+				}
+
+				// Otherwise, we don't bother to try to upgrade the provider.
+				ctx.UpgradeProviderVersion = false
+				ctx.MajorVersionBump = false
+				return msg, nil
 			}))
 	}
 
@@ -614,7 +624,11 @@ type UpgradeTargetIssue struct {
 	Number  int             `json:"number"`
 }
 
-func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, error) {
+// Fetch the expected upgrade target from github. Return a list of open upgrade issues,
+// sorted by semantic version. The list may be empty.
+//
+// The second argument represents a message to describe the result. It may be empty.
+func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, error) {
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--author=pulumi-bot",
@@ -625,7 +639,7 @@ func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, error) {
 	getIssues.Stdout = bytes
 	err := getIssues.Run()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	titles := []struct {
 		Title  string `json:"title"`
@@ -633,7 +647,7 @@ func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, error) {
 	}{}
 	err = json.Unmarshal(bytes.Bytes(), &titles)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var versions []UpgradeTargetIssue
@@ -662,19 +676,19 @@ func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, error) {
 	if len(versions) == 0 {
 		var extra string
 		if versionConstrained {
-			extra = "(a version was found but it was greater then the specified max)"
+			extra = " (a version was found but it was greater then the specified max)"
 		}
-		return nil, fmt.Errorf("no upgrade found%s", extra)
+		return nil, fmt.Sprintf("no upgrade found%s", extra), nil
 	}
 	sort.Slice(versions, func(i, j int) bool {
 		return versions[j].Version.LessThan(versions[i].Version)
 	})
 
 	if ctx.MaxVersion != nil && !versions[0].Version.Equal(ctx.MaxVersion) {
-		return nil, fmt.Errorf("possible upgrades exist, but non match %s", ctx.MaxVersion)
+		return nil, "", fmt.Errorf("possible upgrades exist, but non match %s", ctx.MaxVersion)
 	}
 
-	return versions, nil
+	return versions, "", nil
 }
 
 func pullDefaultBranch(ctx Context, remote string) step.Step {
