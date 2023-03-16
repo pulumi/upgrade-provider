@@ -497,6 +497,34 @@ func modPathWithoutVersion(path string) string {
 	return path
 }
 
+// Find the go module version of needleModule, searching from the default repo branch, not
+// the currently checked out code.
+func originalGoVersionOf(ctx context.Context, repo ProviderRepo, needleModule string) (module.Version, bool, error) {
+	file := filepath.Join("provider", "go.mod")
+
+	cmd := exec.CommandContext(ctx, "git", "show", repo.defaultBranch+":"+file)
+	cmd.Dir = repo.root
+	data, err := cmd.Output()
+	if err != nil {
+		return module.Version{}, false, fmt.Errorf("%s:%s: %w",
+			repo.defaultBranch, file, err)
+	}
+
+	goMod, err := modfile.Parse(file, data, nil)
+	if err != nil {
+		return module.Version{}, false, fmt.Errorf("%s:%s: %w",
+			repo.defaultBranch, file, err)
+	}
+
+	for _, req := range goMod.Require {
+		path := modPathWithoutVersion(req.Mod.Path)
+		if path == needleModule {
+			return req.Mod, true, nil
+		}
+	}
+	return module.Version{}, false, nil
+}
+
 func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoMod, error) {
 	path := repo.root
 	file := filepath.Join(path, "provider", "go.mod")
@@ -511,16 +539,12 @@ func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoM
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
 
-	var bridge module.Version
-	for _, req := range goMod.Require {
-		path := modPathWithoutVersion(req.Mod.Path)
-		if path == "github.com/pulumi/pulumi-terraform-bridge" {
-			bridge = req.Mod
-			break
-		}
-	}
-	if bridge.Path == "" {
-		return nil, fmt.Errorf("Unable to discover pulumi-terraform-bridge version")
+	bridge, ok, err := originalGoVersionOf(ctx, repo, "github.com/pulumi/pulumi-terraform-bridge")
+	bridgeMissingMsg := "Unable to discover pulumi-terraform-bridge version"
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", bridgeMissingMsg, err)
+	} else if !ok {
+		return nil, fmt.Errorf(bridgeMissingMsg)
 	}
 
 	tfProviderRepoName := getTfProviderRepoName(providerName)
