@@ -229,8 +229,9 @@ func UpgradeProvider(ctx Context, name string) error {
 					return fmt.Sprintf("Up to date at %s", latest.Original()), nil
 				}
 
-				return fmt.Sprintf("%s -> %s", latest.Original(), goMod.Bridge.Version), nil
-			}).AssignTo(&targetBridgeVersion))
+				targetBridgeVersion = latest.Original()
+				return fmt.Sprintf("%s -> %s", goMod.Bridge.Version, latest.Original()), nil
+			}))
 	}
 
 	if ctx.MajorVersionBump {
@@ -1133,7 +1134,6 @@ func majorVersionBump(ctx Context, goMod *GoMod, targets UpstreamVersions, repo 
 			"github.com/pulumi/"+name+"/{}/pkg").In(&repo.root),
 		replaceInFile("Update Go Module", "go.mod",
 			"module github.com/pulumi/"+name+"/{}").In(repo.providerDir()),
-		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
 		step.F("Update Go Imports", func() (string, error) {
 			var filesUpdated int
 			var fn filepath.WalkFunc = func(path string, info fs.FileInfo, err error) error {
