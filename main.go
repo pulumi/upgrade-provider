@@ -203,7 +203,7 @@ func UpgradeProvider(ctx Context, name string) error {
 				// Otherwise, we don't bother to try to upgrade the provider.
 				ctx.UpgradeProviderVersion = false
 				ctx.MajorVersionBump = false
-				return msg, nil
+				return "Up to date" + msg, nil
 			}))
 	}
 
@@ -226,7 +226,7 @@ func UpgradeProvider(ctx Context, name string) error {
 				// If our target upgrade version is the same as our current version, we skip the update.
 				if latest.Original() == goMod.Bridge.Version {
 					ctx.UpgradeBridgeVersion = false
-					return fmt.Sprintf("Fully up to date at %s", latest.Original()), nil
+					return fmt.Sprintf("Up to date at %s", latest.Original()), nil
 				}
 
 				return fmt.Sprintf("%s -> %s", latest.Original(), goMod.Bridge.Version), nil
@@ -678,7 +678,7 @@ func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 		if versionConstrained {
 			extra = " (a version was found but it was greater then the specified max)"
 		}
-		return nil, fmt.Sprintf("no upgrade found%s", extra), nil
+		return nil, extra, nil
 	}
 	sort.Slice(versions, func(i, j int) bool {
 		return versions[j].Version.LessThan(versions[i].Version)
