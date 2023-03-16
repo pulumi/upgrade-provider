@@ -24,6 +24,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
 
+	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 )
 
@@ -206,12 +207,19 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	if ctx.UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
-			step.F("Target Bridge Version", func() (string, error) {
+			step.F("Planning Bridge Update", func() (string, error) {
 				latest, err := latestRelease(ctx, "pulumi/pulumi-terraform-bridge")
 				if err != nil {
 					return "", err
 				}
-				return latest.Original(), nil
+
+				// If our target upgrade version is the same as our current version, we skip the update.
+				if latest.Original() == goMod.Bridge.Version {
+					ctx.UpgradeBridgeVersion = false
+					return fmt.Sprintf("Fully up to date at %s", latest.Original()), nil
+				}
+
+				return fmt.Sprintf("%s -> %s", latest.Original(), goMod.Bridge.Version), nil
 			}).AssignTo(&targetBridgeVersion))
 	}
 
@@ -230,6 +238,13 @@ func UpgradeProvider(ctx Context, name string) error {
 	ok = step.Run(step.Combined("Discovering Repository", discoverSteps...))
 	if !ok {
 		return ErrHandled
+	}
+
+	// Running the discover steps might have invalidated one or more actions. If there
+	// are no actions remaining, we can exit early.
+	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion {
+		fmt.Println(colorize.Bold("No actions needed"))
+		return nil
 	}
 
 	var forkedProviderUpstreamCommit string
@@ -261,10 +276,10 @@ func UpgradeProvider(ctx Context, name string) error {
 		steps = append(steps, majorVersionBump(ctx, goMod, upgradeTargets, repo))
 
 		defer func() {
-			esc := "\u001B["
-			fmt.Printf("\n\n%[1]s1m%[1]s33mMajor Version Updates are not fully automated!%[1]sm\n", esc)
+			fmt.Printf("\n\n" + colorize.Warn("Major Version Updates are not fully automated!") + "\n")
 			fmt.Printf("Steps 1..9, 12 and 13 have been automated. Step 11 can be skipped.\n")
-			fmt.Printf("%[1]s1mYou%[1]sm need to complete Step 10: Updating README.md and sdk/python/README.md in a follow up commit.\n", esc)
+			fmt.Printf("%s need to complete Step 10: Updating README.md and sdk/python/README.md "+
+				"in a follow up commit.\n", colorize.Bold("You"))
 			fmt.Printf("Steps are listed at\n\t" +
 				"https://github.com/pulumi/platform-providers-team/blob/main/playbooks/tf-provider-major-version-update.md\n")
 		}()
@@ -461,6 +476,7 @@ type GoMod struct {
 	Kind     RepoKind
 	Upstream module.Version
 	Fork     *modfile.Replace
+	Bridge   module.Version
 }
 
 func modPathWithoutVersion(path string) string {
@@ -483,6 +499,19 @@ func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoM
 	if err != nil {
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
+
+	var bridge module.Version
+	for _, req := range goMod.Require {
+		path := modPathWithoutVersion(req.Mod.Path)
+		if path == "github.com/pulumi/pulumi-terraform-bridge" {
+			bridge = req.Mod
+			break
+		}
+	}
+	if bridge.Path == "" {
+		return nil, fmt.Errorf("Unable to discover pulumi-terraform-bridge version")
+	}
+
 	tfProviderRepoName := getTfProviderRepoName(providerName)
 
 	getUpstream := func(file *modfile.File) (*modfile.Require, error) {
@@ -561,6 +590,7 @@ func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoM
 	out := GoMod{
 		Upstream: upstream.Mod,
 		Fork:     fork,
+		Bridge:   bridge,
 	}
 
 	if fork == nil {
