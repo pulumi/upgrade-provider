@@ -24,6 +24,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
 
+	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 )
 
@@ -188,11 +189,21 @@ func UpgradeProvider(ctx Context, name string) error {
 	if ctx.UpgradeProviderVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Target Provider Version", func() (string, error) {
-				upgradeTargets, err = getExpectedTarget(ctx, name)
-				if err == nil {
-					return upgradeTargets.Latest().String(), nil
+				var msg string
+				upgradeTargets, msg, err = getExpectedTarget(ctx, name)
+				if err != nil {
+					return "", err
 				}
-				return "", err
+
+				// If we have upgrades to perform, we list the new version we will target
+				if len(upgradeTargets) > 0 {
+					return upgradeTargets.Latest().String() + msg, nil
+				}
+
+				// Otherwise, we don't bother to try to upgrade the provider.
+				ctx.UpgradeProviderVersion = false
+				ctx.MajorVersionBump = false
+				return "Up to date" + msg, nil
 			}))
 	}
 
@@ -206,13 +217,21 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	if ctx.UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
-			step.F("Target Bridge Version", func() (string, error) {
+			step.F("Planning Bridge Update", func() (string, error) {
 				latest, err := latestRelease(ctx, "pulumi/pulumi-terraform-bridge")
 				if err != nil {
 					return "", err
 				}
-				return latest.Original(), nil
-			}).AssignTo(&targetBridgeVersion))
+
+				// If our target upgrade version is the same as our current version, we skip the update.
+				if latest.Original() == goMod.Bridge.Version {
+					ctx.UpgradeBridgeVersion = false
+					return fmt.Sprintf("Up to date at %s", latest.Original()), nil
+				}
+
+				targetBridgeVersion = latest.Original()
+				return fmt.Sprintf("%s -> %s", goMod.Bridge.Version, latest.Original()), nil
+			}))
 	}
 
 	if ctx.MajorVersionBump {
@@ -230,6 +249,13 @@ func UpgradeProvider(ctx Context, name string) error {
 	ok = step.Run(step.Combined("Discovering Repository", discoverSteps...))
 	if !ok {
 		return ErrHandled
+	}
+
+	// Running the discover steps might have invalidated one or more actions. If there
+	// are no actions remaining, we can exit early.
+	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion {
+		fmt.Println(colorize.Bold("No actions needed"))
+		return nil
 	}
 
 	var forkedProviderUpstreamCommit string
@@ -261,10 +287,10 @@ func UpgradeProvider(ctx Context, name string) error {
 		steps = append(steps, majorVersionBump(ctx, goMod, upgradeTargets, repo))
 
 		defer func() {
-			esc := "\u001B["
-			fmt.Printf("\n\n%[1]s1m%[1]s33mMajor Version Updates are not fully automated!%[1]sm\n", esc)
+			fmt.Printf("\n\n" + colorize.Warn("Major Version Updates are not fully automated!") + "\n")
 			fmt.Printf("Steps 1..9, 12 and 13 have been automated. Step 11 can be skipped.\n")
-			fmt.Printf("%[1]s1mYou%[1]sm need to complete Step 10: Updating README.md and sdk/python/README.md in a follow up commit.\n", esc)
+			fmt.Printf("%s need to complete Step 10: Updating README.md and sdk/python/README.md "+
+				"in a follow up commit.\n", colorize.Bold("You"))
 			fmt.Printf("Steps are listed at\n\t" +
 				"https://github.com/pulumi/platform-providers-team/blob/main/playbooks/tf-provider-major-version-update.md\n")
 		}()
@@ -461,6 +487,7 @@ type GoMod struct {
 	Kind     RepoKind
 	Upstream module.Version
 	Fork     *modfile.Replace
+	Bridge   module.Version
 }
 
 func modPathWithoutVersion(path string) string {
@@ -468,6 +495,34 @@ func modPathWithoutVersion(path string) string {
 		return path[:match[0]]
 	}
 	return path
+}
+
+// Find the go module version of needleModule, searching from the default repo branch, not
+// the currently checked out code.
+func originalGoVersionOf(ctx context.Context, repo ProviderRepo, needleModule string) (module.Version, bool, error) {
+	file := filepath.Join("provider", "go.mod")
+
+	cmd := exec.CommandContext(ctx, "git", "show", repo.defaultBranch+":"+file)
+	cmd.Dir = repo.root
+	data, err := cmd.Output()
+	if err != nil {
+		return module.Version{}, false, fmt.Errorf("%s:%s: %w",
+			repo.defaultBranch, file, err)
+	}
+
+	goMod, err := modfile.Parse(file, data, nil)
+	if err != nil {
+		return module.Version{}, false, fmt.Errorf("%s:%s: %w",
+			repo.defaultBranch, file, err)
+	}
+
+	for _, req := range goMod.Require {
+		path := modPathWithoutVersion(req.Mod.Path)
+		if path == needleModule {
+			return req.Mod, true, nil
+		}
+	}
+	return module.Version{}, false, nil
 }
 
 func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoMod, error) {
@@ -483,6 +538,15 @@ func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoM
 	if err != nil {
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
+
+	bridge, ok, err := originalGoVersionOf(ctx, repo, "github.com/pulumi/pulumi-terraform-bridge")
+	bridgeMissingMsg := "Unable to discover pulumi-terraform-bridge version"
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", bridgeMissingMsg, err)
+	} else if !ok {
+		return nil, fmt.Errorf(bridgeMissingMsg)
+	}
+
 	tfProviderRepoName := getTfProviderRepoName(providerName)
 
 	getUpstream := func(file *modfile.File) (*modfile.Require, error) {
@@ -561,6 +625,7 @@ func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoM
 	out := GoMod{
 		Upstream: upstream.Mod,
 		Fork:     fork,
+		Bridge:   bridge,
 	}
 
 	if fork == nil {
@@ -584,7 +649,11 @@ type UpgradeTargetIssue struct {
 	Number  int             `json:"number"`
 }
 
-func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, error) {
+// Fetch the expected upgrade target from github. Return a list of open upgrade issues,
+// sorted by semantic version. The list may be empty.
+//
+// The second argument represents a message to describe the result. It may be empty.
+func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, error) {
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--author=pulumi-bot",
@@ -595,7 +664,7 @@ func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, error) {
 	getIssues.Stdout = bytes
 	err := getIssues.Run()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	titles := []struct {
 		Title  string `json:"title"`
@@ -603,7 +672,7 @@ func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, error) {
 	}{}
 	err = json.Unmarshal(bytes.Bytes(), &titles)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var versions []UpgradeTargetIssue
@@ -632,19 +701,19 @@ func getExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, error) {
 	if len(versions) == 0 {
 		var extra string
 		if versionConstrained {
-			extra = "(a version was found but it was greater then the specified max)"
+			extra = " (a version was found but it was greater then the specified max)"
 		}
-		return nil, fmt.Errorf("no upgrade found%s", extra)
+		return nil, extra, nil
 	}
 	sort.Slice(versions, func(i, j int) bool {
 		return versions[j].Version.LessThan(versions[i].Version)
 	})
 
 	if ctx.MaxVersion != nil && !versions[0].Version.Equal(ctx.MaxVersion) {
-		return nil, fmt.Errorf("possible upgrades exist, but non match %s", ctx.MaxVersion)
+		return nil, "", fmt.Errorf("possible upgrades exist, but non match %s", ctx.MaxVersion)
 	}
 
-	return versions, nil
+	return versions, "", nil
 }
 
 func pullDefaultBranch(ctx Context, remote string) step.Step {
@@ -1089,7 +1158,6 @@ func majorVersionBump(ctx Context, goMod *GoMod, targets UpstreamVersions, repo 
 			"github.com/pulumi/"+name+"/{}/pkg").In(&repo.root),
 		replaceInFile("Update Go Module", "go.mod",
 			"module github.com/pulumi/"+name+"/{}").In(repo.providerDir()),
-		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
 		step.F("Update Go Imports", func() (string, error) {
 			var filesUpdated int
 			var fn filepath.WalkFunc = func(path string, info fs.FileInfo, err error) error {
