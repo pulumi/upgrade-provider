@@ -367,8 +367,8 @@ func UpgradeProvider(ctx Context, name string) error {
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m",
 			"make build_sdks", "--allow-empty")).In(&repo.root),
-		informGitHub(ctx, upgradeTargets, repo, upstreamProviderName,
-			targetBridgeVersion),
+		informGitHub(ctx, upgradeTargets, repo, goMod,
+			upstreamProviderName, targetBridgeVersion),
 	)
 
 	ok = step.Run(step.Combined("Update Artifacts", artifacts...))
@@ -853,7 +853,7 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 	).Return(&expectedLocation)
 }
 
-func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, targetBridge, upstreamProviderName string) string {
+func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, goMod *GoMod, targetBridge, upstreamProviderName string) string {
 	b := new(strings.Builder)
 	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n",
 		strings.Join(os.Args[1:], " "))
@@ -873,8 +873,8 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, tar
 			upstreamProviderName, prev, upgradeTargets.Latest())
 	}
 	if ctx.UpgradeBridgeVersion {
-		fmt.Fprintf(b, "Upgrading pulumi-terraform-bridge to %s.\n",
-			targetBridge)
+		fmt.Fprintf(b, "Upgrading pulumi-terraform-bridge from %s to %s.\n",
+			goMod.Bridge.Version, targetBridge)
 	}
 
 	if len(upgradeTargets) > 0 {
@@ -1078,8 +1078,8 @@ func upgradeProviderVersion(
 }
 
 func informGitHub(
-	ctx Context, target UpstreamVersions,
-	repo ProviderRepo, upstreamProviderName, targetBridgeVersion string,
+	ctx Context, target UpstreamVersions, repo ProviderRepo,
+	goMod *GoMod, upstreamProviderName, targetBridgeVersion string,
 ) step.Step {
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
@@ -1099,7 +1099,7 @@ func informGitHub(
 		"--head", repo.workingBranch,
 		"--reviewer", "pulumi/Ecosystem",
 		"--title", prTitle,
-		"--body", prBody(ctx, repo, target, targetBridgeVersion, upstreamProviderName),
+		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, upstreamProviderName),
 	)).In(&repo.root)
 	return step.Combined("GitHub",
 		pushBranch,
