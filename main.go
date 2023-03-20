@@ -147,6 +147,10 @@ type ProviderRepo struct {
 
 	// The highest version tag released on the repo
 	currentVersion *semver.Version
+
+	// The upstream version we are upgrading from.  Because not all upstream providers
+	// are go module compliment, we might not be able to always resolve this version.
+	currentUpstreamVersion *semver.Version
 }
 
 func (p ProviderRepo) providerDir() *string {
@@ -186,27 +190,6 @@ func UpgradeProvider(ctx Context, name string) error {
 			AssignTo(&repo.defaultBranch),
 	}
 
-	if ctx.UpgradeProviderVersion {
-		discoverSteps = append(discoverSteps,
-			step.F("Target Provider Version", func() (string, error) {
-				var msg string
-				upgradeTargets, msg, err = getExpectedTarget(ctx, name)
-				if err != nil {
-					return "", err
-				}
-
-				// If we have upgrades to perform, we list the new version we will target
-				if len(upgradeTargets) > 0 {
-					return upgradeTargets.Latest().String() + msg, nil
-				}
-
-				// Otherwise, we don't bother to try to upgrade the provider.
-				ctx.UpgradeProviderVersion = false
-				ctx.MajorVersionBump = false
-				return "Up to date" + msg, nil
-			}))
-	}
-
 	discoverSteps = append(discoverSteps, step.F("Repo kind", func() (string, error) {
 		goMod, err = repoKind(ctx, repo, upstreamProviderName)
 		if err != nil {
@@ -214,6 +197,39 @@ func UpgradeProvider(ctx Context, name string) error {
 		}
 		return string(goMod.Kind), nil
 	}))
+
+	if ctx.UpgradeProviderVersion {
+		discoverSteps = append(discoverSteps,
+			step.F("Planning Provider Update", func() (string, error) {
+				var msg string
+				upgradeTargets, msg, err = getExpectedTarget(ctx, name)
+				if err != nil {
+					return "", err
+				}
+
+				// If we have upgrades to perform, we list the new version we will target
+				if len(upgradeTargets) == 0 {
+					// Otherwise, we don't bother to try to upgrade the provider.
+					ctx.UpgradeProviderVersion = false
+					ctx.MajorVersionBump = false
+					return "Up to date" + msg, nil
+				}
+
+				if goMod.Kind.IsPatched() {
+					err := setCurrentUpstreamFromPatched(ctx, repo)
+					if err != nil {
+						return "", fmt.Errorf("current upstream version: %w", err)
+					}
+				}
+
+				var previous string
+				if repo.currentUpstreamVersion != nil {
+					previous = fmt.Sprintf("%s -> ", repo.currentUpstreamVersion)
+				}
+
+				return previous + upgradeTargets.Latest().String() + msg, nil
+			}))
+	}
 
 	if ctx.UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
@@ -844,8 +860,12 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, tar
 	}
 
 	if ctx.UpgradeProviderVersion {
-		fmt.Fprintf(b, "Upgrading upstream provider %s to %s.\n",
-			upstreamProviderName, upgradeTargets.Latest())
+		var prev string
+		if repo.currentUpstreamVersion != nil {
+			prev = fmt.Sprintf("from %s ", repo.currentUpstreamVersion)
+		}
+		fmt.Fprintf(b, "Upgrading terraform-provider-%s %sto %s.\n",
+			upstreamProviderName, prev, upgradeTargets.Latest())
 	}
 	if ctx.UpgradeBridgeVersion {
 		fmt.Fprintf(b, "Upgrading pulumi-terraform-bridge to %s.\n",
@@ -1339,4 +1359,55 @@ func updateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
 		}
 		return "", os.WriteFile(path, bytes, stats.Mode().Perm())
 	})
+}
+
+func setCurrentUpstreamFromPatched(ctx Context, repo ProviderRepo) error {
+	// We do a SHA tag lookup on the upstream. As long
+	// as we are pointing to a released version, this
+	// should always work.
+
+	getCheckedInCommit := exec.CommandContext(ctx,
+		"git", "ls-tree", repo.defaultBranch, "upstream", "--object-only")
+	getCheckedInCommit.Dir = repo.root
+
+	checkedInCommit, err := getCheckedInCommit.Output()
+	if err != nil {
+		return err
+	}
+	sha := bytes.TrimSpace(checkedInCommit)
+
+	getRemoteURL := exec.CommandContext(ctx,
+		"git", "submodule", "foreach", "-q", "git", "config", "remote.origin.url")
+	getRemoteURL.Dir = repo.root
+	remoteURL, err := getRemoteURL.Output()
+	if err != nil {
+		return err
+	}
+
+	getTags := exec.CommandContext(ctx,
+		"git", "ls-remote", "--tags", strings.TrimSpace(string(remoteURL)))
+	allTags, err := getTags.Output()
+	if err != nil {
+		return fmt.Errorf("failed to list remote tags: %w", err)
+	}
+
+	var version string
+	for _, tag := range bytes.Split(allTags, []byte{'\n'}) {
+		tag := bytes.TrimSpace(tag)
+		if !bytes.HasPrefix(tag, sha) {
+			continue
+		}
+		ref := string(bytes.Split(bytes.TrimSpace(tag), []byte{'\t'})[1])
+		version = strings.TrimPrefix(ref, "refs/tags/")
+	}
+	if version == "" {
+		return fmt.Errorf("No tags match expected SHA '%s'", string(sha))
+	}
+
+	repo.currentUpstreamVersion, err =
+		semver.NewVersion(strings.TrimSpace(version))
+	if err != nil {
+		return fmt.Errorf("current upstream version: %w", err)
+	}
+	return nil
 }
