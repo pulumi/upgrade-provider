@@ -215,11 +215,16 @@ func UpgradeProvider(ctx Context, name string) error {
 					return "Up to date" + msg, nil
 				}
 
-				if goMod.Kind.IsPatched() {
-					err := setCurrentUpstreamFromPatched(ctx, repo)
-					if err != nil {
-						return "", fmt.Errorf("current upstream version: %w", err)
-					}
+				switch {
+				case goMod.Kind.IsPatched():
+					err = setCurrentUpstreamFromPatched(ctx, &repo)
+				case goMod.Kind == Plain:
+					err = setCurrentUpstreamFromPlain(ctx, &repo, goMod)
+				default:
+					err = nil
+				}
+				if err != nil {
+					return "", fmt.Errorf("current upstream version: %w", err)
 				}
 
 				var previous string
@@ -362,8 +367,8 @@ func UpgradeProvider(ctx Context, name string) error {
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m",
 			"make build_sdks", "--allow-empty")).In(&repo.root),
-		informGitHub(ctx, upgradeTargets, repo, upstreamProviderName,
-			targetBridgeVersion),
+		informGitHub(ctx, upgradeTargets, repo, goMod,
+			upstreamProviderName, targetBridgeVersion),
 	)
 
 	ok = step.Run(step.Combined("Update Artifacts", artifacts...))
@@ -848,7 +853,7 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 	).Return(&expectedLocation)
 }
 
-func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, targetBridge, upstreamProviderName string) string {
+func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, goMod *GoMod, targetBridge, upstreamProviderName string) string {
 	b := new(strings.Builder)
 	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n",
 		strings.Join(os.Args[1:], " "))
@@ -868,8 +873,8 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, tar
 			upstreamProviderName, prev, upgradeTargets.Latest())
 	}
 	if ctx.UpgradeBridgeVersion {
-		fmt.Fprintf(b, "Upgrading pulumi-terraform-bridge to %s.\n",
-			targetBridge)
+		fmt.Fprintf(b, "Upgrading pulumi-terraform-bridge from %s to %s.\n",
+			goMod.Bridge.Version, targetBridge)
 	}
 
 	if len(upgradeTargets) > 0 {
@@ -1073,8 +1078,8 @@ func upgradeProviderVersion(
 }
 
 func informGitHub(
-	ctx Context, target UpstreamVersions,
-	repo ProviderRepo, upstreamProviderName, targetBridgeVersion string,
+	ctx Context, target UpstreamVersions, repo ProviderRepo,
+	goMod *GoMod, upstreamProviderName, targetBridgeVersion string,
 ) step.Step {
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
@@ -1094,7 +1099,7 @@ func informGitHub(
 		"--head", repo.workingBranch,
 		"--reviewer", "pulumi/Ecosystem",
 		"--title", prTitle,
-		"--body", prBody(ctx, repo, target, targetBridgeVersion, upstreamProviderName),
+		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, upstreamProviderName),
 	)).In(&repo.root)
 	return step.Combined("GitHub",
 		pushBranch,
@@ -1361,11 +1366,12 @@ func updateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
 	})
 }
 
-func setCurrentUpstreamFromPatched(ctx Context, repo ProviderRepo) error {
-	// We do a SHA tag lookup on the upstream. As long
-	// as we are pointing to a released version, this
-	// should always work.
-
+// setCurrentUpstreamFromPatched sets repo.currentUpstreamVersion to the version pointed to in the
+// submodule in the default branch.
+//
+// We don't use the current branch, since applying a partial update could change the current branch,
+// leading to a non idempotent result.
+func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
 	getCheckedInCommit := exec.CommandContext(ctx,
 		"git", "ls-tree", repo.defaultBranch, "upstream", "--object-only")
 	getCheckedInCommit.Dir = repo.root
@@ -1410,4 +1416,70 @@ func setCurrentUpstreamFromPatched(ctx Context, repo ProviderRepo) error {
 		return fmt.Errorf("current upstream version: %w", err)
 	}
 	return nil
+}
+
+// setCurrentUpstreamFromPlain sets repo.currentUpstreamVersion to the version pointed to in
+// provider/go.mod if the version is valid semver. Otherwise try to resolve a pseudo version against
+// commits in the upstream repository.
+//
+// We don't use the current branch, since applying a partial update could change the current branch,
+// leading to a non idempotent result.
+func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
+	version, found, err := originalGoVersionOf(ctx, *repo, goMod.Upstream.Path)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("could not find existing upstream '%s'", goMod.Upstream.Path)
+	}
+	if parsed, err := semver.NewVersion(version.Version); err == nil {
+		// This was a valid go module, so this worked.
+		repo.currentUpstreamVersion = parsed
+		return nil
+	}
+
+	// If we don't have a fully resolved version, we got a partial version. We need to resolve
+	// that back into a version tag.
+
+	// The revision part of a go mod psuedo version generally corresponds to the commit sha1
+	// that the version references.
+	rev, err := module.PseudoVersionRev(version.Version)
+	if err != nil {
+		return fmt.Errorf("expected pseudo version, found '%s': %w", version.Version, err)
+	}
+
+	// We now fetch the set of tagged commits.
+	url := "https://" + modPathWithoutVersion(goMod.Upstream.Path) + ".git"
+	getTagCommits := exec.CommandContext(ctx, "git", "ls-remote", "--tags", "--quiet", url)
+	getTagCommits.Dir = repo.root
+	tagCommits, err := getTagCommits.Output()
+	if err != nil {
+		return err
+	}
+	revBytes := []byte(rev)
+	for _, tag := range bytes.Split(tagCommits, []byte{'\n'}) {
+		tag = bytes.TrimSpace(tag)
+		if !bytes.HasPrefix(tag, revBytes) {
+			continue
+		}
+
+		// It is possible that this is a different commit, since we just take the first 12
+		// characters, but its **very** unlikely.
+		tag = bytes.Split(tag, []byte{'\t'})[1]
+		versionComponent := strings.TrimPrefix(string(tag), "refs/tags/")
+		version, err := semver.NewVersion(versionComponent)
+		if err != nil {
+			// Its possible that this error is valid, for example if the tag has a path,
+			// such as 'refs/tags/sdk/v2.3.2'. If we needed this to be 100% **correct**,
+			// we could require that the URL comes from a known source (`github.com`,
+			// `gitlab.com`, ect.) and figure out how many tag components need to be
+			// part of the url.
+			//
+			// It's not worth doing that for now.
+			return fmt.Errorf("failed to parse commit tag '%s': %w", string(tag), err)
+		}
+		repo.currentUpstreamVersion = version
+		return nil
+	}
+	return fmt.Errorf("no tag commit that matched '%s' in '%s'", rev, url)
 }
