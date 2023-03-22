@@ -1383,18 +1383,19 @@ func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
 	sha := bytes.TrimSpace(checkedInCommit)
 
 	getRemoteURL := exec.CommandContext(ctx,
-		"git", "submodule", "foreach", "-q", "git", "config", "remote.origin.url")
+		"git", "config", "--get", "submodule.upstream.url")
 	getRemoteURL.Dir = repo.root
-	remoteURL, err := getRemoteURL.Output()
+	remoteURLBytes, err := getRemoteURL.Output()
 	if err != nil {
 		return err
 	}
+	remoteURL := string(bytes.TrimSpace(remoteURLBytes))
 
 	getTags := exec.CommandContext(ctx,
-		"git", "ls-remote", "--tags", strings.TrimSpace(string(remoteURL)))
+		"git", "ls-remote", "--tags", remoteURL)
 	allTags, err := getTags.Output()
 	if err != nil {
-		return fmt.Errorf("failed to list remote tags: %w", err)
+		return fmt.Errorf("failed to list remote tags for '%s': %w", remoteURL, err)
 	}
 
 	var version string
