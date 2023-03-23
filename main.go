@@ -1404,16 +1404,15 @@ func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
 			continue
 		}
 		ref := string(bytes.Split(bytes.TrimSpace(tag), []byte{'\t'})[1])
-		version = strings.TrimPrefix(ref, "refs/tags/")
+		version = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(ref, "refs/tags/"), "^{}"))
 	}
 	if version == "" {
 		return fmt.Errorf("No tags match expected SHA '%s'", string(sha))
 	}
 
-	repo.currentUpstreamVersion, err =
-		semver.NewVersion(strings.TrimSpace(version))
+	repo.currentUpstreamVersion, err = semver.NewVersion(version)
 	if err != nil {
-		return fmt.Errorf("current upstream version: %w", err)
+		return fmt.Errorf("current upstream version '%s': %w", version, err)
 	}
 	return nil
 }
