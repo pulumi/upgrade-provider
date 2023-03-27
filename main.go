@@ -1401,6 +1401,13 @@ func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
 	}
 	sha := bytes.TrimSpace(checkedInCommit)
 
+	ensureSubmoduleInit := exec.CommandContext(ctx,
+		"git", "submodule", "init")
+	ensureSubmoduleInit.Dir = repo.root
+	out, err := ensureSubmoduleInit.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to init submodule: %w: %s", err, string(out))
+	}
 	getRemoteURL := exec.CommandContext(ctx,
 		"git", "config", "--get", "submodule.upstream.url")
 	getRemoteURL.Dir = repo.root
