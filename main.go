@@ -220,10 +220,12 @@ func UpgradeProvider(ctx Context, name string) error {
 					err = setCurrentUpstreamFromPatched(ctx, &repo)
 				case goMod.Kind.IsForked():
 					err = setCurrentUpstreamFromForked(ctx, &repo, goMod)
+				case goMod.Kind.IsShimmed():
+					err = setCurrentUpstreamFromShimmed(ctx, &repo, goMod)
 				case goMod.Kind == Plain:
 					err = setCurrentUpstreamFromPlain(ctx, &repo, goMod)
 				default:
-					err = nil
+					return "", fmt.Errorf("Unexpected repo kind: %s", goMod.Kind)
 				}
 				if err != nil {
 					return "", fmt.Errorf("current upstream version: %w", err)
@@ -350,7 +352,7 @@ func UpgradeProvider(ctx Context, name string) error {
 		step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
 		step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
-		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&repo.root),
+		gitCommit(ctx, "make tfgen").In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&repo.root),
 		step.Computed(func() step.Step {
 			if !ctx.MajorVersionBump {
@@ -376,8 +378,7 @@ func UpgradeProvider(ctx Context, name string) error {
 				In(&dir)
 		}),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
-		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m",
-			"make build_sdks", "--allow-empty")).In(&repo.root),
+		gitCommit(ctx, "make build_sdks").In(&repo.root),
 		informGitHub(ctx, upgradeTargets, repo, goMod,
 			upstreamProviderName, targetBridgeVersion),
 	)
@@ -388,6 +389,27 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	return nil
+}
+
+// A "git commit" step that is resilient to no changes in the directory.
+//
+// This is required to accommodate failure and retry in the `git` push steps.
+func gitCommit(ctx context.Context, msg string) step.Step {
+	return step.Computed(func() step.Step {
+		check, err := exec.CommandContext(ctx, "git", "status", "--porcelain=1").CombinedOutput()
+		description := fmt.Sprintf(`git commit -m "%s"`, msg)
+		if err != nil {
+			return step.F("git commit", func() (string, error) {
+				return "", err
+			})
+		}
+		if len(check) > 0 {
+			return step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", msg))
+		}
+		return step.F(description, func() (string, error) {
+			return "nothing to commit", nil
+		})
+	})
 }
 
 type RepoKind string
@@ -531,9 +553,7 @@ func modPathWithoutVersion(path string) string {
 
 // Find the go module version of needleModule, searching from the default repo branch, not
 // the currently checked out code.
-func originalGoVersionOf(ctx context.Context, repo ProviderRepo, needleModule string) (module.Version, bool, error) {
-	file := filepath.Join("provider", "go.mod")
-
+func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleModule string) (module.Version, bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "show", repo.defaultBranch+":"+file)
 	cmd.Dir = repo.root
 	data, err := cmd.Output()
@@ -579,7 +599,7 @@ func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoM
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
 
-	bridge, ok, err := originalGoVersionOf(ctx, repo, "github.com/pulumi/pulumi-terraform-bridge")
+	bridge, ok, err := originalGoVersionOf(ctx, repo, filepath.Join("provider", "go.mod"), "github.com/pulumi/pulumi-terraform-bridge")
 	bridgeMissingMsg := "Unable to discover pulumi-terraform-bridge version"
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", bridgeMissingMsg, err)
@@ -1451,24 +1471,33 @@ func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
 // We don't use the current branch, since applying a partial update could change the current branch,
 // leading to a non idempotent result.
 func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
-	return setUpstreamFromRemoteRepo(ctx, repo, goMod, "tags", goMod.Upstream.Path, semver.NewVersion)
+	return setUpstreamFromRemoteRepo(ctx, repo, "tags",
+		filepath.Join("provider", "go.mod"), goMod.Upstream.Path,
+		semver.NewVersion)
 }
 
 func setCurrentUpstreamFromForked(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
-	return setUpstreamFromRemoteRepo(ctx, repo, goMod, "heads", goMod.Fork.New.Path,
+	return setUpstreamFromRemoteRepo(ctx, repo, "heads",
+		filepath.Join("provider", "go.mod"), goMod.Fork.New.Path,
 		func(s string) (*semver.Version, error) {
 			version := strings.TrimPrefix(s, "upstream-")
 			return semver.NewVersion(version)
 		})
 }
 
+func setCurrentUpstreamFromShimmed(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
+	return setUpstreamFromRemoteRepo(ctx, repo, "tags",
+		filepath.Join("provider", "shim", "go.mod"), goMod.Upstream.Path,
+		semver.NewVersion)
+}
+
 func setUpstreamFromRemoteRepo(
-	ctx Context, repo *ProviderRepo, goMod *GoMod, kind, upstream string,
+	ctx Context, repo *ProviderRepo, kind, goModPath, upstream string,
 	parse func(string) (*semver.Version, error),
 ) error {
-	version, found, err := originalGoVersionOf(ctx, *repo, upstream)
+	version, found, err := originalGoVersionOf(ctx, *repo, goModPath, upstream)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not discover original version: %w", err)
 	}
 	if !found {
 		return fmt.Errorf("could not find previous upstream '%s'", upstream)
@@ -1501,7 +1530,7 @@ func setUpstreamFromRemoteRepo(
 	getTagCommits.Dir = repo.root
 	tagCommits, err := getTagCommits.Output()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get remote %s from '%s': %w", kind, url, err)
 	}
 	revBytes := []byte(rev)
 	for _, line := range bytes.Split(tagCommits, []byte{'\n'}) {

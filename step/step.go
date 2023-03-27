@@ -119,17 +119,23 @@ func (s step) In(path *string) Step {
 	return s
 }
 
-func runIn(path *string, f func() (string, error)) (string, error) {
+// Run a function in `path` (or the current directory if `path` is nil).
+//
+// An error is returned if there was a failure in changing the directory or if `f`
+// returned an error.
+func runIn[T any](path *string, f func() (T, error)) (T, error) {
 	if path == nil {
 		return f()
 	}
 	wd, err := os.Getwd()
 	if err != nil {
-		return "", err
+		var t T
+		return t, err
 	}
 	err = os.Chdir(*path)
 	if err != nil {
-		return "", err
+		var t T
+		return t, err
 	}
 	defer func() {
 		e := os.Chdir(wd)
@@ -143,15 +149,17 @@ func runIn(path *string, f func() (string, error)) (string, error) {
 // A Step that can't be fully computed until it is run. This allows constructing a Step
 // that depends on information gathered in other steps.
 func Computed(step func() Step) Step {
-	return unknownStep{f: step}
+	return unknownStep{f: step, in: nil}
 }
 
 type unknownStep struct {
-	f func() Step
+	f  func() Step
+	in *string
 }
 
 func (us unknownStep) In(path *string) Step {
 	return unknownStep{
+		in: path,
 		f: func() Step {
 			s := us.f()
 			if s == nil {
@@ -163,6 +171,7 @@ func (us unknownStep) In(path *string) Step {
 }
 func (us unknownStep) AssignTo(lvalue *string) Step {
 	return unknownStep{
+		in: us.in,
 		f: func() Step {
 			s := us.f()
 			if s == nil {
@@ -175,6 +184,7 @@ func (us unknownStep) AssignTo(lvalue *string) Step {
 
 func (us unknownStep) Return(rvalue *string) Step {
 	return unknownStep{
+		in: us.in,
 		f: func() Step {
 			s := us.f()
 			if s == nil {
@@ -186,7 +196,11 @@ func (us unknownStep) Return(rvalue *string) Step {
 }
 
 func (us unknownStep) run(prefix string) bool {
-	s := us.f()
+	s, err := runIn(us.in, func() (Step, error) { return us.f(), nil })
+	if err != nil {
+		fmt.Println("failed to compute step: %w", err)
+		return false
+	}
 	if s == nil {
 		return true
 	}
