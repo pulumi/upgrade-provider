@@ -218,6 +218,8 @@ func UpgradeProvider(ctx Context, name string) error {
 				switch {
 				case goMod.Kind.IsPatched():
 					err = setCurrentUpstreamFromPatched(ctx, &repo)
+				case goMod.Kind.IsForked():
+					err = setCurrentUpstreamFromForked(ctx, &repo, goMod)
 				case goMod.Kind == Plain:
 					err = setCurrentUpstreamFromPlain(ctx, &repo, goMod)
 				default:
@@ -270,6 +272,15 @@ func UpgradeProvider(ctx Context, name string) error {
 	ok = step.Run(step.Combined("Discovering Repository", discoverSteps...))
 	if !ok {
 		return ErrHandled
+	}
+
+	shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTargets.Latest().Major()
+	if ctx.MajorVersionBump && !shouldMajorVersionBump {
+		return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
+			repo.currentUpstreamVersion.Major())
+	} else if !ctx.MajorVersionBump && shouldMajorVersionBump {
+		return fmt.Errorf("This is a major version update (v%d -> v%d), but --major was not passed",
+			repo.currentUpstreamVersion.Major(), upgradeTargets.Latest().Major())
 	}
 
 	// Running the discover steps might have invalidated one or more actions. If there
@@ -537,6 +548,14 @@ func originalGoVersionOf(ctx context.Context, repo ProviderRepo, needleModule st
 			repo.defaultBranch, file, err)
 	}
 
+	needleModule = modPathWithoutVersion(needleModule)
+
+	for _, req := range goMod.Replace {
+		path := modPathWithoutVersion(req.New.Path)
+		if path == needleModule {
+			return req.New, true, nil
+		}
+	}
 	for _, req := range goMod.Require {
 		path := modPathWithoutVersion(req.Mod.Path)
 		if path == needleModule {
@@ -1425,15 +1444,36 @@ func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
 // We don't use the current branch, since applying a partial update could change the current branch,
 // leading to a non idempotent result.
 func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
-	version, found, err := originalGoVersionOf(ctx, *repo, goMod.Upstream.Path)
+	return setUpstreamFromRemoteRepo(ctx, repo, goMod, "tags", goMod.Upstream.Path, semver.NewVersion)
+}
+
+func setCurrentUpstreamFromForked(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
+	return setUpstreamFromRemoteRepo(ctx, repo, goMod, "heads", goMod.Fork.New.Path,
+		func(s string) (*semver.Version, error) {
+			version := strings.TrimPrefix(s, "upstream-")
+			return semver.NewVersion(version)
+		})
+}
+
+func setUpstreamFromRemoteRepo(
+	ctx Context, repo *ProviderRepo, goMod *GoMod, kind, upstream string,
+	parse func(string) (*semver.Version, error),
+) error {
+	version, found, err := originalGoVersionOf(ctx, *repo, upstream)
 	if err != nil {
 		return err
 	}
 	if !found {
-		return fmt.Errorf("could not find existing upstream '%s'", goMod.Upstream.Path)
+		return fmt.Errorf("could not find previous upstream '%s'", upstream)
 	}
-	if parsed, err := semver.NewVersion(version.Version); err == nil {
-		// This was a valid go module, so this worked.
+
+	if !module.IsPseudoVersion(version.Version) {
+		parsed, err := semver.NewVersion(version.Version)
+		if err != nil {
+			return fmt.Errorf("failed to parse upstream version '%s'", version.Version)
+		}
+		// This will not happen for pulumi forks, since we use upstream branches
+		// instead of tags. It *will* happen for plain repos.
 		repo.currentUpstreamVersion = parsed
 		return nil
 	}
@@ -1449,25 +1489,25 @@ func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) 
 	}
 
 	// We now fetch the set of tagged commits.
-	url := "https://" + modPathWithoutVersion(goMod.Upstream.Path) + ".git"
-	getTagCommits := exec.CommandContext(ctx, "git", "ls-remote", "--tags", "--quiet", url)
+	url := "https://" + modPathWithoutVersion(upstream) + ".git"
+	getTagCommits := exec.CommandContext(ctx, "git", "ls-remote", "--"+kind, "--quiet", url)
 	getTagCommits.Dir = repo.root
 	tagCommits, err := getTagCommits.Output()
 	if err != nil {
 		return err
 	}
 	revBytes := []byte(rev)
-	for _, tag := range bytes.Split(tagCommits, []byte{'\n'}) {
-		tag = bytes.TrimSpace(tag)
-		if !bytes.HasPrefix(tag, revBytes) {
+	for _, line := range bytes.Split(tagCommits, []byte{'\n'}) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, revBytes) {
 			continue
 		}
 
 		// It is possible that this is a different commit, since we just take the first 12
 		// characters, but its **very** unlikely.
-		tag = bytes.Split(tag, []byte{'\t'})[1]
-		versionComponent := strings.TrimPrefix(string(tag), "refs/tags/")
-		version, err := semver.NewVersion(versionComponent)
+		line = bytes.Split(line, []byte{'\t'})[1]
+		versionComponent := strings.TrimPrefix(string(line), "refs/"+kind+"/")
+		version, err := parse(versionComponent)
 		if err != nil {
 			// Its possible that this error is valid, for example if the tag has a path,
 			// such as 'refs/tags/sdk/v2.3.2'. If we needed this to be 100% **correct**,
@@ -1476,7 +1516,8 @@ func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) 
 			// part of the url.
 			//
 			// It's not worth doing that for now.
-			return fmt.Errorf("failed to parse commit tag '%s': %w", string(tag), err)
+			return fmt.Errorf("failed to parse commit %s '%s': %w",
+				strings.TrimSuffix(kind, "s"), string(line), err)
 		}
 		repo.currentUpstreamVersion = version
 		return nil
