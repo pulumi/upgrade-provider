@@ -276,13 +276,15 @@ func UpgradeProvider(ctx Context, name string) error {
 		return ErrHandled
 	}
 
-	shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTargets.Latest().Major()
-	if ctx.MajorVersionBump && !shouldMajorVersionBump {
-		return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
-			repo.currentUpstreamVersion.Major())
-	} else if !ctx.MajorVersionBump && shouldMajorVersionBump {
-		return fmt.Errorf("This is a major version update (v%d -> v%d), but --major was not passed",
-			repo.currentUpstreamVersion.Major(), upgradeTargets.Latest().Major())
+	if ctx.UpgradeProviderVersion {
+		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTargets.Latest().Major()
+		if ctx.MajorVersionBump && !shouldMajorVersionBump {
+			return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
+				repo.currentUpstreamVersion.Major())
+		} else if !ctx.MajorVersionBump && shouldMajorVersionBump {
+			return fmt.Errorf("This is a major version update (v%d -> v%d), but --major was not passed",
+				repo.currentUpstreamVersion.Major(), upgradeTargets.Latest().Major())
+		}
 	}
 
 	// Running the discover steps might have invalidated one or more actions. If there
