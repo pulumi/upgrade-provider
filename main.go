@@ -19,6 +19,7 @@ import (
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 	"gopkg.in/yaml.v3"
+	"k8s.io/utils/strings/slices"
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
@@ -27,6 +28,15 @@ import (
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 )
+
+const (
+	TfBridgeXPkg = "github.com/pulumi/pulumi-terraform-bridge/v3/pkg/tfbridge/x"
+	ContractPkg  = "github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+)
+
+var CodeMigrationOpts = []string{
+	"autoalias",
+}
 
 type Context struct {
 	context.Context
@@ -39,6 +49,9 @@ type Context struct {
 
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
+
+	UpgradeCodeMigration bool
+	MigrationOpts        *[]string
 }
 
 func cmd() *cobra.Command {
@@ -48,6 +61,7 @@ func cmd() *cobra.Command {
 		gopath = build.Default.GOPATH
 	}
 	var upgradeKind string
+	var migrationOpts *[]string
 
 	context := Context{
 		Context: context.Background(),
@@ -84,13 +98,18 @@ func cmd() *cobra.Command {
 			case "all":
 				context.UpgradeBridgeVersion = true
 				context.UpgradeProviderVersion = true
+				context.UpgradeCodeMigration = true
+				context.MigrationOpts = migrationOpts
 			case "bridge":
 				context.UpgradeBridgeVersion = true
 			case "provider":
 				context.UpgradeProviderVersion = true
+			case "code":
+				context.UpgradeCodeMigration = true
+				context.MigrationOpts = migrationOpts
 			default:
 				return fmt.Errorf(
-					"--kind=%s invalid. Must be one of `all`, `bridge` or `provider`.",
+					"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, or `code`.",
 					upgradeKind)
 			}
 
@@ -119,7 +138,12 @@ If the passed version does not exist, an error is signaled.`)
 		`The kind of upgrade to perform:
 - "all":     Upgrade the upstream provider and the bridge.
 - "bridge":  Upgrade the bridge only.
-- "provider: Upgrade the upstream provider only.`)
+- "provider": Upgrade the upstream provider only.
+- "code": Perform a code migration. Must specify at least one option via --migration-opts`)
+
+	migrationOpts = cmd.PersistentFlags().StringSlice("migration-opts", []string{},
+		`A comma separated list of code migration to perform:
+- "autoalias": Apply auto aliasing to the provider.`)
 
 	return cmd
 }
@@ -274,7 +298,7 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
-	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion {
+	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion && !ctx.UpgradeCodeMigration {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -297,6 +321,8 @@ func UpgradeProvider(ctx Context, name string) error {
 			"We are upgrading the bridge, so we must have a target version")
 		repo.workingBranch = fmt.Sprintf("upgrade-pulumi-terraform-bridge-to-%s",
 			targetBridgeVersion)
+	} else if ctx.UpgradeCodeMigration {
+		repo.workingBranch = "upgrade-code-migration"
 	} else {
 		return fmt.Errorf("calculating branch name: unknown action")
 	}
@@ -332,6 +358,36 @@ func UpgradeProvider(ctx Context, name string) error {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
 			In(repo.providerDir()))
+	}
+
+	if ctx.UpgradeCodeMigration {
+		if ctx.MigrationOpts == nil || len(*ctx.MigrationOpts) == 0 {
+			// assume --kind=all and perform all code migrations
+			if ctx.UpgradeProviderVersion && ctx.UpgradeBridgeVersion {
+				ctx.MigrationOpts = &CodeMigrationOpts
+			}
+			return fmt.Errorf("--kind=code: must provide at least one option via --migration-opts")
+		}
+		for _, opt := range *ctx.MigrationOpts {
+			if !slices.Contains(CodeMigrationOpts, opt) {
+				return fmt.Errorf("invalid option: %s", opt)
+			}
+		}
+
+		for _, opt := range *ctx.MigrationOpts {
+			switch opt {
+			case "autoalias":
+				s, err := AddAutoAliasing(ctx, repo, name)
+				if err != nil {
+					return err
+				}
+				steps = append(steps, s...)
+				steps = append(steps,
+					step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+					step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
+				)
+			}
+		}
 	}
 
 	artifacts := append(steps,
@@ -1090,6 +1146,8 @@ func informGitHub(
 			upstreamProviderName, target.Latest())
 	} else if ctx.UpgradeBridgeVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
+	} else if ctx.UpgradeCodeMigration {
+		prTitle = fmt.Sprintf("Perform code migration: %s", *ctx.MigrationOpts)
 	} else {
 		panic("Unknown action")
 	}
@@ -1482,4 +1540,117 @@ func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) 
 		return nil
 	}
 	return fmt.Errorf("no tag commit that matched '%s' in '%s'", rev, url)
+}
+
+func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) ([]step.Step, error) {
+	steps := []step.Step{}
+	steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+		"go", "get", TfBridgeXPkg)).
+		In(repo.providerDir()))
+	b, err := os.ReadFile(filepath.Join(*repo.providerDir(), "resources.go"))
+	if err != nil {
+		return steps, err
+	}
+	lines := strings.Split(string(b), "\n")
+	steps = append(steps,
+		step.F(fmt.Sprintf("Add %s and embed imports", TfBridgeXPkg), func() (string, error) {
+			addTfBridgeXPkg := false
+			addContractPkg := false
+			if !strings.Contains(string(b), TfBridgeXPkg) {
+				addTfBridgeXPkg = true
+			}
+			if !strings.Contains(string(b), ContractPkg) {
+				addContractPkg = true
+			}
+			if !strings.Contains(string(b), "\"embed\"") {
+				for i, line := range lines {
+					if strings.Contains(line, "github.com") {
+						lines[i-1] = "    _ \"embed\""
+						lines = append(lines, "")
+						copy(lines[i+1:], lines[i:])
+						lines[i] = ""
+						break
+					}
+				}
+			}
+			// add tfbridge/x import
+			if addTfBridgeXPkg {
+				for i, line := range lines {
+					if strings.Contains(line, "github.com/pulumi/pulumi-terraform-bridge/v3/pkg/tfbridge") {
+						lines = append(lines, "")
+						copy(lines[i+1:], lines[i:])
+						lines[i+1] = fmt.Sprintf("    \"%s\"", TfBridgeXPkg)
+						if addContractPkg {
+							lines[i+1] = lines[i+1] + fmt.Sprintf("\n    \"%s\"", ContractPkg)
+						}
+						b = []byte(strings.Join(lines, "\n"))
+						break
+					}
+				}
+			}
+			return "", nil
+		}),
+		step.F("Implement AutoAliasing", func() (string, error) {
+			r, err := regexp.Compile("AutoAliasing((.*), (.*))")
+			if err != nil {
+				return "", err
+			}
+			field := r.Find(b)
+			if field != nil {
+				return "AutoAliasing already implemented", nil
+			}
+
+			providerName := strings.TrimPrefix(providerName, "pulumi-")
+			metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
+			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+				_, err = os.Create(metadataPath)
+				if err != nil {
+					return "failed to initialize metadata file", err
+				}
+			}
+
+			// read in embeded metadata after import statements
+			afterImportBlock := false
+			for i, line := range lines {
+				if strings.Contains(line, "import (") {
+					afterImportBlock = true
+				}
+				if afterImportBlock && strings.Contains(line, ")") {
+					lines = append(lines, "", "", "", "", "")
+					copy(lines[i+5:], lines[i+1:])
+					lines[i+1] = ""
+					lines[i+2] = fmt.Sprintf("//go:embed cmd/pulumi-resource-%s/bridge-metadata.json", providerName)
+					lines[i+3] = "var metadata []byte"
+					lines[i+4] = ""
+					b = []byte(strings.Join(lines, "\n"))
+					break
+				}
+			}
+
+			// set metadata field on provider
+			for i, line := range lines {
+				if strings.Contains(line, "tfbridge.ProviderInfo{") {
+					lines = append(lines, "")
+					copy(lines[i+2:], lines[i+1:])
+					lines[i+1] = `        MetadataInfo: tfbridge.NewProviderMetadata(metadata),`
+					b = []byte(strings.Join(lines, "\n"))
+					break
+				}
+			}
+
+			for i, line := range lines {
+				// assuming `prov := tfbridge.ProviderInfo{}`
+				if strings.Contains(line, "prov.SetAutonaming(") {
+					lines = append(lines, "")
+					copy(lines[i+1:], lines[i:])
+					lines[i] = `    err := x.AutoAliasing(&prov, prov.GetMetadata())
+    contract.AssertNoErrorf(err, "auto aliasing failed")`
+					b = []byte(strings.Join(lines, "\n"))
+					break
+				}
+			}
+			err = os.WriteFile(filepath.Join(*repo.providerDir(), "resources.go"), b, 0600)
+			return "", err
+		}))
+	return steps, nil
 }
