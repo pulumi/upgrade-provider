@@ -141,7 +141,7 @@ If the passed version does not exist, an error is signaled.`)
 - "provider": Upgrade the upstream provider only.
 - "code": Perform a code migration. Must specify at least one option via --migration-opts`)
 
-	migrationOpts = cmd.PersistentFlags().StringSlice("migration-opts", []string{},
+	migrationOpts = cmd.PersistentFlags().StringSliceVar(&context.MigrationOpts, "migration-opts", nil,
 		`A comma separated list of code migration to perform:
 - "autoalias": Apply auto aliasing to the provider.`)
 
