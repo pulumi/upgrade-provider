@@ -19,7 +19,6 @@ import (
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 	"gopkg.in/yaml.v3"
-	"k8s.io/utils/strings/slices"
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
@@ -302,6 +301,13 @@ func UpgradeProvider(ctx Context, name string) error {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
+	if ctx.UpgradeCodeMigration && (ctx.MigrationOpts == nil || len(*ctx.MigrationOpts) == 0) {
+		// assume --kind=all and perform all code migrations
+		if ctx.UpgradeProviderVersion && ctx.UpgradeBridgeVersion {
+			ctx.MigrationOpts = &CodeMigrationOpts
+		}
+		return fmt.Errorf("--kind=code: must provide at least one option via --migration-opts")
+	}
 
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() && ctx.UpgradeProviderVersion {
@@ -361,20 +367,12 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	if ctx.UpgradeCodeMigration {
-		if ctx.MigrationOpts == nil || len(*ctx.MigrationOpts) == 0 {
-			// assume --kind=all and perform all code migrations
-			if ctx.UpgradeProviderVersion && ctx.UpgradeBridgeVersion {
-				ctx.MigrationOpts = &CodeMigrationOpts
-			}
-			return fmt.Errorf("--kind=code: must provide at least one option via --migration-opts")
-		}
+		applied := make(map[string]struct{})
 		for _, opt := range *ctx.MigrationOpts {
-			if !slices.Contains(CodeMigrationOpts, opt) {
-				return fmt.Errorf("invalid option: %s", opt)
+			if _, ok := applied[opt]; ok {
+				continue
 			}
-		}
-
-		for _, opt := range *ctx.MigrationOpts {
+			applied[opt] = struct{}{}
 			switch opt {
 			case "autoalias":
 				s, err := AddAutoAliasing(ctx, repo, name)
@@ -386,6 +384,8 @@ func UpgradeProvider(ctx Context, name string) error {
 					step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 					step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
 				)
+			default:
+				return fmt.Errorf("unknown migration '%s'", opt)
 			}
 		}
 	}
