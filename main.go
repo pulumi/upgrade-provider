@@ -33,8 +33,10 @@ const (
 	ContractPkg  = "github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
-var CodeMigrationOpts = []string{
-	"autoalias",
+type CodeMigration = func(ctx Context, repo ProviderRepo, providerName string) (step.Step, error)
+
+var CodeMigrations = map[string]CodeMigration{
+	"autoalias": AddAutoAliasing,
 }
 
 type Context struct {
@@ -132,10 +134,10 @@ If the passed version does not exist, an error is signaled.`)
 
 	cmd.PersistentFlags().StringVar(&upgradeKind, "kind", "all",
 		`The kind of upgrade to perform:
-- "all":     Upgrade the upstream provider and the bridge.
-- "bridge":  Upgrade the bridge only.
+- "all":      Upgrade the upstream provider and the bridge.
+- "bridge":   Upgrade the bridge only.
 - "provider": Upgrade the upstream provider only.
-- "code": Perform a code migration. Must specify at least one option via --migration-opts`)
+- "code":     Perform some number of code migrations.`)
 
 	cmd.PersistentFlags().StringSliceVar(&context.MigrationOpts, "migration-opts", nil,
 		`A comma separated list of code migration to perform:
@@ -298,12 +300,14 @@ func UpgradeProvider(ctx Context, name string) error {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
-	if ctx.UpgradeCodeMigration && (ctx.MigrationOpts == nil || len(ctx.MigrationOpts) == 0) {
-		// assume --kind=all and perform all code migrations
-		if ctx.UpgradeProviderVersion && ctx.UpgradeBridgeVersion {
-			ctx.MigrationOpts = CodeMigrationOpts
+	if ctx.UpgradeCodeMigration && len(ctx.MigrationOpts) == 0 {
+		keys := make([]string, 0, len(CodeMigrations))
+		for k := range CodeMigrations {
+			keys = append(keys, k)
 		}
-		return fmt.Errorf("--kind=code: must provide at least one option via --migration-opts")
+		ctx.MigrationOpts = keys
+	} else if !ctx.UpgradeCodeMigration && len(ctx.MigrationOpts) > 0 {
+		fmt.Println(colorize.Warn("--migration-opts passed but --kind does not indicate a code migration"))
 	}
 
 	var forkedProviderUpstreamCommit string
@@ -367,23 +371,23 @@ func UpgradeProvider(ctx Context, name string) error {
 		applied := make(map[string]struct{})
 		for _, opt := range ctx.MigrationOpts {
 			if _, ok := applied[opt]; ok {
+				fmt.Println(colorize.Warn("Duplicate code migration " + colorize.Bold(opt)))
 				continue
 			}
 			applied[opt] = struct{}{}
-			switch opt {
-			case "autoalias":
-				s, err := AddAutoAliasing(ctx, repo, name)
-				if err != nil {
-					return err
-				}
-				steps = append(steps, s...)
-				steps = append(steps,
-					step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
-					step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
-				)
-			default:
+
+			getMigration, found := CodeMigrations[opt]
+			if !found {
 				return fmt.Errorf("unknown migration '%s'", opt)
 			}
+
+			migration, err := getMigration(ctx, repo, name)
+			if err != nil {
+				return fmt.Errorf("unable implement migration '%s': %w", opt, err)
+			}
+
+			steps = append(steps, migration)
+
 		}
 	}
 
@@ -1539,14 +1543,14 @@ func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) 
 	return fmt.Errorf("no tag commit that matched '%s' in '%s'", rev, url)
 }
 
-func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) ([]step.Step, error) {
+func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
 	steps := []step.Step{}
 	steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 		"go", "get", TfBridgeXPkg)).
 		In(repo.providerDir()))
 	b, err := os.ReadFile(filepath.Join(*repo.providerDir(), "resources.go"))
 	if err != nil {
-		return steps, err
+		return nil, err
 	}
 	lines := strings.Split(string(b), "\n")
 	steps = append(steps,
@@ -1649,5 +1653,10 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) ([]ste
 			err = os.WriteFile(filepath.Join(*repo.providerDir(), "resources.go"), b, 0600)
 			return "", err
 		}))
-	return steps, nil
+	steps = append(steps,
+		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
+	)
+
+	return step.Combined("Add AutoAliasing", steps...), nil
 }
