@@ -50,7 +50,7 @@ type Context struct {
 	MajorVersionBump       bool
 
 	UpgradeCodeMigration bool
-	MigrationOpts        *[]string
+	MigrationOpts        []string
 }
 
 func cmd() *cobra.Command {
@@ -60,7 +60,6 @@ func cmd() *cobra.Command {
 		gopath = build.Default.GOPATH
 	}
 	var upgradeKind string
-	var migrationOpts *[]string
 
 	context := Context{
 		Context: context.Background(),
@@ -98,14 +97,12 @@ func cmd() *cobra.Command {
 				context.UpgradeBridgeVersion = true
 				context.UpgradeProviderVersion = true
 				context.UpgradeCodeMigration = true
-				context.MigrationOpts = migrationOpts
 			case "bridge":
 				context.UpgradeBridgeVersion = true
 			case "provider":
 				context.UpgradeProviderVersion = true
 			case "code":
 				context.UpgradeCodeMigration = true
-				context.MigrationOpts = migrationOpts
 			default:
 				return fmt.Errorf(
 					"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, or `code`.",
@@ -140,7 +137,7 @@ If the passed version does not exist, an error is signaled.`)
 - "provider": Upgrade the upstream provider only.
 - "code": Perform a code migration. Must specify at least one option via --migration-opts`)
 
-	migrationOpts = cmd.PersistentFlags().StringSliceVar(&context.MigrationOpts, "migration-opts", nil,
+	cmd.PersistentFlags().StringSliceVar(&context.MigrationOpts, "migration-opts", nil,
 		`A comma separated list of code migration to perform:
 - "autoalias": Apply auto aliasing to the provider.`)
 
@@ -301,10 +298,10 @@ func UpgradeProvider(ctx Context, name string) error {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
-	if ctx.UpgradeCodeMigration && (ctx.MigrationOpts == nil || len(*ctx.MigrationOpts) == 0) {
+	if ctx.UpgradeCodeMigration && (ctx.MigrationOpts == nil || len(ctx.MigrationOpts) == 0) {
 		// assume --kind=all and perform all code migrations
 		if ctx.UpgradeProviderVersion && ctx.UpgradeBridgeVersion {
-			ctx.MigrationOpts = &CodeMigrationOpts
+			ctx.MigrationOpts = CodeMigrationOpts
 		}
 		return fmt.Errorf("--kind=code: must provide at least one option via --migration-opts")
 	}
@@ -368,7 +365,7 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	if ctx.UpgradeCodeMigration {
 		applied := make(map[string]struct{})
-		for _, opt := range *ctx.MigrationOpts {
+		for _, opt := range ctx.MigrationOpts {
 			if _, ok := applied[opt]; ok {
 				continue
 			}
@@ -1147,7 +1144,7 @@ func informGitHub(
 	} else if ctx.UpgradeBridgeVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
 	} else if ctx.UpgradeCodeMigration {
-		prTitle = fmt.Sprintf("Code migration: %s", strings.Join(*ctx.MigrationOpts, ", "))
+		prTitle = fmt.Sprintf("Code migration: %s", strings.Join(ctx.MigrationOpts, ", "))
 	} else {
 		panic("Unknown action")
 	}
