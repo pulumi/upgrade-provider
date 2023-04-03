@@ -1045,7 +1045,7 @@ func upgradeProviderVersion(
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					for _, line := range strings.Split(string(b), "\n") {
 						parts := strings.Split(line, "\t")
-						contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values")
+						contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values, found line '%s'", line)
 						if parts[1] == "refs/tags/v"+target.String() {
 							return parts[0], nil
 						}
@@ -1115,6 +1115,7 @@ func upgradeProviderVersion(
 			"go", "mod", "tidy")).In(&goModDir))
 	}
 
+	steps = append(steps, getLatestTFPluginSDKReplace(ctx, repo))
 	return step.Combined("Update TF Provider", steps...)
 }
 
@@ -1561,4 +1562,119 @@ func setUpstreamFromRemoteRepo(
 		return nil
 	}
 	return fmt.Errorf("no tag commit that matched '%s' in '%s'", rev, url)
+}
+
+// Most if not all of our TF SDK based providers use a "replace" based version of
+// github.com/hashicorp/terraform-plugin-sdk/v2. To avoid compile errors, we want
+// to be using the most up to date version of this plugin.
+//
+// This is predicated on updating to the latest version being safe. We will need to
+// revisit this when a new major version of the plugin SDK is released.
+func getLatestTFPluginSDKReplace(ctx context.Context, repo ProviderRepo) step.Step {
+	name := "Update TF Plugin SDK Fork"
+	stepFail := func(msg string, a ...any) step.Step {
+		return step.F(name, func() (string, error) {
+			return "", fmt.Errorf(msg, a...)
+		})
+	}
+
+	return step.Computed(func() step.Step {
+		// We do discover in a computed provider so if the fork isn't present,
+		// it isn't displayed to the user.
+		goModFile, err := os.ReadFile("go.mod")
+		if err != nil {
+			return stepFail("could not fine go.mod: %w", err)
+		}
+		goMod, err := modfile.Parse("go.mod", goModFile, nil)
+		if err != nil {
+			return stepFail("could not parse go.mod: %w", err)
+		}
+
+		const targetSrc = "github.com/hashicorp/terraform-plugin-sdk/v2"
+
+		var require *modfile.Require
+		for _, r := range goMod.Require {
+			if r.Mod.Path == targetSrc {
+				require = r
+			}
+		}
+		if require == nil {
+			return nil
+		}
+
+		var replace *modfile.Replace
+		for _, r := range goMod.Replace {
+			if r.Old.Path == targetSrc {
+				replace = r
+				break
+			}
+		}
+		if replace == nil {
+			return nil
+		}
+
+		return step.F(name, func() (string, error) {
+			// If the fork is present, we need to figure out the SHA of the
+			// latest upstream version to use.
+			const hostRepo = "https://github.com/pulumi/terraform-plugin-sdk.git"
+			result, err := exec.CommandContext(ctx, "git",
+				"ls-remote", "--heads", hostRepo).Output()
+			if err != nil {
+				return "", fmt.Errorf("could not get branches: %w", err)
+			}
+			lines := strings.Split(string(result), "\n")
+			versions := make([]*semver.Version, len(lines))
+			shas := make([]string, len(lines))
+			highest := -1
+			for i, line := range lines {
+				split := strings.Split(strings.TrimSpace(line), "\t")
+				if len(split) < 2 {
+					continue
+				}
+				shas[i] = split[0]
+				version, hasVersion := strings.CutPrefix(split[1], "refs/heads/upstream-")
+				if !hasVersion {
+					continue
+				}
+				if v, err := semver.NewVersion(version); err == nil {
+					versions[i] = v
+					if highest == -1 || versions[highest].LessThan(v) {
+						highest = i
+					}
+				}
+			}
+			if highest == -1 {
+				return "", fmt.Errorf("no upstream version found")
+			}
+
+			// We now compare the pseudo vision and the latest SHA.
+			pseudo, err := module.PseudoVersionRev(replace.New.Version)
+			if err != nil {
+				return "", fmt.Errorf("not using a branch based replace")
+			}
+
+			// If the pseudo version matches the latest SHA, we are already up
+			// to date. We don't need to do any edits.
+			if strings.HasPrefix(shas[highest], pseudo) {
+				return "already up to date", nil
+			}
+
+			// Otherwise, we need to replace the old version. goMod.AddReplace
+			// will handle replacing existing `replace` directives.
+			err = goMod.AddReplace(replace.Old.Path, replace.Old.Version,
+				replace.New.Path, shas[highest])
+			if err != nil {
+				return "", fmt.Errorf("failed to update version: %w", err)
+			}
+
+			// We now write out the new file over the old file.
+			goMod.Cleanup()
+			goModFile, err = goMod.Format()
+			if err != nil {
+				return "", fmt.Errorf("failed to format file as bytes: %w", err)
+			}
+			err = os.WriteFile("go.mod", goModFile, 0600)
+			return "updated", err
+		})
+	}).In(repo.providerDir())
 }
