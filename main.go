@@ -1578,9 +1578,9 @@ func getLatestTFPluginSDKReplace(ctx context.Context, repo ProviderRepo) step.St
 		})
 	}
 
+	// We do discover in a step.Computed so if the fork isn't present, it isn't
+	// displayed to the user.
 	return step.Computed(func() step.Step {
-		// We do discover in a computed provider so if the fork isn't present,
-		// it isn't displayed to the user.
 		goModFile, err := os.ReadFile("go.mod")
 		if err != nil {
 			return stepFail("could not fine go.mod: %w", err)
