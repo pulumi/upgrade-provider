@@ -1654,6 +1654,7 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 			return "", err
 		}))
 	steps = append(steps,
+		step.Cmd(exec.CommandContext(ctx, "go", "fmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
 	)
