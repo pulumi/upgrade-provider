@@ -1565,11 +1565,11 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 			}
 			if !strings.Contains(string(b), "\"embed\"") {
 				for i, line := range lines {
-					if strings.Contains(line, "github.com") {
-						lines[i-1] = "    _ \"embed\""
-						lines = append(lines, "")
-						copy(lines[i+1:], lines[i:])
-						lines[i] = ""
+					if strings.Contains(line, "import (") {
+						lines = append(lines, "", "")
+						copy(lines[i+3:], lines[i+1:])
+						lines[i+1] = "// embed package is not used directly"
+						lines[i+2] = "    _ \"embed\""
 						break
 					}
 				}
@@ -1639,13 +1639,17 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 				}
 			}
 
+			errAssignment := ":="
 			for i, line := range lines {
+				if strings.Contains(line, "err :=") {
+					errAssignment = "="
+				}
 				// assuming `prov := tfbridge.ProviderInfo{}`
 				if strings.Contains(line, "prov.SetAutonaming(") {
 					lines = append(lines, "")
 					copy(lines[i+1:], lines[i:])
-					lines[i] = `    err := x.AutoAliasing(&prov, prov.GetMetadata())
-    contract.AssertNoErrorf(err, "auto aliasing failed")`
+					lines[i] = fmt.Sprintf("    err %s x.AutoAliasing(&prov, prov.GetMetadata())\n    contract.AssertNoErrorf(err, \"auto aliasing failed\")",
+						errAssignment)
 					b = []byte(strings.Join(lines, "\n"))
 					break
 				}
@@ -1654,7 +1658,7 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 			return "", err
 		}))
 	steps = append(steps,
-		step.Cmd(exec.CommandContext(ctx, "go", "fmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
+		step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
 	)
