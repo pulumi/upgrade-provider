@@ -1744,6 +1744,7 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 	)
 
 	return step.Combined("Add AutoAliasing", steps...), nil
+}
 
 // Most if not all of our TF SDK based providers use a "replace" based version of
 // github.com/hashicorp/terraform-plugin-sdk/v2. To avoid compile errors, we want
