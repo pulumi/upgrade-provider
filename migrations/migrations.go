@@ -33,8 +33,8 @@ func AddAutoAliasingSourceCode(fset *token.FileSet, file *ast.File, savePath str
 				c.Replace(x)
 			}
 		case *ast.GenDecl:
-			if x.Tok == token.IMPORT {
-				c.InsertAfter(&ast.GenDecl{
+			if x.Tok == token.CONST {
+				c.InsertBefore(&ast.GenDecl{
 					Doc: &ast.CommentGroup{
 						List: []*ast.Comment{
 							{Text: "go:embed cmd/pulumi-resource-databricks/bridge-metadata.json"},
