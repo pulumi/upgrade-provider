@@ -240,10 +240,14 @@ func UpgradeProvider(ctx Context, name string) error {
 				switch {
 				case goMod.Kind.IsPatched():
 					err = setCurrentUpstreamFromPatched(ctx, &repo)
+				case goMod.Kind.IsForked():
+					err = setCurrentUpstreamFromForked(ctx, &repo, goMod)
+				case goMod.Kind.IsShimmed():
+					err = setCurrentUpstreamFromShimmed(ctx, &repo, goMod)
 				case goMod.Kind == Plain:
 					err = setCurrentUpstreamFromPlain(ctx, &repo, goMod)
 				default:
-					err = nil
+					return "", fmt.Errorf("Unexpected repo kind: %s", goMod.Kind)
 				}
 				if err != nil {
 					return "", fmt.Errorf("current upstream version: %w", err)
@@ -292,6 +296,17 @@ func UpgradeProvider(ctx Context, name string) error {
 	ok = step.Run(step.Combined("Discovering Repository", discoverSteps...))
 	if !ok {
 		return ErrHandled
+	}
+
+	if ctx.UpgradeProviderVersion {
+		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTargets.Latest().Major()
+		if ctx.MajorVersionBump && !shouldMajorVersionBump {
+			return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
+				repo.currentUpstreamVersion.Major())
+		} else if !ctx.MajorVersionBump && shouldMajorVersionBump {
+			return fmt.Errorf("This is a major version update (v%d -> v%d), but --major was not passed",
+				repo.currentUpstreamVersion.Major(), upgradeTargets.Latest().Major())
+		}
 	}
 
 	// Running the discover steps might have invalidated one or more actions. If there
@@ -396,7 +411,7 @@ func UpgradeProvider(ctx Context, name string) error {
 		step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
 		step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
-		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&repo.root),
+		gitCommit(ctx, "make tfgen").In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&repo.root),
 		step.Computed(func() step.Step {
 			if !ctx.MajorVersionBump {
@@ -422,8 +437,7 @@ func UpgradeProvider(ctx Context, name string) error {
 				In(&dir)
 		}),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
-		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m",
-			"make build_sdks", "--allow-empty")).In(&repo.root),
+		gitCommit(ctx, "make build_sdks").In(&repo.root),
 		informGitHub(ctx, upgradeTargets, repo, goMod,
 			upstreamProviderName, targetBridgeVersion),
 	)
@@ -434,6 +448,27 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	return nil
+}
+
+// A "git commit" step that is resilient to no changes in the directory.
+//
+// This is required to accommodate failure and retry in the `git` push steps.
+func gitCommit(ctx context.Context, msg string) step.Step {
+	return step.Computed(func() step.Step {
+		check, err := exec.CommandContext(ctx, "git", "status", "--porcelain=1").CombinedOutput()
+		description := fmt.Sprintf(`git commit -m "%s"`, msg)
+		if err != nil {
+			return step.F("git commit", func() (string, error) {
+				return "", err
+			})
+		}
+		if len(check) > 0 {
+			return step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", msg))
+		}
+		return step.F(description, func() (string, error) {
+			return "nothing to commit", nil
+		})
+	})
 }
 
 type RepoKind string
@@ -577,9 +612,7 @@ func modPathWithoutVersion(path string) string {
 
 // Find the go module version of needleModule, searching from the default repo branch, not
 // the currently checked out code.
-func originalGoVersionOf(ctx context.Context, repo ProviderRepo, needleModule string) (module.Version, bool, error) {
-	file := filepath.Join("provider", "go.mod")
-
+func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleModule string) (module.Version, bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "show", repo.defaultBranch+":"+file)
 	cmd.Dir = repo.root
 	data, err := cmd.Output()
@@ -594,6 +627,14 @@ func originalGoVersionOf(ctx context.Context, repo ProviderRepo, needleModule st
 			repo.defaultBranch, file, err)
 	}
 
+	needleModule = modPathWithoutVersion(needleModule)
+
+	for _, req := range goMod.Replace {
+		path := modPathWithoutVersion(req.New.Path)
+		if path == needleModule {
+			return req.New, true, nil
+		}
+	}
 	for _, req := range goMod.Require {
 		path := modPathWithoutVersion(req.Mod.Path)
 		if path == needleModule {
@@ -617,7 +658,7 @@ func repoKind(ctx context.Context, repo ProviderRepo, providerName string) (*GoM
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
 
-	bridge, ok, err := originalGoVersionOf(ctx, repo, "github.com/pulumi/pulumi-terraform-bridge")
+	bridge, ok, err := originalGoVersionOf(ctx, repo, filepath.Join("provider", "go.mod"), "github.com/pulumi/pulumi-terraform-bridge")
 	bridgeMissingMsg := "Unable to discover pulumi-terraform-bridge version"
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", bridgeMissingMsg, err)
@@ -1061,7 +1102,7 @@ func upgradeProviderVersion(
 				return runGitCommand(ctx, func(b []byte) (string, error) {
 					for _, line := range strings.Split(string(b), "\n") {
 						parts := strings.Split(line, "\t")
-						contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values")
+						contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values, found line '%s'", line)
 						if parts[1] == "refs/tags/v"+target.String() {
 							return parts[0], nil
 						}
@@ -1131,6 +1172,7 @@ func upgradeProviderVersion(
 			"go", "mod", "tidy")).In(&goModDir))
 	}
 
+	steps = append(steps, getLatestTFPluginSDKReplace(ctx, repo))
 	return step.Combined("Update TF Provider", steps...)
 }
 
@@ -1441,6 +1483,13 @@ func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
 	}
 	sha := bytes.TrimSpace(checkedInCommit)
 
+	ensureSubmoduleInit := exec.CommandContext(ctx,
+		"git", "submodule", "init")
+	ensureSubmoduleInit.Dir = repo.root
+	out, err := ensureSubmoduleInit.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to init submodule: %w: %s", err, string(out))
+	}
 	getRemoteURL := exec.CommandContext(ctx,
 		"git", "config", "--get", "submodule.upstream.url")
 	getRemoteURL.Dir = repo.root
@@ -1484,15 +1533,45 @@ func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
 // We don't use the current branch, since applying a partial update could change the current branch,
 // leading to a non idempotent result.
 func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
-	version, found, err := originalGoVersionOf(ctx, *repo, goMod.Upstream.Path)
+	return setUpstreamFromRemoteRepo(ctx, repo, "tags",
+		filepath.Join("provider", "go.mod"), goMod.Upstream.Path,
+		semver.NewVersion)
+}
+
+func setCurrentUpstreamFromForked(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
+	return setUpstreamFromRemoteRepo(ctx, repo, "heads",
+		filepath.Join("provider", "go.mod"), goMod.Fork.New.Path,
+		func(s string) (*semver.Version, error) {
+			version := strings.TrimPrefix(s, "upstream-")
+			return semver.NewVersion(version)
+		})
+}
+
+func setCurrentUpstreamFromShimmed(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
+	return setUpstreamFromRemoteRepo(ctx, repo, "tags",
+		filepath.Join("provider", "shim", "go.mod"), goMod.Upstream.Path,
+		semver.NewVersion)
+}
+
+func setUpstreamFromRemoteRepo(
+	ctx Context, repo *ProviderRepo, kind, goModPath, upstream string,
+	parse func(string) (*semver.Version, error),
+) error {
+	version, found, err := originalGoVersionOf(ctx, *repo, goModPath, upstream)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not discover original version: %w", err)
 	}
 	if !found {
-		return fmt.Errorf("could not find existing upstream '%s'", goMod.Upstream.Path)
+		return fmt.Errorf("could not find previous upstream '%s'", upstream)
 	}
-	if parsed, err := semver.NewVersion(version.Version); err == nil {
-		// This was a valid go module, so this worked.
+
+	if !module.IsPseudoVersion(version.Version) {
+		parsed, err := semver.NewVersion(version.Version)
+		if err != nil {
+			return fmt.Errorf("failed to parse upstream version '%s'", version.Version)
+		}
+		// This will not happen for pulumi forks, since we use upstream branches
+		// instead of tags. It *will* happen for plain repos.
 		repo.currentUpstreamVersion = parsed
 		return nil
 	}
@@ -1508,25 +1587,25 @@ func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) 
 	}
 
 	// We now fetch the set of tagged commits.
-	url := "https://" + modPathWithoutVersion(goMod.Upstream.Path) + ".git"
-	getTagCommits := exec.CommandContext(ctx, "git", "ls-remote", "--tags", "--quiet", url)
+	url := "https://" + modPathWithoutVersion(upstream) + ".git"
+	getTagCommits := exec.CommandContext(ctx, "git", "ls-remote", "--"+kind, "--quiet", url)
 	getTagCommits.Dir = repo.root
 	tagCommits, err := getTagCommits.Output()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get remote %s from '%s': %w", kind, url, err)
 	}
 	revBytes := []byte(rev)
-	for _, tag := range bytes.Split(tagCommits, []byte{'\n'}) {
-		tag = bytes.TrimSpace(tag)
-		if !bytes.HasPrefix(tag, revBytes) {
+	for _, line := range bytes.Split(tagCommits, []byte{'\n'}) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, revBytes) {
 			continue
 		}
 
 		// It is possible that this is a different commit, since we just take the first 12
 		// characters, but its **very** unlikely.
-		tag = bytes.Split(tag, []byte{'\t'})[1]
-		versionComponent := strings.TrimPrefix(string(tag), "refs/tags/")
-		version, err := semver.NewVersion(versionComponent)
+		line = bytes.Split(line, []byte{'\t'})[1]
+		versionComponent := strings.TrimPrefix(string(line), "refs/"+kind+"/")
+		version, err := parse(versionComponent)
 		if err != nil {
 			// Its possible that this error is valid, for example if the tag has a path,
 			// such as 'refs/tags/sdk/v2.3.2'. If we needed this to be 100% **correct**,
@@ -1535,7 +1614,8 @@ func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) 
 			// part of the url.
 			//
 			// It's not worth doing that for now.
-			return fmt.Errorf("failed to parse commit tag '%s': %w", string(tag), err)
+			return fmt.Errorf("failed to parse commit %s '%s': %w",
+				strings.TrimSuffix(kind, "s"), string(line), err)
 		}
 		repo.currentUpstreamVersion = version
 		return nil
@@ -1664,4 +1744,118 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 	)
 
 	return step.Combined("Add AutoAliasing", steps...), nil
+
+// Most if not all of our TF SDK based providers use a "replace" based version of
+// github.com/hashicorp/terraform-plugin-sdk/v2. To avoid compile errors, we want
+// to be using the most up to date version of this plugin.
+//
+// This is predicated on updating to the latest version being safe. We will need to
+// revisit this when a new major version of the plugin SDK is released.
+func getLatestTFPluginSDKReplace(ctx context.Context, repo ProviderRepo) step.Step {
+	name := "Update TF Plugin SDK Fork"
+	stepFail := func(msg string, a ...any) step.Step {
+		return step.F(name, func() (string, error) {
+			return "", fmt.Errorf(msg, a...)
+		})
+	}
+
+	// We do discover in a step.Computed so if the fork isn't present, it isn't
+	// displayed to the user.
+	return step.Computed(func() step.Step {
+		goModFile, err := os.ReadFile("go.mod")
+		if err != nil {
+			return stepFail("could not fine go.mod: %w", err)
+		}
+		goMod, err := modfile.Parse("go.mod", goModFile, nil)
+		if err != nil {
+			return stepFail("could not parse go.mod: %w", err)
+		}
+
+		const targetSrc = "github.com/hashicorp/terraform-plugin-sdk/v2"
+
+		var require *modfile.Require
+		for _, r := range goMod.Require {
+			if r.Mod.Path == targetSrc {
+				require = r
+			}
+		}
+		if require == nil {
+			return nil
+		}
+
+		var replace *modfile.Replace
+		for _, r := range goMod.Replace {
+			if r.Old.Path == targetSrc {
+				replace = r
+				break
+			}
+		}
+		if replace == nil {
+			return nil
+		}
+
+		return step.F(name, func() (string, error) {
+			// If the fork is present, we need to figure out the SHA of the
+			// latest upstream version to use.
+			const hostRepo = "https://github.com/pulumi/terraform-plugin-sdk.git"
+			result, err := exec.CommandContext(ctx, "git",
+				"ls-remote", "--heads", hostRepo).Output()
+			if err != nil {
+				return "", fmt.Errorf("could not get branches: %w", err)
+			}
+			lines := strings.Split(string(result), "\n")
+			versions := make([]*semver.Version, len(lines))
+			shas := make([]string, len(lines))
+			highest := -1
+			for i, line := range lines {
+				split := strings.Split(strings.TrimSpace(line), "\t")
+				if len(split) < 2 {
+					continue
+				}
+				shas[i] = split[0]
+				version, hasVersion := strings.CutPrefix(split[1], "refs/heads/upstream-")
+				if !hasVersion {
+					continue
+				}
+				if v, err := semver.NewVersion(version); err == nil {
+					versions[i] = v
+					if highest == -1 || versions[highest].LessThan(v) {
+						highest = i
+					}
+				}
+			}
+			if highest == -1 {
+				return "", fmt.Errorf("no upstream version found")
+			}
+
+			// We now compare the pseudo vision and the latest SHA.
+			pseudo, err := module.PseudoVersionRev(replace.New.Version)
+			if err != nil {
+				return "", fmt.Errorf("not using a branch based replace")
+			}
+
+			// If the pseudo version matches the latest SHA, we are already up
+			// to date. We don't need to do any edits.
+			if strings.HasPrefix(shas[highest], pseudo) {
+				return "already up to date", nil
+			}
+
+			// Otherwise, we need to replace the old version. goMod.AddReplace
+			// will handle replacing existing `replace` directives.
+			err = goMod.AddReplace(replace.Old.Path, replace.Old.Version,
+				replace.New.Path, shas[highest])
+			if err != nil {
+				return "", fmt.Errorf("failed to update version: %w", err)
+			}
+
+			// We now write out the new file over the old file.
+			goMod.Cleanup()
+			goModFile, err = goMod.Format()
+			if err != nil {
+				return "", fmt.Errorf("failed to format file as bytes: %w", err)
+			}
+			err = os.WriteFile("go.mod", goModFile, 0600)
+			return "updated", err
+		})
+	}).In(repo.providerDir())
 }
