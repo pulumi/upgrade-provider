@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"go/build"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -25,6 +27,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/upgrade-provider/colorize"
+	"github.com/pulumi/upgrade-provider/migrations"
 	"github.com/pulumi/upgrade-provider/step"
 )
 
@@ -1545,123 +1548,43 @@ func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) 
 
 func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
 	steps := []step.Step{}
-	steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-		"go", "get", TfBridgeXPkg)).
-		In(repo.providerDir()))
-	b, err := os.ReadFile(filepath.Join(*repo.providerDir(), "resources.go"))
-	if err != nil {
-		return nil, err
-	}
-	lines := strings.Split(string(b), "\n")
+	providerName = strings.TrimPrefix(providerName, "pulumi-")
+	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
+	changesMade := false
 	steps = append(steps,
-		step.F(fmt.Sprintf("Add %s and embed imports", TfBridgeXPkg), func() (string, error) {
-			addTfBridgeXPkg := false
-			addContractPkg := false
-			if !strings.Contains(string(b), TfBridgeXPkg) {
-				addTfBridgeXPkg = true
-			}
-			if !strings.Contains(string(b), ContractPkg) {
-				addContractPkg = true
-			}
-			if !strings.Contains(string(b), "\"embed\"") {
-				for i, line := range lines {
-					if strings.Contains(line, "import (") {
-						lines = append(lines, "", "")
-						copy(lines[i+3:], lines[i+1:])
-						lines[i+1] = "// embed package is not used directly"
-						lines[i+2] = "    _ \"embed\""
-						break
-					}
-				}
-			}
-			// add tfbridge/x import
-			if addTfBridgeXPkg {
-				for i, line := range lines {
-					if strings.Contains(line, "github.com/pulumi/pulumi-terraform-bridge/v3/pkg/tfbridge") {
-						lines = append(lines, "")
-						copy(lines[i+1:], lines[i:])
-						lines[i+1] = fmt.Sprintf("    \"%s\"", TfBridgeXPkg)
-						if addContractPkg {
-							lines[i+1] = lines[i+1] + fmt.Sprintf("\n    \"%s\"", ContractPkg)
-						}
-						b = []byte(strings.Join(lines, "\n"))
-						break
-					}
-				}
-			}
-			return "", nil
-		}),
 		step.F("Implement AutoAliasing", func() (string, error) {
-			r, err := regexp.Compile("AutoAliasing((.*), (.*))")
+			// Quick scan of file to see if AutoAliasing already implemented
+			b, err := os.ReadFile(filepath.Join(*repo.providerDir(), "resources.go"))
 			if err != nil {
 				return "", err
 			}
-			field := r.Find(b)
-			if field != nil {
-				return "AutoAliasing already implemented", nil
+			if strings.Contains(string(b), "AutoAliasing(") {
+				return "", nil
 			}
 
-			providerName := strings.TrimPrefix(providerName, "pulumi-")
-			metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
 			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 				_, err = os.Create(metadataPath)
 				if err != nil {
 					return "failed to initialize metadata file", err
 				}
 			}
-
-			// read in embeded metadata after import statements
-			afterImportBlock := false
-			for i, line := range lines {
-				if strings.Contains(line, "import (") {
-					afterImportBlock = true
-				}
-				if afterImportBlock && strings.Contains(line, ")") {
-					lines = append(lines, "", "", "", "", "")
-					copy(lines[i+5:], lines[i+1:])
-					lines[i+1] = ""
-					lines[i+2] = fmt.Sprintf("//go:embed cmd/pulumi-resource-%s/bridge-metadata.json", providerName)
-					lines[i+3] = "var metadata []byte"
-					lines[i+4] = ""
-					b = []byte(strings.Join(lines, "\n"))
-					break
-				}
+			// Create the AST by parsing src
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, fmt.Sprintf("%s/resources.go", *repo.providerDir()), nil, parser.ParseComments)
+			if err != nil {
+				return "failed to parse resources.go", err
 			}
-
-			// set metadata field on provider
-			for i, line := range lines {
-				if strings.Contains(line, "tfbridge.ProviderInfo{") {
-					lines = append(lines, "")
-					copy(lines[i+2:], lines[i+1:])
-					lines[i+1] = `        MetadataInfo: tfbridge.NewProviderMetadata(metadata),`
-					b = []byte(strings.Join(lines, "\n"))
-					break
-				}
-			}
-
-			errAssignment := ":="
-			for i, line := range lines {
-				if strings.Contains(line, "err :=") {
-					errAssignment = "="
-				}
-				// assuming `prov := tfbridge.ProviderInfo{}`
-				if strings.Contains(line, "prov.SetAutonaming(") {
-					lines = append(lines, "")
-					copy(lines[i+1:], lines[i:])
-					lines[i] = fmt.Sprintf("    err %s x.AutoAliasing(&prov, prov.GetMetadata())\n    contract.AssertNoErrorf(err, \"auto aliasing failed\")",
-						errAssignment)
-					b = []byte(strings.Join(lines, "\n"))
-					break
-				}
-			}
-			err = os.WriteFile(filepath.Join(*repo.providerDir(), "resources.go"), b, 0600)
+			changesMade, err = migrations.AddAutoAliasingSourceCode(fset, file, fmt.Sprintf("%s/resources.go", *repo.providerDir()))
 			return "", err
 		}))
-	steps = append(steps,
-		step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
-		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
-		step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
-	)
+	if changesMade {
+		steps = append(steps,
+			step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "resources.go")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
+		)
+	}
 
 	return step.Combined("Add AutoAliasing", steps...), nil
 }
