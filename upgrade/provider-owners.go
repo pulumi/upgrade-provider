@@ -1,4 +1,4 @@
-package main
+package upgrade
 
 var ProviderOrgs = map[string]string{
 	"datadog": "DataDog",
