@@ -1,0 +1,57 @@
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GOLANGCI_LINT_VERSION: v1.52.2
+name: Upgrade provider
+on: 
+  workflow_dispatch:
+    inputs:
+      provider-name:
+        description: "the full name of the provider to upgrade, i.e. `pulumi-docker`"
+        required: true
+        type: string
+      kind:
+        description: "the type of upgrade to perform"
+        required: true
+        type: choice
+        options:
+        - "all"
+        - "bridge"
+        - "provider"
+        default: "all"
+      major:
+        description: "upgrade the provider to a new major version"
+        required: true
+        type: boolean
+        default: false
+      version:
+        description: "upgrade the provider to the passed in version"
+        required: false
+        type: string  
+jobs:
+  build:
+    name: Build and Test
+    strategy:
+      matrix:
+        go-version: [1.20.x]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+      - name: Install pulumictl
+        uses: jaxxstorm/action-install-gh-release@v1.5.0
+        with:
+          repo: pulumi/pulumictl
+      - name: Install Pulumi CLI
+        uses: pulumi/action-install-pulumi-cli@v2
+      - name: Check out source code
+        uses: actions/checkout@master
+      - name: Download module dependencies
+        env:
+          GOPROXY: "https://proxy.golang.org"
+        run: go mod download
+      - name: Build
+        run: make build
+      - name: Run upgrade-provider
+        run: ./upgrade-provider ${{ inputs.provider-name }} --kind=${{ inputs.kind }} --major=${{ inputs.major }}
