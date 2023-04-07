@@ -29,7 +29,7 @@ on:
         type: string  
 jobs:
   build:
-    name: Build and Test
+    name: Build and Run
     strategy:
       matrix:
         go-version: [1.20.x]
@@ -55,3 +55,22 @@ jobs:
         run: make build
       - name: Run upgrade-provider
         run: ./upgrade-provider ${{ inputs.provider-name }} --kind=${{ inputs.kind }} --major=${{ inputs.major }}
+      - name: Notify success
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: provider-upgrade-status
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_MESSAGE: "Successful"
+          SLACK_TITLE: "${{ inputs.provider-name }} upgrade result"
+          SLACK_USERNAME: provider-bot
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      - name: Notify failure
+        uses: rtCamp/action-slack-notify@v2
+        if: ${{ failure() }}
+        env:
+          SLACK_CHANNEL: provider-upgrade-status
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_MESSAGE: "Failure"
+          SLACK_TITLE: "${{ inputs.provider-name }} upgrade result"
+          SLACK_USERNAME: provider-bot
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
