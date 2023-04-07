@@ -53,6 +53,8 @@ jobs:
         run: go mod download
       - name: Build
         run: make build
+      - name: Setup git identity
+        run: git config --global user.email "bot@pulumi.com" && git config user.name "Pulumi Bot"
       - name: Run upgrade-provider
         run: ./upgrade-provider ${{ inputs.provider-name }} --kind=${{ inputs.kind }} --major=${{ inputs.major }}
       - name: Notify success
