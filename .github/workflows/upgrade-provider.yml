@@ -73,4 +73,4 @@ jobs:
           SLACK_MESSAGE: "Failure"
           SLACK_TITLE: "${{ inputs.provider-name }} upgrade result"
           SLACK_USERNAME: provider-bot
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
