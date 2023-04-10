@@ -78,7 +78,7 @@ jobs:
           SLACK_CHANNEL: provider-upgrade-status
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_MESSAGE: "Upgrade failed :cry:"
-          SLACK_TITLE: "${{ inputs.provider-name }} upgrade result"
-          SLACK_ICON: ":ecosystem-team:"
+          SLACK_TITLE: "Provider: ${{ inputs.provider-name }}"
+          SLACK_ICON: ":star:"
           SLACK_USERNAME: provider-bot
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
