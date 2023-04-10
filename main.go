@@ -1124,7 +1124,7 @@ func informGitHub(
 	goMod *GoMod, upstreamProviderName, targetBridgeVersion string,
 ) step.Step {
 	useSsh := step.Cmd(exec.CommandContext(ctx, "git", "remote", "set-url", "origin",
-		fmt.Sprintf("git@github.com:%s/pulumi-%s.git", "pulumi", upstreamProviderName)))
+		fmt.Sprintf("https://github.com/%s/pulumi-%s.git", "pulumi", upstreamProviderName)))
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
 
