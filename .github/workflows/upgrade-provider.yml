@@ -1,6 +1,7 @@
 env:
-  GITHUB_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   GOLANGCI_LINT_VERSION: v1.52.2
+  PULUMI_BOT_TOKEN: ${{ secrets.PULUMI_BOT_TOKEN }}
 name: Upgrade provider
 on: 
   workflow_dispatch:
@@ -24,7 +25,7 @@ on:
         type: boolean
         default: false
       version:
-        description: "upgrade the provider to the passed in version"
+        description: "upgrade the provider to the specified version"
         required: false
         type: string  
 jobs:
@@ -60,7 +61,7 @@ jobs:
       - name: Setup git identity
         run: git config --global user.name "Pulumi Bot" && git config --global user.email "bot@pulumi.com"
       - name: Run upgrade-provider
-        run: ./upgrade-provider ${{ inputs.provider-name }} --kind=${{ inputs.kind }} --major=${{ inputs.major }}  
+        run: ./upgrade-provider ${{ inputs.provider-name }} --kind=${{ inputs.kind }} --major=${{ inputs.major }}
       - name: Notify success
         uses: rtCamp/action-slack-notify@v2
         env:
