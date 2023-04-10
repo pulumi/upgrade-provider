@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/build"
 	"io/fs"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -39,6 +40,8 @@ type Context struct {
 
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
+
+	GitToken string
 }
 
 func cmd() *cobra.Command {
@@ -48,6 +51,7 @@ func cmd() *cobra.Command {
 		gopath = build.Default.GOPATH
 	}
 	var upgradeKind string
+	var gitToken string
 
 	context := Context{
 		Context: context.Background(),
@@ -99,6 +103,8 @@ func cmd() *cobra.Command {
 					"cannot specify the provider version unless the provider will be upgraded")
 			}
 
+			context.GitToken = gitToken
+
 			return nil
 		},
 		Run: func(_ *cobra.Command, args []string) {
@@ -120,6 +126,8 @@ If the passed version does not exist, an error is signaled.`)
 - "all":     Upgrade the upstream provider and the bridge.
 - "bridge":  Upgrade the bridge only.
 - "provider: Upgrade the upstream provider only.`)
+
+	cmd.PersistentFlags().StringVar(&gitToken, "git access token", "", "auth token for github")
 
 	return cmd
 }
@@ -1123,8 +1131,14 @@ func informGitHub(
 	ctx Context, target UpstreamVersions, repo ProviderRepo,
 	goMod *GoMod, upstreamProviderName, targetBridgeVersion string,
 ) step.Step {
-	setURL := step.Cmd(exec.CommandContext(ctx, "git", "remote", "set-url", "origin",
-		fmt.Sprintf("https://x-access-token:\"%s\"@github.com/pulumi/pulumi-pagerduty.git", os.Getenv("PULUMI_BOT_TOKEN"))))
+	remote, err := url.Parse(fmt.Sprintf("https://github.com/pulumi/pulumi-%s.git", upstreamProviderName))
+	contract.AssertNoErrorf(err, "could not parse remote url")
+	setURL := step.Cmd(exec.CommandContext(ctx, "git", "status"))
+	if ctx.GitToken != "" {
+		remote.User = url.UserPassword("x-access-token", ctx.GitToken)
+		setURL = step.Cmd(exec.CommandContext(ctx, "git", "remote", "set-url", "origin",
+			remote.String()))
+	}
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
 	var prTitle string
