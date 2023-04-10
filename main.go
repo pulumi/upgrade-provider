@@ -127,7 +127,7 @@ If the passed version does not exist, an error is signaled.`)
 - "bridge":  Upgrade the bridge only.
 - "provider: Upgrade the upstream provider only.`)
 
-	cmd.PersistentFlags().StringVar(&gitToken, "git access token", "", "auth token for github")
+	cmd.PersistentFlags().StringVar(&gitToken, "token", "", "auth token for github")
 
 	return cmd
 }
