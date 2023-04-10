@@ -64,6 +64,8 @@ jobs:
         run: git config --global user.name "Pulumi Bot" && git config --global user.email "bot@pulumi.com"
       - name: Run upgrade-provider
         run: ./upgrade-provider ${{ inputs.provider-name }} --kind=${{ inputs.kind }} --major=${{ inputs.major }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.PULUMI_BOT_TOKEN }}
       - name: Notify success
         uses: rtCamp/action-slack-notify@v2
         env:
