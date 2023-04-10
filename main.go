@@ -1124,7 +1124,7 @@ func informGitHub(
 	goMod *GoMod, upstreamProviderName, targetBridgeVersion string,
 ) step.Step {
 	setURL := step.Cmd(exec.CommandContext(ctx, "git", "remote", "set-url", "origin",
-		"https://x-access-token:${{secrets.PULUMI_BOT_TOKEN}}@github.com/pulumi/pulumi-pagerduty.git"))
+		fmt.Sprintf("https://x-access-token:\"%s\"@github.com/pulumi/pulumi-pagerduty.git", os.Getenv("PULUMI_BOT_TOKEN"))))
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
 	var prTitle string
