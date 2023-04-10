@@ -1123,6 +1123,8 @@ func informGitHub(
 	ctx Context, target UpstreamVersions, repo ProviderRepo,
 	goMod *GoMod, upstreamProviderName, targetBridgeVersion string,
 ) step.Step {
+	setURL := step.Cmd(exec.CommandContext(ctx, "git", "remote", "set-url", "origin",
+		"https://x-access-token:${{secrets.PULUMI_BOT_TOKEN}}@github.com/pulumi/pulumi-pagerduty.git"))
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
 	var prTitle string
@@ -1143,6 +1145,7 @@ func informGitHub(
 		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, upstreamProviderName),
 	)).In(&repo.root)
 	return step.Combined("GitHub",
+		setURL,
 		pushBranch,
 		createPR,
 		step.Computed(func() step.Step {
