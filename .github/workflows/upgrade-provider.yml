@@ -48,6 +48,8 @@ jobs:
         uses: pulumi/action-install-pulumi-cli@v2
       - name: Check out source code
         uses: actions/checkout@master
+        with:
+          token: ${{ secrets.PULUMI_BOT_TOKEN }}
       - name: Download module dependencies
         env:
           GOPROXY: "https://proxy.golang.org"

@@ -1123,11 +1123,8 @@ func informGitHub(
 	ctx Context, target UpstreamVersions, repo ProviderRepo,
 	goMod *GoMod, upstreamProviderName, targetBridgeVersion string,
 ) step.Step {
-	useSsh := step.Cmd(exec.CommandContext(ctx, "git", "remote", "set-url", "origin",
-		fmt.Sprintf("https://github.com/%s/pulumi-%s.git", "pulumi", upstreamProviderName)))
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
-
 	var prTitle string
 	if ctx.UpgradeProviderVersion {
 		prTitle = fmt.Sprintf("Upgrade terraform-provider-%s to v%s",
@@ -1146,7 +1143,6 @@ func informGitHub(
 		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, upstreamProviderName),
 	)).In(&repo.root)
 	return step.Combined("GitHub",
-		useSsh,
 		pushBranch,
 		createPR,
 		step.Computed(func() step.Step {
