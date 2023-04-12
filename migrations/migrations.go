@@ -1,12 +1,13 @@
 package migrations
 
 import (
-	"go/ast"
-	"go/printer"
 	"go/token"
 	"os"
 
-	"golang.org/x/tools/go/ast/astutil"
+	"github.com/dave/dst"
+	"github.com/dave/dst/decorator"
+	"github.com/dave/dst/decorator/resolver/gopackages"
+	"github.com/dave/dst/dstutil"
 )
 
 const (
@@ -14,102 +15,103 @@ const (
 	ContractPkg  = "github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
-func AddAutoAliasingSourceCode(fset *token.FileSet, file *ast.File, savePath string) (bool, error) {
+func AddAutoAliasingSourceCode(fset *token.FileSet, file *dst.File, savePath string) (bool, error) {
 	changesMade := false
 
-	changesMade = astutil.AddImport(fset, file, TfBridgeXPkg)
-	changesMade = astutil.AddImport(fset, file, ContractPkg) || changesMade
-	changesMade = astutil.AddNamedImport(fset, file, "_", "embed") || changesMade
+	// changesMade = astutil.AddImport(fset, file, TfBridgeXPkg)
+	// changesMade = astutil.AddImport(fset, file, ContractPkg) || changesMade
+	// changesMade = astutil.AddNamedImport(fset, file, "_", "embed") || changesMade
 
 	applied := false
-	astutil.Apply(file, nil, func(c *astutil.Cursor) bool {
+	dstutil.Apply(file, nil, func(c *dstutil.Cursor) bool {
 		n := c.Node()
 		switch x := n.(type) {
-		case *ast.ImportSpec:
-			if x.Path.Value == "\"embed\"" {
-				x.Comment = &ast.CommentGroup{List: []*ast.Comment{
-					{Text: "embed package not used directly"},
-				}}
-				c.Replace(x)
-			}
-		case *ast.GenDecl:
+		case *dst.ImportSpec:
+			c.InsertBefore(&dst.ImportSpec{Path: &dst.BasicLit{Value: TfBridgeXPkg}})
+			c.InsertBefore(&dst.ImportSpec{Path: &dst.BasicLit{Value: ContractPkg}})
+			embedImp := dst.ImportSpec{Path: &dst.BasicLit{Value: "_ embed"}}
+			embedImp.Decs.Start.Append("embed package blank import")
+			c.InsertBefore(&embedImp)
+		case *dst.GenDecl:
 			if x.Tok == token.CONST {
-				c.InsertBefore(&ast.GenDecl{
-					Doc: &ast.CommentGroup{
-						List: []*ast.Comment{
-							{Text: "go:embed cmd/pulumi-resource-databricks/bridge-metadata.json"},
-						},
-					},
+				d := &dst.GenDecl{
+					// Doc: &dst.CommentGroup{
+					// 	List: []*dst.Comment{
+					// 		{Text: "go:embed cmd/pulumi-resource-databricks/bridge-metadata.json"},
+					// 	},
+					// },
 					Tok: token.VAR,
-					Specs: []ast.Spec{
-						&ast.ValueSpec{
-							Names: []*ast.Ident{{Name: "metadata", Obj: &ast.Object{Kind: ast.Var, Name: "metadata"}}},
-							Type:  &ast.ArrayType{Elt: &ast.Ident{Name: "byte"}},
+					Specs: []dst.Spec{
+						&dst.ValueSpec{
+							Names: []*dst.Ident{{Name: "metadata", Obj: &dst.Object{Kind: dst.Var, Name: "metadata"}}},
+							Type:  &dst.ArrayType{Elt: &dst.Ident{Name: "byte"}},
 						},
+					},
+				}
+				d.Decs.Start.Append("go:embed cmd/pulumi-resource-databricks/bridge-metadata.json")
+				c.InsertBefore(d)
+			}
+		case *dst.CompositeLit:
+			if s, ok := x.Type.(*dst.SelectorExpr); ok && s.Sel.Name == "ProviderInfo" {
+				x.Elts = append(x.Elts, &dst.KeyValueExpr{
+					Key: &dst.Ident{Name: "MetadataInfo"},
+					Value: &dst.CallExpr{
+						Fun: &dst.SelectorExpr{
+							X:   &dst.Ident{Name: "tfbridge"},
+							Sel: &dst.Ident{Name: "NewProviderMetadata"},
+						},
+						Args: []dst.Expr{&dst.Ident{Name: "metadata"}},
 					},
 				})
 			}
-		case *ast.CompositeLit:
-			if s, ok := x.Type.(*ast.SelectorExpr); ok && s.Sel.Name == "ProviderInfo" {
-				x.Elts = append(x.Elts, &ast.KeyValueExpr{
-					Key: &ast.Ident{Name: "MetadataInfo"},
-					Value: &ast.CallExpr{
-						Fun: &ast.SelectorExpr{
-							X:   &ast.Ident{Name: "tfbridge"},
-							Sel: &ast.Ident{Name: "NewProviderMetadata"},
-						},
-						Args: []ast.Expr{&ast.Ident{Name: "metadata"}},
-					},
-				})
-			}
-		case *ast.AssignStmt:
+		case *dst.AssignStmt:
 			if len(x.Rhs) == 1 {
-				if c, ok := x.Rhs[0].(*ast.CallExpr); ok {
-					if s, ok := c.Fun.(*ast.SelectorExpr); ok && s.Sel.Name == "AutoAliasing" {
+				if c, ok := x.Rhs[0].(*dst.CallExpr); ok {
+					if s, ok := c.Fun.(*dst.SelectorExpr); ok && s.Sel.Name == "AutoAliasing" {
 						applied = true
 						return true
 					}
 				}
 			}
-		case *ast.ExprStmt:
-			var id *ast.SelectorExpr
-			call, ok := x.X.(*ast.CallExpr)
+		case *dst.ExprStmt:
+			var id *dst.SelectorExpr
+			call, ok := x.X.(*dst.CallExpr)
 			if ok {
-				id, ok = call.Fun.(*ast.SelectorExpr)
+				id, ok = call.Fun.(*dst.SelectorExpr)
 			}
 			if ok {
 				if id.Sel.Name == "SetAutonaming" && !applied {
-					c.InsertBefore(&ast.AssignStmt{
+					c.InsertBefore(&dst.AssignStmt{
 						Tok: token.DEFINE,
-						Lhs: []ast.Expr{&ast.Ident{Name: "err", Obj: &ast.Object{Kind: ast.Var, Name: "err"}}},
-						Rhs: []ast.Expr{&ast.CallExpr{
-							Fun: &ast.SelectorExpr{
-								X:   &ast.Ident{Name: "x"},
-								Sel: &ast.Ident{Name: "AutoAliasing"},
+						Lhs: []dst.Expr{&dst.Ident{Name: "err", Obj: &dst.Object{Kind: dst.Var, Name: "err"}}},
+						Rhs: []dst.Expr{&dst.CallExpr{
+							Fun: &dst.SelectorExpr{
+								X:   &dst.Ident{Name: "x"},
+								Sel: &dst.Ident{Name: "AutoAliasing"},
 							},
-							Args: []ast.Expr{
-								&ast.UnaryExpr{
+							Args: []dst.Expr{
+								&dst.UnaryExpr{
 									Op: token.AND,
-									X:  &ast.Ident{Name: "prov", Obj: &ast.Object{Kind: ast.Var, Name: "prov"}},
+									X:  &dst.Ident{Name: "prov", Obj: &dst.Object{Kind: dst.Var, Name: "prov"}},
 								},
-								&ast.CallExpr{
-									Fun: &ast.SelectorExpr{
-										X:   &ast.Ident{Name: "prov", Obj: &ast.Object{Kind: ast.Var, Name: "prov"}},
-										Sel: &ast.Ident{Name: "GetMetadata"},
+								&dst.CallExpr{
+									Fun: &dst.SelectorExpr{
+										X:   &dst.Ident{Name: "prov", Obj: &dst.Object{Kind: dst.Var, Name: "prov"}},
+										Sel: &dst.Ident{Name: "GetMetadata"},
 									},
 								},
 							},
 						}},
 					})
-					c.InsertBefore(&ast.ExprStmt{
-						X: &ast.CallExpr{
-							Fun: &ast.SelectorExpr{
-								X:   &ast.Ident{Name: "contract"},
-								Sel: &ast.Ident{Name: "AssertNoErrorf"},
+					c.InsertBefore(&dst.ExprStmt{
+						X: &dst.CallExpr{
+							Fun: &dst.SelectorExpr{
+								X:   &dst.Ident{Name: "contract"},
+								Sel: &dst.Ident{Name: "AssertNoErrorf"},
 							},
-							Args: []ast.Expr{
-								&ast.Ident{Name: "err", Obj: &ast.Object{Kind: ast.Var, Name: "err"}},
-								&ast.BasicLit{Kind: token.STRING, Value: "\"auto aliasing apply failed\""},
+							Args: []dst.Expr{
+								&dst.Ident{Name: "err", Obj: &dst.Object{Kind: dst.Var, Name: "err"}},
+								&dst.BasicLit{Kind: token.STRING, Value: "\"auto aliasing apply failed\""},
 							},
 						}})
 					changesMade = true
@@ -121,6 +123,17 @@ func AddAutoAliasingSourceCode(fset *token.FileSet, file *ast.File, savePath str
 	})
 
 	out, err := os.Create(savePath)
-	err = printer.Fprint(out, fset, file)
+	if err != nil {
+		return false, err
+	}
+	restorer := decorator.NewRestorerWithImports("st", gopackages.New(""))
+	err = restorer.Fprint(out, file)
+	if err != nil {
+		return false, err
+	}
+
+	// decorator.Print(file)
+	// dst.Fprint(out, file, nil)
+	// // printer.Fprint(out, fset, file)
 	return changesMade, err
 }

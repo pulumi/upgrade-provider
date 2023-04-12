@@ -23,6 +23,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	semver "github.com/Masterminds/semver/v3"
+	"github.com/dave/dst/decorator"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
 
@@ -1574,7 +1575,11 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 			if err != nil {
 				return "failed to parse resources.go", err
 			}
-			changesMade, err = migrations.AddAutoAliasingSourceCode(fset, file, fmt.Sprintf("%s/resources.go", *repo.providerDir()))
+			dstFile, err := decorator.DecorateFile(fset, file)
+			if err != nil {
+				return "failed to parse resources.go", err
+			}
+			changesMade, err = migrations.AddAutoAliasingSourceCode(fset, dstFile, fmt.Sprintf("%s/resources.go", *repo.providerDir()))
 			return "", err
 		}))
 	if changesMade {

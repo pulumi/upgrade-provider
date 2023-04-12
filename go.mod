@@ -5,10 +5,10 @@ go 1.19
 require (
 	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/briandowns/spinner v1.20.0
+	github.com/dave/dst v0.27.2
 	github.com/pulumi/pulumi/sdk/v3 v3.53.1
 	github.com/spf13/cobra v1.6.1
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
-	golang.org/x/tools v0.0.0-20191119224855-298f0cb1881e
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -22,4 +22,5 @@ require (
 	github.com/stretchr/testify v1.8.1 // indirect
 	golang.org/x/sys v0.0.0-20220823224334-20c2bfdbfe24 // indirect
 	golang.org/x/term v0.1.0 // indirect
+	golang.org/x/tools v0.1.12 // indirect
 )
