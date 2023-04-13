@@ -199,6 +199,7 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	artifacts := append(steps,
 		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
+		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.examplesDir()),
 		step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
 		step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
