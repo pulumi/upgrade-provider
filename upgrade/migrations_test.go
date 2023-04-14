@@ -3,7 +3,7 @@ package upgrade
 import (
 	"go/parser"
 	"go/token"
-	"io/ioutil"
+	"ioutil"
 	"os"
 	"testing"
 
@@ -59,7 +59,8 @@ func Provider() tfbridge.ProviderInfo {
 	orig, err := os.Create("original.go")
 	assert.Nil(t, err)
 	defer os.Remove("original.go")
-	orig.Write([]byte(origProgram))
+	_, err = orig.Write([]byte(origProgram))
+	assert.Nil(t, err)
 
 	// Parse to ast
 	fs := token.NewFileSet()
