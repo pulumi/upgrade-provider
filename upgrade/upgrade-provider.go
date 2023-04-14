@@ -3,8 +3,6 @@ package upgrade
 import (
 	"bytes"
 	"fmt"
-	"go/parser"
-	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -294,28 +292,13 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 	changesMade := false
 	steps = append(steps,
 		step.F("Implement AutoAliasing", func() (string, error) {
-			// Quick scan of file to see if AutoAliasing already implemented
-			b, err := os.ReadFile(filepath.Join(*repo.providerDir(), "resources.go"))
-			if err != nil {
-				return "", err
-			}
-			if strings.Contains(string(b), "AutoAliasing(") {
-				return "", nil
-			}
-
 			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 				_, err = os.Create(metadataPath)
 				if err != nil {
 					return "failed to initialize metadata file", err
 				}
 			}
-			// Create the AST by parsing src
-			fset := token.NewFileSet()
-			file, err := parser.ParseFile(fset, fmt.Sprintf("%s/resources.go", *repo.providerDir()), nil, parser.ParseComments)
-			if err != nil {
-				return "failed to parse resources.go", err
-			}
-			changesMade, err = AutoAliasingMigration(fset, file, fmt.Sprintf("%s/resources.go", *repo.providerDir()), providerName)
+			err := AutoAliasingMigration(filepath.Join(*repo.providerDir(), "resources.go"), providerName)
 			return "", err
 		}))
 	if changesMade {
