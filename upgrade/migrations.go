@@ -139,6 +139,7 @@ func AutoAliasingMigration(fset *token.FileSet, file *ast.File, savePath, provid
 		return false, err
 	}
 
+	// TODO: figure out how to properly append comments so everything can be done via AST manipulation
 	b, err := os.ReadFile(savePath)
 	if err != nil {
 		return false, err
