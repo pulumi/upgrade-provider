@@ -1,7 +1,6 @@
 package upgrade
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -66,7 +65,7 @@ func Provider() tfbridge.ProviderInfo {
 	err = AutoAliasingMigration(origPath, "test")
 	assert.Nil(t, err)
 
-	modified, err := ioutil.ReadFile(origPath)
+	modified, err := os.ReadFile(origPath)
 	assert.Nil(t, err)
 
 	expected := `package test
@@ -128,6 +127,8 @@ var metadata []byte
 	err = AutoAliasingMigration(origPath, "test")
 	assert.Nil(t, err)
 
-	modified2, err := ioutil.ReadFile(origPath)
+	modified2, err := os.ReadFile(origPath)
+	assert.Nil(t, err)
+
 	assert.Equal(t, string(modified2), expected)
 }

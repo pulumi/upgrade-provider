@@ -162,7 +162,7 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) error {
 	if err != nil {
 		return err
 	}
-	s := string(buf.Bytes())
+	s := buf.String()
 	s = strings.Replace(s, `EMBED_COMMENT_ANCHOR "embed"`,
 		"// embed is used to store bridge-metadata.json in the compiled binary\n    _ \"embed\"", 1)
 	s = strings.Replace(s, `var metadata []byte // EMBED_DIRECTIVE_ANCHOR`,
