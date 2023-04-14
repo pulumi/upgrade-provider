@@ -1,10 +1,9 @@
 package upgrade
 
 import (
-	"go/parser"
-	"go/token"
-	"ioutil"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,29 +55,25 @@ func Provider() tfbridge.ProviderInfo {
 `
 
 	// Write original program to temporary file
-	orig, err := os.Create("original.go")
+	tmpDir := t.TempDir()
+	origPath := filepath.Join(tmpDir, "original.go")
+	orig, err := os.Create(origPath)
 	assert.Nil(t, err)
-	defer os.Remove("original.go")
 	_, err = orig.Write([]byte(origProgram))
 	assert.Nil(t, err)
 
-	// Parse to ast
-	fs := token.NewFileSet()
-	f, err := parser.ParseFile(fs, "original.go", nil, parser.DeclarationErrors|parser.ParseComments)
-	assert.Nil(t, err)
-
 	// Perform auto aliasing migration
-	_, err = AutoAliasingMigration(fs, f, "original.go", "test")
+	err = AutoAliasingMigration(origPath, "test")
 	assert.Nil(t, err)
 
-	newProgram, err := ioutil.ReadFile("original.go")
+	modified, err := ioutil.ReadFile(origPath)
 	assert.Nil(t, err)
 
-	expectedProgram := `package test
+	expected := `package test
 
 import (
 	"fmt"
-	// embed package blank import
+	// embed is used to store bridge-metadata.json in the compiled binary
 	_ "embed"
 	"path/filepath"
 	"strings"
@@ -127,6 +122,12 @@ func Provider() tfbridge.ProviderInfo {
 var metadata []byte
 `
 	// Compare against expected program
-	assert.Equal(t, newProgram, []byte(expectedProgram))
+	assert.Equal(t, string(modified), expected)
 
+	// Test running AutoAliasing twice doesn't change output
+	err = AutoAliasingMigration(origPath, "test")
+	assert.Nil(t, err)
+
+	modified2, err := ioutil.ReadFile(origPath)
+	assert.Equal(t, string(modified2), expected)
 }
