@@ -57,13 +57,16 @@ func cmd() *cobra.Command {
 			case "all":
 				context.UpgradeBridgeVersion = true
 				context.UpgradeProviderVersion = true
+				context.UpgradeCodeMigration = true
 			case "bridge":
 				context.UpgradeBridgeVersion = true
 			case "provider":
 				context.UpgradeProviderVersion = true
+			case "code":
+				context.UpgradeCodeMigration = true
 			default:
 				return fmt.Errorf(
-					"--kind=%s invalid. Must be one of `all`, `bridge` or `provider`.",
+					"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, or `code`.",
 					upgradeKind)
 			}
 
@@ -92,7 +95,12 @@ If the passed version does not exist, an error is signaled.`)
 		`The kind of upgrade to perform:
 - "all":     Upgrade the upstream provider and the bridge.
 - "bridge":  Upgrade the bridge only.
-- "provider: Upgrade the upstream provider only.`)
+- "provider: Upgrade the upstream provider only.
+- "code":     Perform some number of code migrations.`)
+
+	cmd.PersistentFlags().StringSliceVar(&context.MigrationOpts, "migration-opts", nil,
+		`A comma separated list of code migration to perform:
+- "autoalias": Apply auto aliasing to the provider.`)
 
 	return cmd
 }

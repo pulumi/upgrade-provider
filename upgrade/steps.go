@@ -292,6 +292,8 @@ func InformGitHub(
 			upstreamProviderName, target.Latest())
 	} else if ctx.UpgradeBridgeVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
+	} else if ctx.UpgradeCodeMigration {
+		prTitle = fmt.Sprintf("Code migration: %s", strings.Join(ctx.MigrationOpts, ", "))
 	} else {
 		panic("Unknown action")
 	}

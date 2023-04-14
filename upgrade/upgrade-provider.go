@@ -3,6 +3,9 @@ package upgrade
 import (
 	"bytes"
 	"fmt"
+	"go/parser"
+	"go/token"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -12,6 +15,12 @@ import (
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 )
+
+type CodeMigration = func(ctx Context, repo ProviderRepo, providerName string) (step.Step, error)
+
+var CodeMigrations = map[string]CodeMigration{
+	"autoalias": AddAutoAliasing,
+}
 
 func UpgradeProvider(ctx Context, name string) error {
 	var err error
@@ -137,9 +146,19 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
-	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion {
+	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion && !ctx.UpgradeCodeMigration {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
+	}
+
+	if ctx.UpgradeCodeMigration && len(ctx.MigrationOpts) == 0 {
+		keys := make([]string, 0, len(CodeMigrations))
+		for k := range CodeMigrations {
+			keys = append(keys, k)
+		}
+		ctx.MigrationOpts = keys
+	} else if !ctx.UpgradeCodeMigration && len(ctx.MigrationOpts) > 0 {
+		fmt.Println(colorize.Warn("--migration-opts passed but --kind does not indicate a code migration"))
 	}
 
 	var forkedProviderUpstreamCommit string
@@ -160,6 +179,8 @@ func UpgradeProvider(ctx Context, name string) error {
 			"We are upgrading the bridge, so we must have a target version")
 		repo.workingBranch = fmt.Sprintf("upgrade-pulumi-terraform-bridge-to-%s",
 			targetBridgeVersion)
+	} else if ctx.UpgradeCodeMigration {
+		repo.workingBranch = "upgrade-code-migration"
 	} else {
 		return fmt.Errorf("calculating branch name: unknown action")
 	}
@@ -195,6 +216,30 @@ func UpgradeProvider(ctx Context, name string) error {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
 			In(repo.providerDir()))
+	}
+
+	if ctx.UpgradeCodeMigration {
+		applied := make(map[string]struct{})
+		for _, opt := range ctx.MigrationOpts {
+			if _, ok := applied[opt]; ok {
+				fmt.Println(colorize.Warn("Duplicate code migration " + colorize.Bold(opt)))
+				continue
+			}
+			applied[opt] = struct{}{}
+
+			getMigration, found := CodeMigrations[opt]
+			if !found {
+				return fmt.Errorf("unknown migration '%s'", opt)
+			}
+
+			migration, err := getMigration(ctx, repo, name)
+			if err != nil {
+				return fmt.Errorf("unable implement migration '%s': %w", opt, err)
+			}
+
+			steps = append(steps, migration)
+
+		}
 	}
 
 	artifacts := append(steps,
@@ -240,4 +285,47 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	return nil
+}
+
+func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
+	steps := []step.Step{}
+	providerName = strings.TrimPrefix(providerName, "pulumi-")
+	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
+	changesMade := false
+	steps = append(steps,
+		step.F("Implement AutoAliasing", func() (string, error) {
+			// Quick scan of file to see if AutoAliasing already implemented
+			b, err := os.ReadFile(filepath.Join(*repo.providerDir(), "resources.go"))
+			if err != nil {
+				return "", err
+			}
+			if strings.Contains(string(b), "AutoAliasing(") {
+				return "", nil
+			}
+
+			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+				_, err = os.Create(metadataPath)
+				if err != nil {
+					return "failed to initialize metadata file", err
+				}
+			}
+			// Create the AST by parsing src
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, fmt.Sprintf("%s/resources.go", *repo.providerDir()), nil, parser.ParseComments)
+			if err != nil {
+				return "failed to parse resources.go", err
+			}
+			changesMade, err = AutoAliasingMigration(fset, file, fmt.Sprintf("%s/resources.go", *repo.providerDir()), providerName)
+			return "", err
+		}))
+	if changesMade {
+		steps = append(steps,
+			step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "resources.go")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
+		)
+	}
+
+	return step.Combined("Add AutoAliasing", steps...), nil
 }
