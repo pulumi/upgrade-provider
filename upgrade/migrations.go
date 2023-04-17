@@ -19,12 +19,12 @@ const (
 	ContractPkg  = "github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
-func AutoAliasingMigration(resourcesFilePath, providerName string) error {
+func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error) {
 	// Create the AST by parsing src
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, resourcesFilePath, nil, parser.ParseComments)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	applied, initMetadata, errAssigned := false, true, false
@@ -45,7 +45,7 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) error {
 		return true
 	})
 	if applied {
-		return nil
+		return false, nil
 	}
 
 	astutil.AddImport(fset, file, TfBridgeXPkg)
@@ -55,13 +55,6 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) error {
 	astutil.Apply(file, nil, func(c *astutil.Cursor) bool {
 		n := c.Node()
 		switch x := n.(type) {
-		// case *ast.ImportSpec:
-		// 	if x.Path.Value == "\"embed\"" {
-		// 		x.Comment = &ast.CommentGroup{List: []*ast.Comment{
-		// 			{Text: "embed package not used directly"},
-		// 		}}
-		// 		c.Replace(x)
-		// 	}
 		case *ast.GenDecl:
 			if x.Tok == token.VAR {
 				if s, ok := x.Specs[0].(*ast.ValueSpec); ok && s.Names[0].Name == "metadata" {
@@ -142,11 +135,6 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) error {
 	// TODO: figure out how to properly append comments so everything can be done via AST manipulation
 	if initMetadata {
 		file.Decls = append(file.Decls, &ast.GenDecl{
-			// Doc: &ast.CommentGroup{
-			// 	List: []*ast.Comment{
-			// 		{Text: "go:embed cmd/pulumi-resource-databricks/bridge-metadata.json"},
-			// 	},
-			// },
 			Tok: token.VAR,
 			Specs: []ast.Spec{
 				&ast.ValueSpec{
@@ -160,7 +148,7 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) error {
 	buf := new(bytes.Buffer)
 	err = printer.Fprint(buf, fset, file)
 	if err != nil {
-		return err
+		return false, err
 	}
 	s := buf.String()
 	s = strings.Replace(s, `EMBED_COMMENT_ANCHOR "embed"`,
@@ -171,9 +159,11 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) error {
 	// format output
 	formatted, err := format.Source([]byte(s))
 	if err != nil {
-		return err
+		return false, err
 	}
 	err = os.WriteFile(resourcesFilePath, formatted, 0600)
-
-	return err
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

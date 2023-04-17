@@ -808,3 +808,35 @@ func UpdateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
 		return "", os.WriteFile(path, bytes, stats.Mode().Perm())
 	})
 }
+
+func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
+	steps := []step.Step{}
+	providerName = strings.TrimPrefix(providerName, "pulumi-")
+	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
+	changesMade := false
+	steps = append(steps,
+		step.F("Implement AutoAliasing", func() (string, error) {
+			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+				_, err = os.Create(metadataPath)
+				if err != nil {
+					return "failed to initialize metadata file", err
+				}
+			}
+			changes, err := AutoAliasingMigration(filepath.Join(*repo.providerDir(), "resources.go"), providerName)
+			if err != nil {
+				return "failed to perform auto aliasing migration", err
+			}
+			changesMade = changes
+			return "", err
+		}))
+	if changesMade {
+		steps = append(steps,
+			step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "resources.go")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
+		)
+	}
+
+	return step.Combined("Add AutoAliasing", steps...), nil
+}

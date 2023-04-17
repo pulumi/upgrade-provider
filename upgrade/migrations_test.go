@@ -62,8 +62,9 @@ func Provider() tfbridge.ProviderInfo {
 	assert.Nil(t, err)
 
 	// Perform auto aliasing migration
-	err = AutoAliasingMigration(origPath, "test")
+	changesMade, err := AutoAliasingMigration(origPath, "test")
 	assert.Nil(t, err)
+	assert.True(t, changesMade)
 
 	modified, err := os.ReadFile(origPath)
 	assert.Nil(t, err)
@@ -124,8 +125,9 @@ var metadata []byte
 	assert.Equal(t, string(modified), expected)
 
 	// Test running AutoAliasing twice doesn't change output
-	err = AutoAliasingMigration(origPath, "test")
+	changesMade, err = AutoAliasingMigration(origPath, "test")
 	assert.Nil(t, err)
+	assert.False(t, changesMade)
 
 	modified2, err := os.ReadFile(origPath)
 	assert.Nil(t, err)

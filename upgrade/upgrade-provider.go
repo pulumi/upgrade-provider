@@ -3,9 +3,9 @@ package upgrade
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
@@ -218,6 +218,9 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	if ctx.UpgradeCodeMigration {
 		applied := make(map[string]struct{})
+		sort.Slice(ctx.MigrationOpts, func(i, j int) bool {
+			return ctx.MigrationOpts[i] < ctx.MigrationOpts[j]
+		})
 		for _, opt := range ctx.MigrationOpts {
 			if _, ok := applied[opt]; ok {
 				fmt.Println(colorize.Warn("Duplicate code migration " + colorize.Bold(opt)))
@@ -283,32 +286,4 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	return nil
-}
-
-func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
-	steps := []step.Step{}
-	providerName = strings.TrimPrefix(providerName, "pulumi-")
-	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
-	changesMade := false
-	steps = append(steps,
-		step.F("Implement AutoAliasing", func() (string, error) {
-			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
-				_, err = os.Create(metadataPath)
-				if err != nil {
-					return "failed to initialize metadata file", err
-				}
-			}
-			err := AutoAliasingMigration(filepath.Join(*repo.providerDir(), "resources.go"), providerName)
-			return "", err
-		}))
-	if changesMade {
-		steps = append(steps,
-			step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "resources.go")).In(&repo.root),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
-		)
-	}
-
-	return step.Combined("Add AutoAliasing", steps...), nil
 }
