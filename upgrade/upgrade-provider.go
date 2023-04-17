@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
@@ -12,6 +13,12 @@ import (
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 )
+
+type CodeMigration = func(ctx Context, repo ProviderRepo, providerName string) (step.Step, error)
+
+var CodeMigrations = map[string]CodeMigration{
+	"autoalias": AddAutoAliasing,
+}
 
 func UpgradeProvider(ctx Context, name string) error {
 	var err error
@@ -137,9 +144,19 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
-	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion {
+	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion && !ctx.UpgradeCodeMigration {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
+	}
+
+	if ctx.UpgradeCodeMigration && len(ctx.MigrationOpts) == 0 {
+		keys := make([]string, 0, len(CodeMigrations))
+		for k := range CodeMigrations {
+			keys = append(keys, k)
+		}
+		ctx.MigrationOpts = keys
+	} else if !ctx.UpgradeCodeMigration && len(ctx.MigrationOpts) > 0 {
+		fmt.Println(colorize.Warn("--migration-opts passed but --kind does not indicate a code migration"))
 	}
 
 	var forkedProviderUpstreamCommit string
@@ -160,6 +177,8 @@ func UpgradeProvider(ctx Context, name string) error {
 			"We are upgrading the bridge, so we must have a target version")
 		repo.workingBranch = fmt.Sprintf("upgrade-pulumi-terraform-bridge-to-%s",
 			targetBridgeVersion)
+	} else if ctx.UpgradeCodeMigration {
+		repo.workingBranch = "upgrade-code-migration"
 	} else {
 		return fmt.Errorf("calculating branch name: unknown action")
 	}
@@ -195,6 +214,33 @@ func UpgradeProvider(ctx Context, name string) error {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
 			In(repo.providerDir()))
+	}
+
+	if ctx.UpgradeCodeMigration {
+		applied := make(map[string]struct{})
+		sort.Slice(ctx.MigrationOpts, func(i, j int) bool {
+			return ctx.MigrationOpts[i] < ctx.MigrationOpts[j]
+		})
+		for _, opt := range ctx.MigrationOpts {
+			if _, ok := applied[opt]; ok {
+				fmt.Println(colorize.Warn("Duplicate code migration " + colorize.Bold(opt)))
+				continue
+			}
+			applied[opt] = struct{}{}
+
+			getMigration, found := CodeMigrations[opt]
+			if !found {
+				return fmt.Errorf("unknown migration '%s'", opt)
+			}
+
+			migration, err := getMigration(ctx, repo, name)
+			if err != nil {
+				return fmt.Errorf("unable implement migration '%s': %w", opt, err)
+			}
+
+			steps = append(steps, migration)
+
+		}
 	}
 
 	artifacts := append(steps,

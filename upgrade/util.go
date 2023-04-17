@@ -20,6 +20,9 @@ type Context struct {
 
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
+
+	UpgradeCodeMigration bool
+	MigrationOpts        []string
 }
 
 type HandledError struct{}
