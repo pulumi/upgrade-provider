@@ -18,6 +18,10 @@ the rest.
 We don't currently maintain releases for this tool. To install this tool onto your path,
 clone the repository and run `make install`.
 
+## Requirements
+- Go version `1.20`
+- `git` version `>=2.36.0`
+
 ## Usage
 
 `upgrade-provider` relies on the command line utilities `gh` and `git` to run, as well as
