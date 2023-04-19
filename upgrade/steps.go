@@ -840,3 +840,25 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 
 	return step.Combined("Add AutoAliasing", steps...), nil
 }
+
+func ReplaceAssertNoError(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
+	steps := []step.Step{}
+	changesMade := false
+	steps = append(steps,
+		step.F("Replace AssertNoError", func() (string, error) {
+			changes, err := AssertNoErrorMigration(filepath.Join(*repo.providerDir(), "resources.go"))
+			if err != nil {
+				return "failed to perform AssertNoError migration", err
+			}
+			changesMade = changes
+			return "", err
+		}))
+	if changesMade {
+		steps = append(steps,
+			step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
+			step.Cmd(exec.CommandContext(ctx, "git", "add", "resources.go")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "assertnoerror migration")).In(&repo.root),
+		)
+	}
+	return step.Combined("Replace AssertNoError", steps...), nil
+}
