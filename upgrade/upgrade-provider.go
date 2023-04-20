@@ -193,7 +193,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			fmt.Printf("\n\n" + colorize.Warn("Major Version Updates are not fully automated!") + "\n")
 			fmt.Printf("Steps 1..9, 12 and 13 have been automated. Step 11 can be skipped.\n")
 			fmt.Printf("%s need to complete Step 10: Updating README.md and sdk/python/README.md "+
-				"in a follow up commit.\n", colorize.Bold("You"))
+				"in a follow up commit.\nAfter, you should rerun `make tfgen` and `make build_sdks`.", colorize.Bold("You"))
 			fmt.Printf("Steps are listed at\n\t" +
 				"https://github.com/pulumi/platform-providers-team/blob/main/playbooks/tf-provider-major-version-update.md\n")
 		}()
