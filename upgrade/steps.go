@@ -142,12 +142,10 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 			expectedLocation = filepath.Join(strings.Split(repoPath, "/")...)
 			cwd, err := os.Getwd()
 			if err != nil {
-				return "", fmt.Errorf("could not resolve current directory", err)
+				return "", fmt.Errorf("could not resolve current directory: '%s", err)
 			}
-			fmt.Println("CURRENT WORKING DIRECTORY: ", cwd)
-			fmt.Println(filepath.Base(repoPath))
 			if idx := strings.Index(cwd, filepath.Base(repoPath)); idx != -1 {
-				idx = idx + len(expectedLocation)
+				idx = idx + len(expectedLocation) - 1
 				expectedLocation = cwd[:idx]
 			} else {
 				expectedLocation = filepath.Join(ctx.GoPath, "src", expectedLocation)
@@ -310,7 +308,7 @@ func InformGitHub(
 		panic("Unknown action")
 	}
 	createPR := step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
-		"--assignee", "@me",
+		"--add-assignee", "@me",
 		"--base", repo.defaultBranch,
 		"--head", repo.workingBranch,
 		"--reviewer", "pulumi/Ecosystem",
