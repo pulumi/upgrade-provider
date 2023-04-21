@@ -134,3 +134,48 @@ var metadata []byte
 
 	assert.Equal(t, string(modified2), expected)
 }
+
+func TestAssertNoErrorMigration(t *testing.T) {
+	origProgram := `package test
+
+import (
+	"os"
+)
+
+func testing() {
+    f, err := os.Open("path")
+    contract.AssertNoError(err)
+}
+`
+
+	// Write original program to temporary file
+	tmpDir := t.TempDir()
+	origPath := filepath.Join(tmpDir, "original.go")
+	orig, err := os.Create(origPath)
+	assert.Nil(t, err)
+	_, err = orig.Write([]byte(origProgram))
+	assert.Nil(t, err)
+
+	// Perform AssertNoError migration
+	changesMade, err := AssertNoErrorMigration(origPath, "test")
+	assert.Nil(t, err)
+	assert.True(t, changesMade)
+
+	modified, err := os.ReadFile(origPath)
+	assert.Nil(t, err)
+
+	expected := `package test
+
+import (
+	"os"
+)
+
+func testing() {
+	f, err := os.Open("path")
+	contract.AssertNoErrorf(err, "failed to apply auto token mapping")
+
+}
+`
+	// Compare against expected program
+	assert.Equal(t, string(modified), expected)
+}

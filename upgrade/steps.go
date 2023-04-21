@@ -809,20 +809,14 @@ func UpdateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
 	})
 }
 
-func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
+func migrationSteps(ctx Context, repo ProviderRepo, providerName string, description string,
+	migrationFunc func(resourcesFilePath, providerName string) (bool, error)) (step.Step, error) {
 	steps := []step.Step{}
 	providerName = strings.TrimPrefix(providerName, "pulumi-")
-	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
 	changesMade := false
 	steps = append(steps,
-		step.F("Implement AutoAliasing", func() (string, error) {
-			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
-				_, err = os.Create(metadataPath)
-				if err != nil {
-					return "failed to initialize metadata file", err
-				}
-			}
-			changes, err := AutoAliasingMigration(filepath.Join(*repo.providerDir(), "resources.go"), providerName)
+		step.F(description, func() (string, error) {
+			changes, err := migrationFunc(filepath.Join(*repo.providerDir(), "resources.go"), providerName)
 			if err != nil {
 				return "failed to perform auto aliasing migration", err
 			}
@@ -832,11 +826,33 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 	if changesMade {
 		steps = append(steps,
 			step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "resources.go")).In(&repo.root),
 			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
 		)
 	}
 
 	return step.Combined("Add AutoAliasing", steps...), nil
+}
+
+func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
+	steps := []step.Step{}
+	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
+	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+		_, err = os.Create(metadataPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+	steps = append(steps, step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root))
+	migrationSteps, err := migrationSteps(ctx, repo, providerName, "Add AutoAliasing", AutoAliasingMigration)
+	if err != nil {
+		return nil, err
+	}
+	steps = append(steps, migrationSteps)
+	return step.Combined("Add AutoAliasing", steps...), nil
+}
+
+func ReplaceAssertNoError(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
+	return migrationSteps(ctx, repo, providerName, "Remove deprecated contract.Assert",
+		AutoAliasingMigration)
 }

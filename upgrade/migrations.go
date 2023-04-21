@@ -167,3 +167,58 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error)
 	}
 	return true, nil
 }
+
+func AssertNoErrorMigration(resourcesFilePath, providerName string) (bool, error) {
+	return replaceAstFunction(resourcesFilePath,
+		&ast.SelectorExpr{Sel: &ast.Ident{Name: "AssertNoError"}},
+		&ast.CallExpr{
+			Fun: &ast.SelectorExpr{
+				X:   &ast.Ident{Name: "contract"},
+				Sel: &ast.Ident{Name: "AssertNoErrorf"},
+			},
+			Args: []ast.Expr{
+				&ast.Ident{Name: "err", Obj: &ast.Object{Kind: ast.Var, Name: "err"}},
+				&ast.BasicLit{Kind: token.STRING, Value: "\"failed to apply auto token mapping\""},
+			},
+		})
+}
+
+func replaceAstFunction(filePath string, oldNode *ast.SelectorExpr, newNode *ast.CallExpr) (bool, error) {
+	// Create the AST by parsing src
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return false, err
+	}
+	changesMade := false
+	astutil.Apply(file, nil, func(c *astutil.Cursor) bool {
+		n := c.Node()
+		switch x := n.(type) {
+		case *ast.CallExpr:
+			if s, ok := x.Fun.(*ast.SelectorExpr); ok {
+				if s.Sel.Name == oldNode.Sel.Name {
+					changesMade = true
+					c.Replace(newNode)
+				}
+			}
+		}
+		return true
+	})
+
+	buf := new(bytes.Buffer)
+	err = printer.Fprint(buf, fset, file)
+	if err != nil {
+		return false, err
+	}
+	// format output
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return false, err
+	}
+	err = os.WriteFile(filePath, formatted, 0600)
+	if err != nil {
+		return false, err
+	}
+	return changesMade, err
+
+}

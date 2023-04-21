@@ -17,7 +17,8 @@ import (
 type CodeMigration = func(ctx Context, repo ProviderRepo, providerName string) (step.Step, error)
 
 var CodeMigrations = map[string]CodeMigration{
-	"autoalias": AddAutoAliasing,
+	"autoalias":     AddAutoAliasing,
+	"assertnoerror": ReplaceAssertNoError,
 }
 
 func UpgradeProvider(ctx Context, name string) error {
