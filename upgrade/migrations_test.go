@@ -157,7 +157,7 @@ func testing() {
 	assert.Nil(t, err)
 
 	// Perform AssertNoError migration
-	changesMade, err := AssertNoErrorMigration(origPath)
+	changesMade, err := AssertNoErrorMigration(origPath, "test")
 	assert.Nil(t, err)
 	assert.True(t, changesMade)
 
@@ -173,6 +173,7 @@ import (
 func testing() {
 	f, err := os.Open("path")
 	contract.AssertNoErrorf(err, "failed to apply auto token mapping")
+
 }
 `
 	// Compare against expected program
