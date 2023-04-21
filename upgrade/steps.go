@@ -140,7 +140,17 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 
 			// from github.com/org/repo to $GOPATH/src/github.com/org
 			expectedLocation = filepath.Join(strings.Split(repoPath, "/")...)
-			expectedLocation = filepath.Join(ctx.GoPath, "src", expectedLocation)
+			cwd, err := os.Getwd()
+			if err != nil {
+				return "", fmt.Errorf("could not resolve current directory", err)
+			}
+			if idx := strings.Index(cwd, expectedLocation); idx != -1 {
+				idx = idx + len(expectedLocation)
+				expectedLocation = cwd[:idx]
+			} else {
+				expectedLocation = filepath.Join(ctx.GoPath, "src", expectedLocation)
+
+			}
 			if info, err := os.Stat(expectedLocation); err == nil {
 				if !info.IsDir() {
 					return "", fmt.Errorf("'%s' not a directory", expectedLocation)
