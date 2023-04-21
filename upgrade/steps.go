@@ -837,6 +837,12 @@ func migrationSteps(ctx Context, repo ProviderRepo, providerName string, descrip
 func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
 	steps := []step.Step{}
 	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
+	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+		_, err = os.Create(metadataPath)
+		if err != nil {
+			return nil, err
+		}
+	}
 	steps = append(steps, step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root))
 	migrationSteps, err := migrationSteps(ctx, repo, providerName, "Add AutoAliasing", AutoAliasingMigration)
 	if err != nil {
