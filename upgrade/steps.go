@@ -144,6 +144,8 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 			if err != nil {
 				return "", fmt.Errorf("could not resolve current directory", err)
 			}
+			fmt.Println("CURRENT WORKING DIRECTORY: ", cwd)
+			fmt.Println(filepath.Base(repoPath))
 			if idx := strings.Index(cwd, filepath.Base(repoPath)); idx != -1 {
 				idx = idx + len(expectedLocation)
 				expectedLocation = cwd[:idx]
