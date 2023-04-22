@@ -144,12 +144,10 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 			if err != nil {
 				return "", fmt.Errorf("could not resolve current directory: '%s", err)
 			}
-			if idx := strings.Index(cwd, filepath.Base(repoPath)); idx != -1 {
-				idx = idx + len(expectedLocation) - 1
-				expectedLocation = cwd[:idx]
+			if filepath.Base(repoPath) == filepath.Base(cwd) && filepath.Base(cwd) != "" {
+				expectedLocation = cwd
 			} else {
 				expectedLocation = filepath.Join(ctx.GoPath, "src", expectedLocation)
-
 			}
 			if info, err := os.Stat(expectedLocation); err == nil {
 				if !info.IsDir() {
