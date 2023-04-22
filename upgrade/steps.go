@@ -308,7 +308,7 @@ func InformGitHub(
 		panic("Unknown action")
 	}
 	createPR := step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
-		"--add-assignee", "@me",
+		"--assignee", "@me",
 		"--base", repo.defaultBranch,
 		"--head", repo.workingBranch,
 		"--reviewer", "pulumi/Ecosystem",
