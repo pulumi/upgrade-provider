@@ -124,30 +124,10 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 	var repoExists bool
 	return step.Combined("Ensure '"+repoPath+"'",
 		step.F("Expected Location", func() (string, error) {
-			// Strip version
-			if match := versionSuffix.FindStringIndex(repoPath); match != nil {
-				repoPath = repoPath[:match[0]]
-			}
-
-			if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
-				name := strings.TrimPrefix(repo, "terraform-provider-")
-				org, ok := ProviderOrgs[name]
-				if !ok {
-					return "", fmt.Errorf("terraform-providers based path: missing remap for '%s'", name)
-				}
-				repoPath = prefix + "/" + org + "/" + repo
-			}
-
-			// from github.com/org/repo to $GOPATH/src/github.com/org
-			expectedLocation = filepath.Join(strings.Split(repoPath, "/")...)
-			cwd, err := os.Getwd()
+			var err error
+			expectedLocation, err = getRepoExpectedLocation(ctx, repoPath)
 			if err != nil {
-				return "", fmt.Errorf("could not resolve current directory: '%s", err)
-			}
-			if filepath.Base(repoPath) == filepath.Base(cwd) && filepath.Base(cwd) != "" {
-				expectedLocation = cwd
-			} else {
-				expectedLocation = filepath.Join(ctx.GoPath, "src", expectedLocation)
+				return "", err
 			}
 			if info, err := os.Stat(expectedLocation); err == nil {
 				if !info.IsDir() {
