@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,32 +15,29 @@ func TestGetRepoExpectedLocation(t *testing.T) {
 		GoPath: "Users/myuser/go",
 	}
 
-	cwd, err := os.Getwd()
-	assert.Nil(t, err)
+	mockRepoPath := filepath.Join("github.com", "pulumi", "random-provider")
+	defaultExpectedLocation := filepath.Join(ctx.GoPath, "src", mockRepoPath)
+
+	baseProviderCwd := filepath.Join("Users", "home", mockRepoPath)
+	subProviderCwd := filepath.Join(baseProviderCwd, "examples")
+	randomCwd := filepath.Join("Users", "random", "dir")
 
 	// test cwd == repo path
-	mockRepoPath := cwd
-	expected, err := getRepoExpectedLocation(ctx, mockRepoPath)
-	mockRepoPath = trimSeparators(mockRepoPath)
-	expected = trimSeparators(expected)
-	assert.Nil(t, err)
-	assert.Equal(t, mockRepoPath, expected)
+	tests := []struct{ cwd, repoPath, expected string }{
+		{baseProviderCwd, mockRepoPath, baseProviderCwd},   // expected set to cwd
+		{subProviderCwd, mockRepoPath, baseProviderCwd},    // expected set to top level of cwd repo path
+		{randomCwd, mockRepoPath, defaultExpectedLocation}, // expected set to default on no match
+	}
 
-	// test directory above cwd == repo path
-	mockRepoPath = strings.TrimSuffix(cwd, filepath.Base(cwd))
-	expected, err = getRepoExpectedLocation(ctx, mockRepoPath)
-	assert.Nil(t, err)
-	mockRepoPath = trimSeparators(mockRepoPath)
-	expected = trimSeparators(expected)
-	assert.Equal(t, mockRepoPath, expected)
-
-	// test cwd completely different from repo path
-	mockRepoPath = filepath.Join("github.com", "pulumi", "random-provider")
-	expected, err = getRepoExpectedLocation(ctx, mockRepoPath)
-	expected = trimSeparators(expected)
-	assert.Nil(t, err)
-	assert.Equal(t, filepath.Join(ctx.GoPath, "src", mockRepoPath), expected)
-
+	for _, tt := range tests {
+		tt := tt
+		t.Run(fmt.Sprintf("(%s,%s,%s)", tt.cwd, tt.repoPath, tt.expected), func(t *testing.T) {
+			expected, err := getRepoExpectedLocation(ctx, tt.cwd, tt.repoPath)
+			expected = trimSeparators(expected)
+			assert.Nil(t, err)
+			assert.Equal(t, trimSeparators(tt.expected), expected)
+		})
+	}
 }
 
 func trimSeparators(path string) string {

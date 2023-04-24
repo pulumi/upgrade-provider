@@ -343,9 +343,11 @@ func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) 
 	expectedLocation := filepath.Join(strings.Split(repoPath, "/")...)
 
 	tok := strings.Split(cwd, string(os.PathSeparator))
+	path := ""
 	for _, t := range tok {
+		path = filepath.Join(path, t)
 		if filepath.Base(expectedLocation) == t && t != "" {
-			return expectedLocation, nil
+			return path, nil
 		}
 	}
 
