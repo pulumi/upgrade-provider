@@ -835,15 +835,16 @@ func migrationSteps(ctx Context, repo ProviderRepo, providerName string, descrip
 }
 
 func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
-	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
 	providerName = strings.TrimPrefix(providerName, "pulumi-")
+	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
 	steps := []step.Step{
-		step.F("initializing bridge-metadata.json", func() (string, error) {
+		step.F("ensure bridge-metadata.json", func() (string, error) {
 			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 				_, err = os.Create(metadataPath)
 				if err != nil {
 					return "", fmt.Errorf("Could not initialize %s: %w", metadataPath, err)
 				}
+				return "created", nil
 			}
 			return "", nil
 		}),
