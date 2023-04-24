@@ -320,3 +320,36 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 
 	return semver.NewVersion(result.Latest.TagName)
 }
+
+// getRepoExpectedLocation checks the current working directory to see if `upgrade-provider` is being
+// called from within a provider directory or subdirectory, i.e. `user/home/pulumi/pulumi-docker/provider`.
+// If not, the expected location to clone the repo will be $GOPATH/src/github.com/org.
+func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) {
+	// Strip version
+	if match := versionSuffix.FindStringIndex(repoPath); match != nil {
+		repoPath = repoPath[:match[0]]
+	}
+
+	if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
+		name := strings.TrimPrefix(repo, "terraform-provider-")
+		org, ok := ProviderOrgs[name]
+		if !ok {
+			return "", fmt.Errorf("terraform-providers based path: missing remap for '%s'", name)
+		}
+		repoPath = prefix + "/" + org + "/" + repo
+	}
+
+	// from github.com/org/repo to $GOPATH/src/github.com/org
+	expectedLocation := filepath.Join(strings.Split(repoPath, "/")...)
+
+	tok := strings.Split(cwd, string(os.PathSeparator))
+	path := ""
+	for _, t := range tok {
+		path = filepath.Join(path, t)
+		if filepath.Base(expectedLocation) == t && t != "" {
+			return path, nil
+		}
+	}
+
+	return filepath.Join(ctx.GoPath, "src", expectedLocation), nil
+}
