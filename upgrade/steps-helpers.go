@@ -324,7 +324,7 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 // getRepoExpectedLocation checks the current working directory to see if `upgrade-provider` is being
 // called from within a provider directory or subdirectory, i.e. `user/home/pulumi/pulumi-docker/provider`.
 // If not, the expected location to clone the repo will be $GOPATH/src/github.com/org.
-func getRepoExpectedLocation(ctx Context, repoPath string) (string, error) {
+func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) {
 	// Strip version
 	if match := versionSuffix.FindStringIndex(repoPath); match != nil {
 		repoPath = repoPath[:match[0]]
@@ -341,10 +341,6 @@ func getRepoExpectedLocation(ctx Context, repoPath string) (string, error) {
 
 	// from github.com/org/repo to $GOPATH/src/github.com/org
 	expectedLocation := filepath.Join(strings.Split(repoPath, "/")...)
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("could not resolve current directory: '%s", err)
-	}
 
 	tok := strings.Split(cwd, string(os.PathSeparator))
 	for _, t := range tok {

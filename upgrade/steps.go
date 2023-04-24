@@ -124,8 +124,11 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 	var repoExists bool
 	return step.Combined("Ensure '"+repoPath+"'",
 		step.F("Expected Location", func() (string, error) {
-			var err error
-			expectedLocation, err = getRepoExpectedLocation(ctx, repoPath)
+			cwd, err := os.Getwd()
+			if err != nil {
+				return "", fmt.Errorf("could not resolve cwd: %w", err)
+			}
+			expectedLocation, err = getRepoExpectedLocation(ctx, cwd, repoPath)
 			if err != nil {
 				return "", err
 			}
