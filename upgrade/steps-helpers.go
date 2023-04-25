@@ -342,13 +342,13 @@ func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) 
 	// from github.com/org/repo to $GOPATH/src/github.com/org
 	expectedLocation := filepath.Join(strings.Split(repoPath, "/")...)
 
-	tok := strings.Split(cwd, string(os.PathSeparator))
-	path := ""
-	for _, t := range tok {
-		path = filepath.Join(path, t)
-		if filepath.Base(expectedLocation) == t && t != "" {
-			return path, nil
+	expectedBase := filepath.Base(expectedLocation)
+
+	for cwd != "" && cwd != string(os.PathSeparator) && cwd != "." {
+		if filepath.Base(cwd) == expectedBase {
+			return cwd, nil
 		}
+		cwd = filepath.Dir(cwd)
 	}
 
 	return filepath.Join(ctx.GoPath, "src", expectedLocation), nil

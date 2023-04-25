@@ -12,15 +12,15 @@ import (
 
 func TestGetRepoExpectedLocation(t *testing.T) {
 	ctx := Context{
-		GoPath: "Users/myuser/go",
+		GoPath: "/Users/myuser/go",
 	}
 
 	mockRepoPath := filepath.Join("github.com", "pulumi", "random-provider")
 	defaultExpectedLocation := filepath.Join(ctx.GoPath, "src", mockRepoPath)
 
-	baseProviderCwd := filepath.Join("Users", "home", mockRepoPath)
+	baseProviderCwd := string(os.PathSeparator) + filepath.Join("Users", "home", mockRepoPath)
 	subProviderCwd := filepath.Join(baseProviderCwd, "examples")
-	randomCwd := filepath.Join("Users", "random", "dir")
+	randomCwd := string(os.PathSeparator) + filepath.Join("Users", "random", "dir")
 
 	// test cwd == repo path
 	tests := []struct{ cwd, repoPath, expected string }{
