@@ -841,7 +841,7 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 			}
 			return "", nil
 		}),
-		step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root),
+		step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)),
 	}
 	migrationSteps, err := migrationSteps(ctx, repo, providerName, "Add AutoAliasing", AutoAliasingMigration)
 	if err != nil {
