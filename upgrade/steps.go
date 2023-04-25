@@ -163,9 +163,22 @@ func UpgradeProviderVersion(
 	ctx Context, goMod *GoMod, target *semver.Version,
 	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
+	updateLatestPluginSDK, didUpdate := getLatestTFPluginSDKReplace(ctx, repo)
+
 	// We start by updating the terraform-plugin-sdk because later updates sometimes
 	// rely on it.
-	steps := []step.Step{getLatestTFPluginSDKReplace(ctx, repo)}
+	steps := []step.Step{
+		updateLatestPluginSDK,
+		// If we updated the pinned plugin sdk, then we need to run `go mod tidy`
+		// to normalize the ref.
+		step.Computed(func() step.Step {
+			if !(*didUpdate) {
+				return nil
+			}
+			return step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).
+				In(repo.providerDir())
+		}),
+	}
 
 	if goMod.Kind.IsPatched() {
 		// If the provider is patched, we don't use the go module system at all. Instead
@@ -327,13 +340,15 @@ func InformGitHub(
 //
 // This is predicated on updating to the latest version being safe. We will need to
 // revisit this when a new major version of the plugin SDK is released.
-func getLatestTFPluginSDKReplace(ctx context.Context, repo ProviderRepo) step.Step {
+func getLatestTFPluginSDKReplace(ctx context.Context, repo ProviderRepo) (step.Step, *bool) {
 	name := "Update TF Plugin SDK Fork"
 	stepFail := func(msg string, a ...any) step.Step {
 		return step.F(name, func() (string, error) {
 			return "", fmt.Errorf(msg, a...)
 		})
 	}
+
+	didReplace := new(bool)
 
 	// We do discover in a step.Computed so if the fork isn't present, it isn't
 	// displayed to the user.
@@ -431,9 +446,10 @@ func getLatestTFPluginSDKReplace(ctx context.Context, repo ProviderRepo) step.St
 				return "", fmt.Errorf("failed to format file as bytes: %w", err)
 			}
 			err = os.WriteFile("go.mod", goModFile, 0600)
+			*didReplace = true
 			return "updated", err
 		})
-	}).In(repo.providerDir())
+	}).In(repo.providerDir()), didReplace
 }
 
 func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
