@@ -170,7 +170,10 @@ func GetRepoKind(ctx context.Context, repo ProviderRepo, providerName string) (*
 		repoOrgSeperator := strings.LastIndexByte(before, '/')
 		org := before[repoOrgSeperator+1:]
 		if org != "pulumi" {
-			return nil, fmt.Errorf("go.mod: tf fork maintained by '%s': expected 'pulumi'", org)
+			// We have a replace directive for upstream, but it doesn't point
+			// to a pulumi fork. For the purposes of this tool, this is not a
+			// *forked* provider.
+			break
 		}
 		fork = replace
 		break
