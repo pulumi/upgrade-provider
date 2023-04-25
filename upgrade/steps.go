@@ -163,7 +163,10 @@ func UpgradeProviderVersion(
 	ctx Context, goMod *GoMod, target *semver.Version,
 	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
-	steps := []step.Step{}
+	// We start by updating the terraform-plugin-sdk because later updates sometimes
+	// rely on it.
+	steps := []step.Step{getLatestTFPluginSDKReplace(ctx, repo)}
+
 	if goMod.Kind.IsPatched() {
 		// If the provider is patched, we don't use the go module system at all. Instead
 		// we update the module referenced to the new tag.
@@ -266,7 +269,6 @@ func UpgradeProviderVersion(
 			"go", "mod", "tidy")).In(&goModDir))
 	}
 
-	steps = append(steps, getLatestTFPluginSDKReplace(ctx, repo))
 	return step.Combined("Update TF Provider", steps...)
 }
 
