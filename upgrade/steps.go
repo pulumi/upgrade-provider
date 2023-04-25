@@ -572,6 +572,7 @@ func PullDefaultBranch(ctx Context, remote string) step.Step {
 			}
 			return "", fmt.Errorf("could not find 'master' or 'main' branch")
 		}).AssignTo(&defaultBranch),
+		step.Cmd(exec.CommandContext(ctx, "git", "fetch")),
 		step.Computed(func() step.Step {
 			return step.Cmd(exec.CommandContext(ctx, "git", "checkout", defaultBranch))
 		}),
