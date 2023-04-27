@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 const (
@@ -50,7 +52,7 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error)
 
 	astutil.AddImport(fset, file, TfBridgeXPkg)
 	astutil.AddImport(fset, file, ContractPkg)
-	astutil.AddNamedImport(fset, file, "EMBED_COMMENT_ANCHOR", "embed")
+	contract.Assert(astutil.AddNamedImport(fset, file, "EMBED_COMMENT_ANCHOR", "embed"))
 
 	astutil.Apply(file, nil, func(c *astutil.Cursor) bool {
 		n := c.Node()
@@ -150,12 +152,16 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error)
 	if err != nil {
 		return false, err
 	}
+	replaceAnchors := func(s string) string {
+		s = strings.Replace(s, "EMBED_COMMENT_ANCHOR \"embed\"",
+			"// embed is used to store bridge-metadata.json in the compiled binary\n    _ \"embed\"", 1)
+		s = strings.Replace(s, `var metadata []byte // EMBED_DIRECTIVE_ANCHOR`,
+			fmt.Sprintf("//go:embed cmd/pulumi-resource-%s/bridge-metadata.json\nvar metadata []byte",
+				providerName), 1)
+		return s
+	}
 	s := buf.String()
-	s = strings.Replace(s, `EMBED_COMMENT_ANCHOR "embed"`,
-		"// embed is used to store bridge-metadata.json in the compiled binary\n    _ \"embed\"", 1)
-	s = strings.Replace(s, `var metadata []byte // EMBED_DIRECTIVE_ANCHOR`,
-		fmt.Sprintf("//go:embed cmd/pulumi-resource-%s/bridge-metadata.json\nvar metadata []byte",
-			providerName), 1)
+	s = replaceAnchors(s)
 	// format output
 	formatted, err := format.Source([]byte(s))
 	if err != nil {
