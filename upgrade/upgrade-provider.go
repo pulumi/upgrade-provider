@@ -26,10 +26,7 @@ func UpgradeProvider(ctx Context, name, upstreamProviderName string) error {
 	var targetBridgeVersion string
 	var upgradeTargets UpstreamVersions
 	var goMod *GoMod
-	// upstreamProviderName := strings.TrimPrefix(name, "pulumi-")
-	// if s, ok := ProviderName[upstreamProviderName]; ok {
-	// 	upstreamProviderName = s
-	// }
+
 	repo.upstreamName = upstreamProviderName
 
 	ok := step.Run(step.Combined("Setting Up Environment",

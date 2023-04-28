@@ -139,13 +139,6 @@ func say(msg string) func([]byte) (string, error) {
 	}
 }
 
-func getTfProviderRepoName(providerName string) string {
-	if tfRepoName, ok := ProviderName[providerName]; ok {
-		providerName = tfRepoName
-	}
-	return "terraform-provider-" + providerName
-}
-
 // setCurrentUpstreamFromPatched sets repo.currentUpstreamVersion to the version pointed to in the
 // submodule in the default branch.
 //

@@ -101,7 +101,6 @@ func GetRepoKind(ctx context.Context, repo ProviderRepo) (*GoMod, error) {
 		return nil, fmt.Errorf(bridgeMissingMsg)
 	}
 
-	// tfProviderRepoName := getTfProviderRepoName(providerName)
 	tfProviderRepoName := repo.upstreamName
 
 	getUpstream := func(file *modfile.File) (*modfile.Require, error) {
