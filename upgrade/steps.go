@@ -260,7 +260,7 @@ func UpgradeProviderVersion(
 	if goMod.Kind.IsForked() {
 		// If we are running a forked update, we need to replace the reference to the fork
 		// with the SHA of the new upstream branch.
-		contract.Assert(forkedProviderUpstreamCommit != "")
+		contract.Assertf(forkedProviderUpstreamCommit != "", "fork provider upstream commit cannot be null")
 
 		replaceIn := func(dir *string) {
 			steps = append(steps, step.Cmd(exec.CommandContext(ctx,
@@ -574,7 +574,7 @@ func PullDefaultBranch(ctx Context, remote string) step.Step {
 					continue
 				}
 				_, ref, found := strings.Cut(line, "\t")
-				contract.Assert(found)
+				contract.Assertf(found, "not found")
 				branch := strings.TrimPrefix(ref, "refs/heads/")
 				if branch == "master" {
 					hasMaster = true
@@ -729,7 +729,7 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 		if err != nil {
 			return err
 		}
-		contract.Assert(doc.Kind == yaml.DocumentNode)
+		contract.Assertf(doc.Kind == yaml.DocumentNode, "must be yaml format")
 
 		// We have parsed the document node, now lets find the "env" key under it.
 		var env *yaml.Node
@@ -820,7 +820,7 @@ func UpdateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
 }
 
 func migrationSteps(ctx Context, repo ProviderRepo, providerName string, description string,
-	migrationFunc func(resourcesFilePath, providerName string) (bool, error)) (step.Step, error) {
+	migrationFunc func(resourcesFilePath, providerName string) (bool, error)) ([]step.Step, error) {
 	steps := []step.Step{}
 	providerName = strings.TrimPrefix(providerName, "pulumi-")
 	changesMade := false
@@ -828,20 +828,21 @@ func migrationSteps(ctx Context, repo ProviderRepo, providerName string, descrip
 		step.F(description, func() (string, error) {
 			changes, err := migrationFunc(filepath.Join(*repo.providerDir(), "resources.go"), providerName)
 			if err != nil {
-				return "failed to perform auto aliasing migration", err
+				return fmt.Sprintf("failed to perform \"%s\" migration", description), err
 			}
 			changesMade = changes
+			fmt.Println(description, ", changes made: ", changesMade)
 			return "", err
 		}))
 	if changesMade {
 		steps = append(steps,
 			step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "resources.go")).In(&repo.root),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "code migration")).In(&repo.root),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", description)).In(&repo.root),
 		)
 	}
 
-	return step.Combined("Add AutoAliasing", steps...), nil
+	return steps, nil
 }
 
 func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
@@ -860,15 +861,20 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 		}),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root),
 	}
-	migrationSteps, err := migrationSteps(ctx, repo, providerName, "Add AutoAliasing", AutoAliasingMigration)
+	migrationSteps, err := migrationSteps(ctx, repo, providerName, "Perform auto aliasing migration",
+		AutoAliasingMigration)
 	if err != nil {
 		return nil, err
 	}
-	steps = append(steps, migrationSteps)
+	steps = append(steps, migrationSteps...)
 	return step.Combined("Add AutoAliasing", steps...), nil
 }
 
 func ReplaceAssertNoError(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
-	return migrationSteps(ctx, repo, providerName, "Remove deprecated contract.Assert",
-		AutoAliasingMigration)
+	steps, err := migrationSteps(ctx, repo, providerName, "Remove deprecated contract.Assert",
+		AssertNoErrorMigration)
+	if err != nil {
+		return nil, err
+	}
+	return step.Combined("Replace AssertNoError with AssertNoErrorf", steps...), nil
 }
