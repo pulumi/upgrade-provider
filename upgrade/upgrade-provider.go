@@ -27,8 +27,6 @@ func UpgradeProvider(ctx Context, name string) error {
 	var upgradeTargets UpstreamVersions
 	var goMod *GoMod
 
-	repo.upstreamName = ctx.UpstreamProviderName
-
 	ok := step.Run(step.Combined("Setting Up Environment",
 		step.Env("GOWORK", "off"),
 		step.Env("PULUMI_MISSING_DOCS_ERROR", "true"),
