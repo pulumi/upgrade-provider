@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 
@@ -21,16 +20,17 @@ var CodeMigrations = map[string]CodeMigration{
 	"assertnoerror": ReplaceAssertNoError,
 }
 
-func UpgradeProvider(ctx Context, name string) error {
+func UpgradeProvider(ctx Context, name, upstreamProviderName string) error {
 	var err error
 	var repo ProviderRepo
 	var targetBridgeVersion string
 	var upgradeTargets UpstreamVersions
 	var goMod *GoMod
-	upstreamProviderName := strings.TrimPrefix(name, "pulumi-")
-	if s, ok := ProviderName[upstreamProviderName]; ok {
-		upstreamProviderName = s
-	}
+	// upstreamProviderName := strings.TrimPrefix(name, "pulumi-")
+	// if s, ok := ProviderName[upstreamProviderName]; ok {
+	// 	upstreamProviderName = s
+	// }
+	repo.upstreamName = upstreamProviderName
 
 	ok := step.Run(step.Combined("Setting Up Environment",
 		step.Env("GOWORK", "off"),
@@ -47,7 +47,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	discoverSteps = append(discoverSteps, step.F("Repo kind", func() (string, error) {
-		goMod, err = GetRepoKind(ctx, repo, upstreamProviderName)
+		goMod, err = GetRepoKind(ctx, repo)
 		if err != nil {
 			return "", err
 		}

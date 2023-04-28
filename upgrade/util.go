@@ -21,6 +21,8 @@ type Context struct {
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
 
+	UpstreamProviderName string
+
 	UpgradeCodeMigration bool
 	MigrationOpts        []string
 }
@@ -47,6 +49,8 @@ type ProviderRepo struct {
 	// The upstream version we are upgrading from.  Because not all upstream providers
 	// are go module compliment, we might not be able to always resolve this version.
 	currentUpstreamVersion *semver.Version
+
+	upstreamName string
 }
 
 func (p ProviderRepo) providerDir() *string {

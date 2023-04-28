@@ -6,13 +6,24 @@ import (
 	"fmt"
 	"go/build"
 	"os"
+	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/upgrade"
+)
+
+var (
+	// The name of our config file, without the file extension because viper supports many different config file languages.
+	defaultConfigFilename = "upgrade-config"
+	// The environment variable prefix of all environment variables bound to our command line flags.
+	// For example, --number is bound to UPGRADE_NUMBER.
+	envPrefix = "UPGRADE"
 )
 
 func cmd() *cobra.Command {
@@ -42,9 +53,12 @@ func cmd() *cobra.Command {
 		Use:   "upgrade-provider",
 		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
 		Args:  cobra.ExactArgs(1),
-		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			err := initializeConfig(cmd)
+			if err != nil {
+				return err
+			}
 			// Validate that maxVersion is a valid version
-			var err error
 			if maxVersion != "" {
 				context.MaxVersion, err = semver.NewVersion(maxVersion)
 				if err != nil {
@@ -92,11 +106,10 @@ func cmd() *cobra.Command {
 				return fmt.Errorf(
 					"cannot specify the provider version unless the provider will be upgraded")
 			}
-
 			return nil
 		},
 		Run: func(_ *cobra.Command, args []string) {
-			err := upgrade.UpgradeProvider(context, args[0])
+			err := upgrade.UpgradeProvider(context, args[0], context.UpstreamProviderName)
 			exitOnError(err)
 		},
 	}
@@ -120,10 +133,66 @@ If the passed version does not exist, an error is signaled.`)
 		`A comma separated list of code migration to perform:
 - "autoalias": Apply auto aliasing to the provider.`)
 
+	cmd.PersistentFlags().StringVar(&context.UpstreamProviderName, "upstream-provider-name", "",
+		"The name of the upstream provider.")
+
 	return cmd
 }
 
 func main() {
 	err := cmd().Execute()
 	contract.IgnoreError(err)
+}
+
+// Adapted from https://github.com/carolynvs/stingoftheviper/blob/main/main.go
+func initializeConfig(cmd *cobra.Command) error {
+	v := viper.New()
+
+	// Set the base name of the config file, without the file extension.
+	v.SetConfigName(defaultConfigFilename)
+
+	// Set as many paths as you like where viper should look for the
+	// config file. We are only looking in the current working directory.
+	v.AddConfigPath(".")
+
+	// Attempt to read the config file, gracefully ignoring errors
+	// caused by a config file not being found. Return an error
+	// if we cannot parse the config file.
+	if err := v.ReadInConfig(); err != nil {
+		// It's okay if there isn't a config file
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return err
+		}
+	}
+
+	// When we bind flags to environment variables expect that the
+	// environment variables are prefixed, e.g. a flag like --number
+	// binds to an environment variable UPGRADE_NUMBER. This helps
+	// avoid conflicts.
+	v.SetEnvPrefix(envPrefix)
+
+	// Environment variables can't have dashes in them, so bind them to their equivalent
+	// keys with underscores, e.g. --upstream-provider-name to UPGRADE_UPSTREAM_PROVIDER_NAME
+	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+
+	// Bind to environment variables
+	// Works great for simple config names, but needs help for names
+	// like --favorite-color which we fix in the bindFlags function
+	v.AutomaticEnv()
+
+	// Bind the current command's flags to viper
+	bindFlags(cmd, v)
+
+	return nil
+}
+
+// Bind each cobra flag to its associated viper configuration (config file and environment variable)
+func bindFlags(cmd *cobra.Command, v *viper.Viper) {
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		// Apply the viper config value to the flag when the flag is not set and viper has a value
+		if !f.Changed && v.IsSet(f.Name) {
+			val := v.Get(f.Name)
+			cmd.Flags().Set(f.Name, fmt.Sprintf("%v", val))
+		}
+	})
 }
