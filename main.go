@@ -11,6 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
 
+	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/upgrade"
 )
 
@@ -20,7 +21,7 @@ func cmd() *cobra.Command {
 	if !ok {
 		gopath = build.Default.GOPATH
 	}
-	var upgradeKind string
+	var upgradeKind []string
 
 	context := upgrade.Context{
 		Context: context.Background(),
@@ -53,21 +54,38 @@ func cmd() *cobra.Command {
 			}
 
 			// Validate the kind switch
-			switch upgradeKind {
-			case "all":
-				context.UpgradeBridgeVersion = true
-				context.UpgradeProviderVersion = true
-				context.UpgradeCodeMigration = true
-			case "bridge":
-				context.UpgradeBridgeVersion = true
-			case "provider":
-				context.UpgradeProviderVersion = true
-			case "code":
-				context.UpgradeCodeMigration = true
-			default:
-				return fmt.Errorf(
-					"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, or `code`.",
-					upgradeKind)
+			var warnedAll bool
+			for _, kind := range upgradeKind {
+				warn := func(msg string, a ...any) {
+					fmt.Println(colorize.Warn(fmt.Sprintf(msg, a...)))
+				}
+				set := func(v *bool) {
+					if *v && !warnedAll {
+						warn("Duplicate `--kind` argument: %s", kind)
+					}
+					*v = true
+				}
+
+				switch kind {
+				case "all":
+					context.UpgradeBridgeVersion = true
+					context.UpgradeProviderVersion = true
+					context.UpgradeCodeMigration = true
+					if len(upgradeKind) > 1 {
+						warnedAll = true
+						warn("`--kind=all` implies all other options")
+					}
+				case "bridge":
+					set(&context.UpgradeBridgeVersion)
+				case "provider":
+					set(&context.UpgradeProviderVersion)
+				case "code":
+					set(&context.UpgradeCodeMigration)
+				default:
+					return fmt.Errorf(
+						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, or `code`.",
+						upgradeKind)
+				}
 			}
 
 			if context.MaxVersion != nil && !context.UpgradeProviderVersion {
@@ -91,9 +109,9 @@ If the passed version does not exist, an error is signaled.`)
 	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
 		`Upgrade the provider to a new major version.`)
 
-	cmd.PersistentFlags().StringVar(&upgradeKind, "kind", "all",
+	cmd.PersistentFlags().StringSliceVar(&upgradeKind, "kind", []string{"all"},
 		`The kind of upgrade to perform:
-- "all":     Upgrade the upstream provider and the bridge.
+- "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code".
 - "bridge":  Upgrade the bridge only.
 - "provider: Upgrade the upstream provider only.
 - "code":     Perform some number of code migrations.`)
