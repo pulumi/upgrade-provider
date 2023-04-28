@@ -18,9 +18,9 @@ import (
 	"github.com/pulumi/upgrade-provider/upgrade"
 )
 
-var (
+const (
 	// The name of our config file, without the file extension because viper supports many different config file languages.
-	defaultConfigFilename = "upgrade-config"
+	configFilename = ".upgrade-config"
 	// The environment variable prefix of all environment variables bound to our command line flags.
 	// For example, --number is bound to UPGRADE_NUMBER.
 	envPrefix = "UPGRADE"
@@ -149,7 +149,7 @@ func initializeConfig(cmd *cobra.Command) error {
 	v := viper.New()
 
 	// Set the base name of the config file, without the file extension.
-	v.SetConfigName(defaultConfigFilename)
+	v.SetConfigName(configFilename)
 
 	// Set as many paths as you like where viper should look for the
 	// config file. We are only looking in the current working directory.
