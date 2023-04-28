@@ -20,14 +20,14 @@ var CodeMigrations = map[string]CodeMigration{
 	"assertnoerror": ReplaceAssertNoError,
 }
 
-func UpgradeProvider(ctx Context, name, upstreamProviderName string) error {
+func UpgradeProvider(ctx Context, name string) error {
 	var err error
 	var repo ProviderRepo
 	var targetBridgeVersion string
 	var upgradeTargets UpstreamVersions
 	var goMod *GoMod
 
-	repo.upstreamName = upstreamProviderName
+	repo.upstreamName = ctx.UpstreamProviderName
 
 	ok := step.Run(step.Combined("Setting Up Environment",
 		step.Env("GOWORK", "off"),
@@ -169,7 +169,7 @@ func UpgradeProvider(ctx Context, name, upstreamProviderName string) error {
 	var targetSHA string
 	if ctx.UpgradeProviderVersion {
 		repo.workingBranch = fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s",
-			upstreamProviderName, upgradeTargets.Latest())
+			ctx.UpstreamProviderName, upgradeTargets.Latest())
 	} else if ctx.UpgradeBridgeVersion {
 		contract.Assertf(targetBridgeVersion != "",
 			"We are upgrading the bridge, so we must have a target version")
@@ -274,8 +274,7 @@ func UpgradeProvider(ctx Context, name, upstreamProviderName string) error {
 		}),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		GitCommit(ctx, "make build_sdks").In(&repo.root),
-		InformGitHub(ctx, upgradeTargets, repo, goMod,
-			upstreamProviderName, targetBridgeVersion),
+		InformGitHub(ctx, upgradeTargets, repo, goMod, targetBridgeVersion),
 	)
 
 	ok = step.Run(step.Combined("Update Artifacts", artifacts...))

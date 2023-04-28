@@ -82,7 +82,7 @@ func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleMod
 	return module.Version{}, false, nil
 }
 
-func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, goMod *GoMod, targetBridge, upstreamProviderName string) string {
+func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, goMod *GoMod, targetBridge string) string {
 	b := new(strings.Builder)
 	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n",
 		strings.Join(os.Args[1:], " "))
@@ -98,8 +98,8 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, goM
 		if repo.currentUpstreamVersion != nil {
 			prev = fmt.Sprintf("from %s ", repo.currentUpstreamVersion)
 		}
-		fmt.Fprintf(b, "Upgrading terraform-provider-%s %sto %s.\n",
-			upstreamProviderName, prev, upgradeTargets.Latest())
+		fmt.Fprintf(b, "Upgrading %s %s to %s.\n",
+			ctx.UpstreamProviderName, prev, upgradeTargets.Latest())
 	}
 	if ctx.UpgradeBridgeVersion {
 		fmt.Fprintf(b, "Upgrading pulumi-terraform-bridge from %s to %s.\n",

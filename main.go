@@ -109,7 +109,7 @@ func cmd() *cobra.Command {
 			return nil
 		},
 		Run: func(_ *cobra.Command, args []string) {
-			err := upgrade.UpgradeProvider(context, args[0], context.UpstreamProviderName)
+			err := upgrade.UpgradeProvider(context, args[0])
 			exitOnError(err)
 		},
 	}
