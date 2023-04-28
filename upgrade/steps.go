@@ -260,7 +260,7 @@ func UpgradeProviderVersion(
 	if goMod.Kind.IsForked() {
 		// If we are running a forked update, we need to replace the reference to the fork
 		// with the SHA of the new upstream branch.
-		contract.Assert(forkedProviderUpstreamCommit != "")
+		contract.Assertf(forkedProviderUpstreamCommit != "", "fork provider upstream commit cannot be null")
 
 		replaceIn := func(dir *string) {
 			steps = append(steps, step.Cmd(exec.CommandContext(ctx,
@@ -574,7 +574,7 @@ func PullDefaultBranch(ctx Context, remote string) step.Step {
 					continue
 				}
 				_, ref, found := strings.Cut(line, "\t")
-				contract.Assert(found)
+				contract.Assertf(found, "not found")
 				branch := strings.TrimPrefix(ref, "refs/heads/")
 				if branch == "master" {
 					hasMaster = true
@@ -729,7 +729,7 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 		if err != nil {
 			return err
 		}
-		contract.Assert(doc.Kind == yaml.DocumentNode)
+		contract.Assertf(doc.Kind == yaml.DocumentNode, "must be yaml format")
 
 		// We have parsed the document node, now lets find the "env" key under it.
 		var env *yaml.Node

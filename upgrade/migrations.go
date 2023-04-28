@@ -52,7 +52,7 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error)
 
 	astutil.AddImport(fset, file, TfBridgeXPkg)
 	astutil.AddImport(fset, file, ContractPkg)
-	contract.Assert(astutil.AddNamedImport(fset, file, "EMBED_COMMENT_ANCHOR", "embed"))
+	contract.Assertf(astutil.AddNamedImport(fset, file, "EMBED_COMMENT_ANCHOR", "embed"), "duplicate import")
 
 	astutil.Apply(file, nil, func(c *astutil.Cursor) bool {
 		n := c.Node()
