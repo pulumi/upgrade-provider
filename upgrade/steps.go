@@ -876,5 +876,5 @@ func ReplaceAssertNoError(ctx Context, repo ProviderRepo, providerName string) (
 	if err != nil {
 		return nil, err
 	}
-	return step.Combined("Replace AssertNoError", steps...), nil
+	return step.Combined("Replace AssertNoError with AssertNoErrorf", steps...), nil
 }
