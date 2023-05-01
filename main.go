@@ -33,6 +33,7 @@ func cmd() *cobra.Command {
 		gopath = build.Default.GOPATH
 	}
 	var upgradeKind []string
+	var experimental bool
 
 	context := upgrade.Context{
 		Context: context.Background(),
@@ -84,7 +85,9 @@ func cmd() *cobra.Command {
 				case "all":
 					context.UpgradeBridgeVersion = true
 					context.UpgradeProviderVersion = true
-					context.UpgradeCodeMigration = true
+					if experimental {
+						context.UpgradeCodeMigration = true
+					}
 					if len(upgradeKind) > 1 {
 						warnedAll = true
 						warn("`--kind=all` implies all other options")
@@ -128,6 +131,9 @@ If the passed version does not exist, an error is signaled.`)
 - "bridge":  Upgrade the bridge only.
 - "provider: Upgrade the upstream provider only.
 - "code":     Perform some number of code migrations.`)
+
+	cmd.PersistentFlags().BoolVar(&experimental, "experimental", false,
+		`Enable experimental features, such as auto token mapping and auto aliasing`)
 
 	cmd.PersistentFlags().StringSliceVar(&context.MigrationOpts, "migration-opts", nil,
 		`A comma separated list of code migration to perform:
