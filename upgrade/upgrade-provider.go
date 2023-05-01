@@ -13,7 +13,7 @@ import (
 	"github.com/pulumi/upgrade-provider/step"
 )
 
-type CodeMigration = func(ctx Context, repo ProviderRepo, providerName string) (step.Step, error)
+type CodeMigration = func(ctx Context, repo ProviderRepo) (step.Step, error)
 
 var CodeMigrations = map[string]CodeMigration{
 	"autoalias":     AddAutoAliasing,
@@ -37,7 +37,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	discoverSteps := []step.Step{
-		PulumiProviderRepos(ctx, name).AssignTo(&repo.root),
+		OrgProviderRepos(ctx, name).AssignTo(&repo.root),
 		PullDefaultBranch(ctx, "origin").In(&repo.root).
 			AssignTo(&repo.defaultBranch),
 	}
@@ -115,7 +115,7 @@ func UpgradeProvider(ctx Context, name string) error {
 		discoverSteps = append(discoverSteps,
 			step.F("Current Major Version", func() (string, error) {
 				var err error
-				repo.currentVersion, err = latestRelease(ctx, "pulumi/"+name)
+				repo.currentVersion, err = latestRelease(ctx, name)
 				if err != nil {
 					return "", err
 				}
@@ -158,7 +158,7 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() && ctx.UpgradeProviderVersion {
-		ok = step.Run(upgradeUpstreamFork(ctx, name, upgradeTargets.Latest(), goMod).
+		ok = step.Run(upgradeUpstreamFork(ctx, repo.name, upgradeTargets.Latest(), goMod).
 			AssignTo(&forkedProviderUpstreamCommit))
 		if !ok {
 			return ErrHandled
@@ -230,7 +230,7 @@ func UpgradeProvider(ctx Context, name string) error {
 				return fmt.Errorf("unknown migration '%s'", opt)
 			}
 
-			migration, err := getMigration(ctx, repo, name)
+			migration, err := getMigration(ctx, repo)
 			if err != nil {
 				return fmt.Errorf("unable implement migration '%s': %w", opt, err)
 			}
@@ -254,7 +254,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			}
 
 			return UpdateFile("Update module in sdk/go.mod", "sdk/go.mod", func(b []byte) ([]byte, error) {
-				base := "module github.com/pulumi/" + name + "/sdk"
+				base := "module github.com/" + name + "/sdk"
 				old := base
 				if repo.currentVersion.Major() > 1 {
 					old += fmt.Sprintf("/v%d", repo.currentVersion.Major())
