@@ -59,6 +59,11 @@ func cmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Require `upstream-provider-name` to be set
+			if context.UpstreamProviderName == "" {
+				return errors.New("`upstream-provider-name` must be provided")
+			}
+
 			// Validate that maxVersion is a valid version
 			if maxVersion != "" {
 				context.MaxVersion, err = semver.NewVersion(maxVersion)
