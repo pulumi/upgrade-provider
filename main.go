@@ -146,7 +146,8 @@ If the passed version does not exist, an error is signaled.`)
 - "autoalias": Apply auto aliasing to the provider.`)
 
 	cmd.PersistentFlags().StringVar(&context.UpstreamProviderName, "upstream-provider-name", "",
-		"The name of the upstream provider.")
+		`The name of the upstream provider.
+Must be set in '.upgrade-config.yml' or passed with flag.`)
 
 	return cmd
 }
