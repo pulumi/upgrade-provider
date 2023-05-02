@@ -21,6 +21,8 @@ type Context struct {
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
 
+	UpstreamProviderName string
+
 	UpgradeCodeMigration bool
 	MigrationOpts        []string
 }

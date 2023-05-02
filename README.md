@@ -138,6 +138,14 @@ Then the basic provider upgrade is performed:
 
 If `shim` is a subfolder of `provider`, then upgrades will be performed in `shim`.
 
+## Configuration
+
+A configuration file `.upgrade-config.{yml/json}` may be defined within the provider directory.
+Values include:
+- `upstream-provider-name`: The name of the upstream provider repo, i.e. `terraform-provider-docker`
+- `experimental`: Whether to enable experimental `pulumi-terraform-bridge` features https://github.com/pulumi/pulumi-terraform-bridge/tree/master/pkg/tfbridge/x. Value must be [true, false].
+
+
 ## Project Guidelines
 
 ### Goals

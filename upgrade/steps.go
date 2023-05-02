@@ -287,7 +287,7 @@ func UpgradeProviderVersion(
 
 func InformGitHub(
 	ctx Context, target UpstreamVersions, repo ProviderRepo,
-	goMod *GoMod, upstreamProviderName, targetBridgeVersion string,
+	goMod *GoMod, targetBridgeVersion string,
 ) step.Step {
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
@@ -295,7 +295,7 @@ func InformGitHub(
 	var prTitle string
 	if ctx.UpgradeProviderVersion {
 		prTitle = fmt.Sprintf("Upgrade terraform-provider-%s to v%s",
-			upstreamProviderName, target.Latest())
+			ctx.UpstreamProviderName, target.Latest())
 	} else if ctx.UpgradeBridgeVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
 	} else if ctx.UpgradeCodeMigration {
@@ -309,7 +309,7 @@ func InformGitHub(
 		"--head", repo.workingBranch,
 		"--reviewer", "pulumi/Ecosystem",
 		"--title", prTitle,
-		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, upstreamProviderName),
+		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion),
 	)).In(&repo.root)
 	return step.Combined("GitHub",
 		pushBranch,
