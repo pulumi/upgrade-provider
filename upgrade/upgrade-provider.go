@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"golang.org/x/mod/semver"
 
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
@@ -85,6 +86,11 @@ func UpgradeProvider(ctx Context, name string) error {
 
 				var previous string
 				if repo.currentUpstreamVersion != nil {
+					if semver.Compare(repo.currentUpstreamVersion.String(),
+						upgradeTargets.Latest().String()) > 0 {
+						return "", fmt.Errorf("current upstream version %v is greater than target version %v",
+							repo.currentUpstreamVersion, upgradeTargets.Latest())
+					}
 					previous = fmt.Sprintf("%s -> ", repo.currentUpstreamVersion)
 				}
 
