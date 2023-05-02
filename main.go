@@ -112,7 +112,13 @@ func cmd() *cobra.Command {
 			return nil
 		},
 		Run: func(_ *cobra.Command, args []string) {
-			err := upgrade.UpgradeProvider(context, args[0])
+			// Validate argument is {org}/{repo}
+			tok := strings.Split(args[0], "/")
+			if len(tok) != 2 {
+				fmt.Println("error: argument must be provided as {org}/{repo}")
+				os.Exit(1)
+			}
+			err := upgrade.UpgradeProvider(context, tok[0], tok[1])
 			exitOnError(err)
 		},
 	}

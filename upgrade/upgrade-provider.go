@@ -20,12 +20,15 @@ var CodeMigrations = map[string]CodeMigration{
 	"assertnoerror": ReplaceAssertNoError,
 }
 
-func UpgradeProvider(ctx Context, name string) error {
+func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	var err error
 	var repo ProviderRepo
 	var targetBridgeVersion string
 	var upgradeTargets UpstreamVersions
 	var goMod *GoMod
+
+	repo.org = repoOrg
+	repo.name = repoName
 
 	ok := step.Run(step.Combined("Setting Up Environment",
 		step.Env("GOWORK", "off"),
@@ -37,7 +40,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	discoverSteps := []step.Step{
-		OrgProviderRepos(ctx, name).AssignTo(&repo.root),
+		OrgProviderRepos(ctx, repoName).AssignTo(&repo.root),
 		PullDefaultBranch(ctx, "origin").In(&repo.root).
 			AssignTo(&repo.defaultBranch),
 	}
@@ -54,7 +57,7 @@ func UpgradeProvider(ctx Context, name string) error {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Provider Update", func() (string, error) {
 				var msg string
-				upgradeTargets, msg, err = GetExpectedTarget(ctx, name)
+				upgradeTargets, msg, err = GetExpectedTarget(ctx, repoName)
 				if err != nil {
 					return "", err
 				}
@@ -115,7 +118,7 @@ func UpgradeProvider(ctx Context, name string) error {
 		discoverSteps = append(discoverSteps,
 			step.F("Current Major Version", func() (string, error) {
 				var err error
-				repo.currentVersion, err = latestRelease(ctx, name)
+				repo.currentVersion, err = latestRelease(ctx, repoName)
 				if err != nil {
 					return "", err
 				}
@@ -254,7 +257,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			}
 
 			return UpdateFile("Update module in sdk/go.mod", "sdk/go.mod", func(b []byte) ([]byte, error) {
-				base := "module github.com/" + name + "/sdk"
+				base := "module github.com/" + repoName + "/sdk"
 				old := base
 				if repo.currentVersion.Major() > 1 {
 					old += fmt.Sprintf("/v%d", repo.currentVersion.Major())
