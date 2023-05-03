@@ -64,8 +64,7 @@ func cmd() *cobra.Command {
 			// Validate argument is {org}/{repo}
 			tok := strings.Split(args[0], "/")
 			if len(tok) != 2 {
-				fmt.Println("error: argument must be provided as {org}/{repo}")
-				os.Exit(1)
+				return errors.New("argument must be provided as {org}/{repo}")
 			}
 			repoOrg, repoName = tok[0], tok[1]
 			// Require `upstream-provider-name` to be set
