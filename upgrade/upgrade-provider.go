@@ -59,7 +59,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				var msg string
 				upgradeTargets, msg, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName)
 				if err != nil {
-					return "failed to get expected upgrade version", err
+					return "", err
 				}
 
 				// If we have upgrades to perform, we list the new version we will target
