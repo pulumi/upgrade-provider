@@ -34,6 +34,8 @@ func cmd() *cobra.Command {
 	}
 	var upgradeKind []string
 	var experimental bool
+	var repoName string
+	var repoOrg string
 
 	context := upgrade.Context{
 		Context: context.Background(),
@@ -54,11 +56,18 @@ func cmd() *cobra.Command {
 		Use:   "upgrade-provider",
 		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
 		Args:  cobra.ExactArgs(1),
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			err := initializeConfig(cmd)
 			if err != nil {
 				return err
 			}
+			// Validate argument is {org}/{repo}
+			tok := strings.Split(args[0], "/")
+			if len(tok) != 2 {
+				fmt.Println("error: argument must be provided as {org}/{repo}")
+				os.Exit(1)
+			}
+			repoOrg, repoName = tok[0], tok[1]
 			// Require `upstream-provider-name` to be set
 			if context.UpstreamProviderName == "" {
 				return errors.New("`upstream-provider-name` must be provided")
@@ -117,13 +126,7 @@ func cmd() *cobra.Command {
 			return nil
 		},
 		Run: func(_ *cobra.Command, args []string) {
-			// Validate argument is {org}/{repo}
-			tok := strings.Split(args[0], "/")
-			if len(tok) != 2 {
-				fmt.Println("error: argument must be provided as {org}/{repo}")
-				os.Exit(1)
-			}
-			err := upgrade.UpgradeProvider(context, tok[0], tok[1])
+			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
 			exitOnError(err)
 		},
 	}

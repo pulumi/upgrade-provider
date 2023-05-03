@@ -294,7 +294,7 @@ func InformGitHub(
 
 	var prTitle string
 	if ctx.UpgradeProviderVersion {
-		prTitle = fmt.Sprintf("Upgrade terraform-provider-%s to v%s",
+		prTitle = fmt.Sprintf("Upgrade %s to v%s",
 			ctx.UpstreamProviderName, target.Latest())
 	} else if ctx.UpgradeBridgeVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
@@ -556,8 +556,8 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 	return versions, "", nil
 }
 
-func OrgProviderRepos(ctx Context, name string) step.Step {
-	return ensureUpstreamRepo(ctx, path.Join("github.com", name))
+func OrgProviderRepos(ctx Context, org, repo string) step.Step {
+	return ensureUpstreamRepo(ctx, path.Join("github.com", org, repo))
 }
 
 func PullDefaultBranch(ctx Context, remote string) step.Step {

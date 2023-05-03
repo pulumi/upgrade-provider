@@ -22,13 +22,13 @@ var CodeMigrations = map[string]CodeMigration{
 
 func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	var err error
-	var repo ProviderRepo
+	repo := ProviderRepo{
+		name: repoName,
+		org:  repoOrg,
+	}
 	var targetBridgeVersion string
 	var upgradeTargets UpstreamVersions
 	var goMod *GoMod
-
-	repo.org = repoOrg
-	repo.name = repoName
 
 	ok := step.Run(step.Combined("Setting Up Environment",
 		step.Env("GOWORK", "off"),
@@ -40,7 +40,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 
 	discoverSteps := []step.Step{
-		OrgProviderRepos(ctx, repoName).AssignTo(&repo.root),
+		OrgProviderRepos(ctx, repoOrg, repoName).AssignTo(&repo.root),
 		PullDefaultBranch(ctx, "origin").In(&repo.root).
 			AssignTo(&repo.defaultBranch),
 	}
@@ -57,9 +57,9 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Provider Update", func() (string, error) {
 				var msg string
-				upgradeTargets, msg, err = GetExpectedTarget(ctx, repoName)
+				upgradeTargets, msg, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName)
 				if err != nil {
-					return "", err
+					return "failed to get expected upgrade version", err
 				}
 
 				// If we have upgrades to perform, we list the new version we will target
@@ -69,7 +69,6 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 					ctx.MajorVersionBump = false
 					return "Up to date" + msg, nil
 				}
-
 				switch {
 				case goMod.Kind.IsPatched():
 					err = setCurrentUpstreamFromPatched(ctx, &repo)
@@ -118,7 +117,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		discoverSteps = append(discoverSteps,
 			step.F("Current Major Version", func() (string, error) {
 				var err error
-				repo.currentVersion, err = latestRelease(ctx, repoName)
+				repo.currentVersion, err = latestRelease(ctx, repoOrg+"/"+repoName)
 				if err != nil {
 					return "", err
 				}
