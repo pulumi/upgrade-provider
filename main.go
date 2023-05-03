@@ -67,6 +67,10 @@ func cmd() *cobra.Command {
 				return errors.New("argument must be provided as {org}/{repo}")
 			}
 			repoOrg, repoName = tok[0], tok[1]
+			// repo name should start with 'pulumi-'
+			if !strings.HasPrefix(repoName, "pulumi-") {
+				return errors.New("{repo} must start with `pulumi-`")
+			}
 			// Require `upstream-provider-name` to be set
 			if context.UpstreamProviderName == "" {
 				return errors.New("`upstream-provider-name` must be provided")
