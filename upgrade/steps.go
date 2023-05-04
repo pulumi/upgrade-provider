@@ -294,7 +294,7 @@ func InformGitHub(
 
 	var prTitle string
 	if ctx.UpgradeProviderVersion {
-		prTitle = fmt.Sprintf("Upgrade terraform-provider-%s to v%s",
+		prTitle = fmt.Sprintf("Upgrade %s to v%s",
 			ctx.UpstreamProviderName, target.Latest())
 	} else if ctx.UpgradeBridgeVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
@@ -497,7 +497,7 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--author=pulumi-bot",
-		"--repo=pulumi/"+name,
+		"--repo="+name,
 		"--limit=100",
 		"--json=title,number")
 	bytes := new(bytes.Buffer)
@@ -556,8 +556,8 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 	return versions, "", nil
 }
 
-func PulumiProviderRepos(ctx Context, name string) step.Step {
-	return ensureUpstreamRepo(ctx, path.Join("github.com", "pulumi", name))
+func OrgProviderRepos(ctx Context, org, repo string) step.Step {
+	return ensureUpstreamRepo(ctx, path.Join("github.com", org, repo))
 }
 
 func PullDefaultBranch(ctx Context, remote string) step.Step {
@@ -845,8 +845,8 @@ func migrationSteps(ctx Context, repo ProviderRepo, providerName string, descrip
 	return steps, nil
 }
 
-func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
-	providerName = strings.TrimPrefix(providerName, "pulumi-")
+func AddAutoAliasing(ctx Context, repo ProviderRepo) (step.Step, error) {
+	providerName := strings.TrimPrefix(repo.name, "pulumi-")
 	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
 	steps := []step.Step{
 		step.F("ensure bridge-metadata.json", func() (string, error) {
@@ -870,8 +870,8 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo, providerName string) (step.
 	return step.Combined("Add AutoAliasing", steps...), nil
 }
 
-func ReplaceAssertNoError(ctx Context, repo ProviderRepo, providerName string) (step.Step, error) {
-	steps, err := migrationSteps(ctx, repo, providerName, "Remove deprecated contract.Assert",
+func ReplaceAssertNoError(ctx Context, repo ProviderRepo) (step.Step, error) {
+	steps, err := migrationSteps(ctx, repo, repo.name, "Remove deprecated contract.Assert",
 		AssertNoErrorMigration)
 	if err != nil {
 		return nil, err

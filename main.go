@@ -34,6 +34,8 @@ func cmd() *cobra.Command {
 	}
 	var upgradeKind []string
 	var experimental bool
+	var repoName string
+	var repoOrg string
 
 	context := upgrade.Context{
 		Context: context.Background(),
@@ -54,11 +56,26 @@ func cmd() *cobra.Command {
 		Use:   "upgrade-provider",
 		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
 		Args:  cobra.ExactArgs(1),
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			err := initializeConfig(cmd)
 			if err != nil {
 				return err
 			}
+			// Validate argument is {org}/{repo}
+			tok := strings.Split(args[0], "/")
+			if len(tok) != 2 {
+				return errors.New("argument must be provided as {org}/{repo}")
+			}
+			repoOrg, repoName = tok[0], tok[1]
+			// repo name should start with 'pulumi-'
+			if !strings.HasPrefix(repoName, "pulumi-") {
+				return errors.New("{repo} must start with `pulumi-`")
+			}
+			// Require `upstream-provider-name` to be set
+			if context.UpstreamProviderName == "" {
+				return errors.New("`upstream-provider-name` must be provided")
+			}
+
 			// Validate that maxVersion is a valid version
 			if maxVersion != "" {
 				context.MaxVersion, err = semver.NewVersion(maxVersion)
@@ -112,7 +129,7 @@ func cmd() *cobra.Command {
 			return nil
 		},
 		Run: func(_ *cobra.Command, args []string) {
-			err := upgrade.UpgradeProvider(context, args[0])
+			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
 			exitOnError(err)
 		},
 	}
@@ -140,7 +157,7 @@ If the passed version does not exist, an error is signaled.`)
 - "autoalias": Apply auto aliasing to the provider.`)
 
 	cmd.PersistentFlags().StringVar(&context.UpstreamProviderName, "upstream-provider-name", "",
-		"The name of the upstream provider.")
+		`The name of the upstream provider.`)
 
 	return cmd
 }

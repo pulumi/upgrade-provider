@@ -14,16 +14,19 @@ import (
 	"github.com/pulumi/upgrade-provider/step"
 )
 
-type CodeMigration = func(ctx Context, repo ProviderRepo, providerName string) (step.Step, error)
+type CodeMigration = func(ctx Context, repo ProviderRepo) (step.Step, error)
 
 var CodeMigrations = map[string]CodeMigration{
 	"autoalias":     AddAutoAliasing,
 	"assertnoerror": ReplaceAssertNoError,
 }
 
-func UpgradeProvider(ctx Context, name string) error {
+func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	var err error
-	var repo ProviderRepo
+	repo := ProviderRepo{
+		name: repoName,
+		org:  repoOrg,
+	}
 	var targetBridgeVersion string
 	var upgradeTargets UpstreamVersions
 	var goMod *GoMod
@@ -38,7 +41,7 @@ func UpgradeProvider(ctx Context, name string) error {
 	}
 
 	discoverSteps := []step.Step{
-		PulumiProviderRepos(ctx, name).AssignTo(&repo.root),
+		OrgProviderRepos(ctx, repoOrg, repoName).AssignTo(&repo.root),
 		PullDefaultBranch(ctx, "origin").In(&repo.root).
 			AssignTo(&repo.defaultBranch),
 	}
@@ -55,7 +58,7 @@ func UpgradeProvider(ctx Context, name string) error {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Provider Update", func() (string, error) {
 				var msg string
-				upgradeTargets, msg, err = GetExpectedTarget(ctx, name)
+				upgradeTargets, msg, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName)
 				if err != nil {
 					return "", err
 				}
@@ -67,7 +70,6 @@ func UpgradeProvider(ctx Context, name string) error {
 					ctx.MajorVersionBump = false
 					return "Up to date" + msg, nil
 				}
-
 				switch {
 				case goMod.Kind.IsPatched():
 					err = setCurrentUpstreamFromPatched(ctx, &repo)
@@ -121,7 +123,7 @@ func UpgradeProvider(ctx Context, name string) error {
 		discoverSteps = append(discoverSteps,
 			step.F("Current Major Version", func() (string, error) {
 				var err error
-				repo.currentVersion, err = latestRelease(ctx, "pulumi/"+name)
+				repo.currentVersion, err = latestRelease(ctx, repoOrg+"/"+repoName)
 				if err != nil {
 					return "", err
 				}
@@ -164,7 +166,7 @@ func UpgradeProvider(ctx Context, name string) error {
 
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() && ctx.UpgradeProviderVersion {
-		ok = step.Run(upgradeUpstreamFork(ctx, name, upgradeTargets.Latest(), goMod).
+		ok = step.Run(upgradeUpstreamFork(ctx, repo.name, upgradeTargets.Latest(), goMod).
 			AssignTo(&forkedProviderUpstreamCommit))
 		if !ok {
 			return ErrHandled
@@ -236,7 +238,7 @@ func UpgradeProvider(ctx Context, name string) error {
 				return fmt.Errorf("unknown migration '%s'", opt)
 			}
 
-			migration, err := getMigration(ctx, repo, name)
+			migration, err := getMigration(ctx, repo)
 			if err != nil {
 				return fmt.Errorf("unable implement migration '%s': %w", opt, err)
 			}
@@ -260,7 +262,7 @@ func UpgradeProvider(ctx Context, name string) error {
 			}
 
 			return UpdateFile("Update module in sdk/go.mod", "sdk/go.mod", func(b []byte) ([]byte, error) {
-				base := "module github.com/pulumi/" + name + "/sdk"
+				base := "module github.com/" + repoName + "/sdk"
 				old := base
 				if repo.currentVersion.Major() > 1 {
 					old += fmt.Sprintf("/v%d", repo.currentVersion.Major())
