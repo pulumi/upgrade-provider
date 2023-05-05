@@ -14,7 +14,8 @@ type Context struct {
 
 	GoPath string
 
-	MaxVersion *semver.Version
+	TargetVersion *semver.Version
+	MaxVersion    *semver.Version
 
 	UpgradeBridgeVersion bool
 

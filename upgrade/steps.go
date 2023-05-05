@@ -494,6 +494,10 @@ func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
 //
 // The second argument represents a message to describe the result. It may be empty.
 func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, error) {
+	if ctx.TargetVersion != nil {
+		return []UpgradeTargetIssue{{Version: ctx.TargetVersion, Number: 0}}, "", nil
+	}
+
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--author=pulumi-bot",

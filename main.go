@@ -28,6 +28,7 @@ const (
 
 func cmd() *cobra.Command {
 	var maxVersion string
+	var targetVersion string
 	gopath, ok := os.LookupEnv("GOPATH")
 	if !ok {
 		gopath = build.Default.GOPATH
@@ -74,6 +75,15 @@ func cmd() *cobra.Command {
 			// Require `upstream-provider-name` to be set
 			if context.UpstreamProviderName == "" {
 				return errors.New("`upstream-provider-name` must be provided")
+			}
+
+			// Validate that targetVersion is a valid version
+			if targetVersion != "" {
+				context.TargetVersion, err = semver.NewVersion(targetVersion)
+				if err != nil {
+					return fmt.Errorf("--target-version=%s: %w",
+						targetVersion, err)
+				}
 			}
 
 			// Validate that maxVersion is a valid version
@@ -134,8 +144,13 @@ func cmd() *cobra.Command {
 		},
 	}
 
-	cmd.PersistentFlags().StringVar(&maxVersion, "provider-version", "",
-		`Upgrade the provider to the passed in version.
+	cmd.PersistentFlags().StringVar(&targetVersion, "target-version", "",
+		`Upgrade the provider to the passed version.
+
+If the passed version does not exist, an error is signaled.`)
+
+	cmd.PersistentFlags().StringVar(&maxVersion, "max-version", "",
+		`Limit the provider upgrade to the passed version when the target version is not provided.
 
 If the passed version does not exist, an error is signaled.`)
 
@@ -146,7 +161,7 @@ If the passed version does not exist, an error is signaled.`)
 		`The kind of upgrade to perform:
 - "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code".
 - "bridge":  Upgrade the bridge only.
-- "provider: Upgrade the upstream provider only.
+- "provider: Upgrade the upstre am provider only.
 - "code":     Perform some number of code migrations.`)
 
 	cmd.PersistentFlags().BoolVar(&experimental, "experimental", false,
