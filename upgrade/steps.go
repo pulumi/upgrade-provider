@@ -532,7 +532,7 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 		}
 		v, err := semver.NewVersion(version)
 		if err == nil {
-			if !(ctx.MaxVersion == nil || ctx.MaxVersion.Equal(v) || ctx.MaxVersion.GreaterThan(v)) {
+			if ctx.InferVersion && !(ctx.TargetVersion == nil || ctx.TargetVersion.Equal(v) || ctx.TargetVersion.GreaterThan(v)) {
 				versionConstrained = true
 				continue
 			}
@@ -544,7 +544,7 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 	}
 	if len(versions) == 0 {
 		var extra string
-		if versionConstrained {
+		if ctx.InferVersion && versionConstrained {
 			extra = " (a version was found but it was greater then the specified max)"
 		}
 		return nil, extra, nil
@@ -553,8 +553,8 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 		return versions[j].Version.LessThan(versions[i].Version)
 	})
 
-	if ctx.MaxVersion != nil && !versions[0].Version.Equal(ctx.MaxVersion) {
-		return nil, "", fmt.Errorf("possible upgrades exist, but non match %s", ctx.MaxVersion)
+	if ctx.InferVersion && ctx.TargetVersion != nil && !versions[0].Version.Equal(ctx.TargetVersion) {
+		return nil, "", fmt.Errorf("possible upgrades exist, but non match %s", ctx.TargetVersion)
 	}
 
 	return versions, "", nil

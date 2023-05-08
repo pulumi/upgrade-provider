@@ -27,7 +27,7 @@ const (
 )
 
 func cmd() *cobra.Command {
-	var maxVersion string
+	var inferVersion bool
 	var targetVersion string
 	gopath, ok := os.LookupEnv("GOPATH")
 	if !ok {
@@ -86,15 +86,6 @@ func cmd() *cobra.Command {
 				}
 			}
 
-			// Validate that maxVersion is a valid version
-			if maxVersion != "" {
-				context.MaxVersion, err = semver.NewVersion(maxVersion)
-				if err != nil {
-					return fmt.Errorf("--provider-version=%s: %w",
-						maxVersion, err)
-				}
-			}
-
 			// Validate the kind switch
 			var warnedAll bool
 			for _, kind := range upgradeKind {
@@ -132,7 +123,7 @@ func cmd() *cobra.Command {
 				}
 			}
 
-			if context.MaxVersion != nil && !context.UpgradeProviderVersion {
+			if context.TargetVersion != nil && !context.UpgradeProviderVersion {
 				return fmt.Errorf(
 					"cannot specify the provider version unless the provider will be upgraded")
 			}
@@ -149,10 +140,10 @@ func cmd() *cobra.Command {
 
 If the passed version does not exist, an error is signaled.`)
 
-	cmd.PersistentFlags().StringVar(&maxVersion, "max-version", "",
-		`Limit the provider upgrade to the passed version when the target version is not provided.
-
-If the passed version does not exist, an error is signaled.`)
+	cmd.PersistentFlags().BoolVar(&inferVersion, "pulumi-infer-version", false,
+		`Use our GH issues to infer the target upgrade version.
+		If both '--target-version' and '--pulumi-infer-version' are passed,
+		we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DEV]`)
 
 	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
 		`Upgrade the provider to a new major version.`)
