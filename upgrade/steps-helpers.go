@@ -104,7 +104,7 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget
 			ctx.UpstreamProviderName, prev, upgradeTarget.Version)
 		for _, t := range upgradeTarget.GHIssues {
 			if t.Number > 0 {
-				fmt.Fprintf(b, "Fixes #%d\n", t.Number)
+				fmt.Fprintf(b, "\tFixes #%d\n", t.Number)
 			}
 		}
 	}
