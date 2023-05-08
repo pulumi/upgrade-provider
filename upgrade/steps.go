@@ -664,7 +664,7 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 					if idx := versionSuffix.FindStringIndex(goMod.Upstream.Path); idx != nil {
 						newUpstream := fmt.Sprintf("%s/v%d",
 							goMod.Upstream.Path[:idx[0]],
-							target.Version,
+							target.Version.Major(),
 						)
 						new = bytes.ReplaceAll(data,
 							[]byte(goMod.Upstream.Path),
