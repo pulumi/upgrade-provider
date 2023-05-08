@@ -27,7 +27,8 @@ const (
 )
 
 func cmd() *cobra.Command {
-	var maxVersion string
+	var inferVersion bool
+	var targetVersion string
 	gopath, ok := os.LookupEnv("GOPATH")
 	if !ok {
 		gopath = build.Default.GOPATH
@@ -76,12 +77,12 @@ func cmd() *cobra.Command {
 				return errors.New("`upstream-provider-name` must be provided")
 			}
 
-			// Validate that maxVersion is a valid version
-			if maxVersion != "" {
-				context.MaxVersion, err = semver.NewVersion(maxVersion)
+			// Validate that targetVersion is a valid version
+			if targetVersion != "" {
+				context.TargetVersion, err = semver.NewVersion(targetVersion)
 				if err != nil {
-					return fmt.Errorf("--provider-version=%s: %w",
-						maxVersion, err)
+					return fmt.Errorf("--target-version=%s: %w",
+						targetVersion, err)
 				}
 			}
 
@@ -125,7 +126,7 @@ func cmd() *cobra.Command {
 				}
 			}
 
-			if context.MaxVersion != nil && !context.UpgradeProviderVersion {
+			if context.TargetVersion != nil && !context.UpgradeProviderVersion {
 				return fmt.Errorf(
 					"cannot specify the provider version unless the provider will be upgraded")
 			}
@@ -137,10 +138,17 @@ func cmd() *cobra.Command {
 		},
 	}
 
-	cmd.PersistentFlags().StringVar(&maxVersion, "provider-version", "",
-		`Upgrade the provider to the passed in version.
+	cmd.PersistentFlags().StringVar(&targetVersion, "target-version", "",
+		`Upgrade the provider to the passed version.
 
 If the passed version does not exist, an error is signaled.`)
+
+	cmd.PersistentFlags().BoolVar(&inferVersion, "pulumi-infer-version", false,
+		`Use our GH issues to infer the target upgrade version.
+		If both '--target-version' and '--pulumi-infer-version' are passed,
+		we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DEV]`)
+	err := cmd.PersistentFlags().MarkHidden("pulumi-infer-version")
+	contract.AssertNoErrorf(err, "could not mark `pulumi-infer-version` flag as hidden")
 
 	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
 		`Upgrade the provider to a new major version.`)

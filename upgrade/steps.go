@@ -286,7 +286,7 @@ func UpgradeProviderVersion(
 }
 
 func InformGitHub(
-	ctx Context, target UpstreamVersions, repo ProviderRepo,
+	ctx Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion string,
 ) step.Step {
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
@@ -295,7 +295,7 @@ func InformGitHub(
 	var prTitle string
 	if ctx.UpgradeProviderVersion {
 		prTitle = fmt.Sprintf("Upgrade %s to v%s",
-			ctx.UpstreamProviderName, target.Latest())
+			ctx.UpstreamProviderName, target.Version)
 	} else if ctx.UpgradeBridgeVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
 	} else if ctx.UpgradeCodeMigration {
@@ -323,8 +323,8 @@ func InformGitHub(
 
 			// This PR will close issues, so we assign the issues to @me, just like
 			// the PR itself.
-			issues := make([]step.Step, len(target))
-			for i, t := range target {
+			issues := make([]step.Step, len(target.GHIssues))
+			for i, t := range target.GHIssues {
 				issues[i] = step.Cmd(exec.CommandContext(ctx,
 					"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
 					"--add-assignee", "@me")).In(&repo.root)
@@ -493,7 +493,12 @@ func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
 // sorted by semantic version. The list may be empty.
 //
 // The second argument represents a message to describe the result. It may be empty.
-func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, error) {
+func GetExpectedTarget(ctx Context, name string) (*UpstreamUpgradeTarget, string, error) {
+	target := &UpstreamUpgradeTarget{Version: ctx.TargetVersion}
+	if ctx.TargetVersion != nil {
+		return target, "", nil
+	}
+
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--author=pulumi-bot",
@@ -528,7 +533,7 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 		}
 		v, err := semver.NewVersion(version)
 		if err == nil {
-			if !(ctx.MaxVersion == nil || ctx.MaxVersion.Equal(v) || ctx.MaxVersion.GreaterThan(v)) {
+			if ctx.InferVersion && !(ctx.TargetVersion == nil || ctx.TargetVersion.Equal(v) || ctx.TargetVersion.GreaterThan(v)) {
 				versionConstrained = true
 				continue
 			}
@@ -540,7 +545,7 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 	}
 	if len(versions) == 0 {
 		var extra string
-		if versionConstrained {
+		if ctx.InferVersion && versionConstrained {
 			extra = " (a version was found but it was greater then the specified max)"
 		}
 		return nil, extra, nil
@@ -549,11 +554,13 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 		return versions[j].Version.LessThan(versions[i].Version)
 	})
 
-	if ctx.MaxVersion != nil && !versions[0].Version.Equal(ctx.MaxVersion) {
-		return nil, "", fmt.Errorf("possible upgrades exist, but non match %s", ctx.MaxVersion)
+	if ctx.InferVersion && ctx.TargetVersion != nil && !versions[0].Version.Equal(ctx.TargetVersion) {
+		return nil, "", fmt.Errorf("possible upgrades exist, but non match %s", ctx.TargetVersion)
 	}
 
-	return versions, "", nil
+	target.GHIssues = versions
+	target.Version = versions[0].Version
+	return target, "", nil
 }
 
 func OrgProviderRepos(ctx Context, org, repo string) step.Step {
@@ -596,7 +603,7 @@ func PullDefaultBranch(ctx Context, remote string) step.Step {
 	).Return(&defaultBranch)
 }
 
-func MajorVersionBump(ctx Context, goMod *GoMod, targets UpstreamVersions, repo ProviderRepo) step.Step {
+func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo) step.Step {
 	if repo.currentVersion.Major() == 0 {
 		// None of these steps are necessary or appropriate when moving from
 		// version 0.x to 1.0 because Go modules only require a version suffix for
@@ -657,7 +664,7 @@ func MajorVersionBump(ctx Context, goMod *GoMod, targets UpstreamVersions, repo 
 					if idx := versionSuffix.FindStringIndex(goMod.Upstream.Path); idx != nil {
 						newUpstream := fmt.Sprintf("%s/v%d",
 							goMod.Upstream.Path[:idx[0]],
-							targets.Latest().Major(),
+							target.Version.Major(),
 						)
 						new = bytes.ReplaceAll(data,
 							[]byte(goMod.Upstream.Path),

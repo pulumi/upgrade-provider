@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 )
@@ -82,7 +83,7 @@ func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleMod
 	return module.Version{}, false, nil
 }
 
-func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, goMod *GoMod, targetBridge string) string {
+func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod, targetBridge string) string {
 	b := new(strings.Builder)
 	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n",
 		strings.Join(os.Args[1:], " "))
@@ -94,24 +95,28 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, goM
 	}
 
 	if ctx.UpgradeProviderVersion {
+		contract.Assertf(upgradeTarget != nil, "upgradeTarget should always be non-nil")
 		var prev string
 		if repo.currentUpstreamVersion != nil {
 			prev = fmt.Sprintf("from %s ", repo.currentUpstreamVersion)
 		}
 		fmt.Fprintf(b, "Upgrading %s %s to %s.\n",
-			ctx.UpstreamProviderName, prev, upgradeTargets.Latest())
+			ctx.UpstreamProviderName, prev, upgradeTarget.Version)
+		for _, t := range upgradeTarget.GHIssues {
+			if t.Number > 0 {
+				fmt.Fprintf(b, "Fixes #%d\n", t.Number)
+			}
+		}
 	}
 	if ctx.UpgradeBridgeVersion {
 		fmt.Fprintf(b, "Upgrading pulumi-terraform-bridge from %s to %s.\n",
 			goMod.Bridge.Version, targetBridge)
 	}
 
-	if len(upgradeTargets) > 0 {
+	if len(upgradeTarget.GHIssues) > 0 {
 		fmt.Fprintf(b, "\n")
 	}
-	for _, t := range upgradeTargets {
-		fmt.Fprintf(b, "Fixes #%d\n", t.Number)
-	}
+
 	return b.String()
 }
 

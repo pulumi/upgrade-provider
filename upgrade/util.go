@@ -14,7 +14,8 @@ type Context struct {
 
 	GoPath string
 
-	MaxVersion *semver.Version
+	TargetVersion *semver.Version
+	InferVersion  bool
 
 	UpgradeBridgeVersion bool
 	UpgradeSdkVersion    bool
@@ -72,14 +73,14 @@ type GoMod struct {
 	Bridge   module.Version
 }
 
+type UpstreamUpgradeTarget struct {
+	// The version we are targeting. `nil` indicates that no upstream upgrade was found.
+	Version *semver.Version
+	// The list of issues that this upgrade will close.
+	GHIssues []UpgradeTargetIssue
+}
+
 type UpgradeTargetIssue struct {
 	Version *semver.Version `json:"-"`
 	Number  int             `json:"number"`
-}
-
-// The sorted list of upstream versions that will be fixed with this update.
-type UpstreamVersions []UpgradeTargetIssue
-
-func (p UpstreamVersions) Latest() *semver.Version {
-	return p[0].Version
 }
