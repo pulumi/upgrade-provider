@@ -149,7 +149,8 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
-	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion && !ctx.UpgradeCodeMigration {
+	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
+		!ctx.UpgradeCodeMigration && ctx.UpgradeSdkVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -219,6 +220,15 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
 			In(repo.providerDir()))
+	}
+	if ctx.UpgradeSdkVersion {
+		steps = append(steps, step.Combined("Upgrade Pulumi SDK",
+			step.Cmd(exec.CommandContext(ctx,
+				"go", "get", "github.com/pulumi/pulumi/sdk/v3")).
+				In(repo.providerDir()),
+			step.Cmd(exec.CommandContext(ctx,
+				"go", "get", "github.com/pulumi/pulumi/pkg/v3")).
+				In(repo.providerDir())))
 	}
 
 	if ctx.UpgradeCodeMigration {
