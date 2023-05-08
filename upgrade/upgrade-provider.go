@@ -64,6 +64,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				}
 
 				// If we have upgrades to perform, we list the new version we will target
+				// unless a version was passed in via `--provider-version`
 				if len(upgradeTargets) == 0 {
 					// Otherwise, we don't bother to try to upgrade the provider.
 					ctx.UpgradeProviderVersion = false

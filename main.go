@@ -161,7 +161,7 @@ If the passed version does not exist, an error is signaled.`)
 		`The kind of upgrade to perform:
 - "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code".
 - "bridge":  Upgrade the bridge only.
-- "provider: Upgrade the upstre am provider only.
+- "provider: Upgrade the upstream provider only.
 - "code":     Perform some number of code migrations.`)
 
 	cmd.PersistentFlags().BoolVar(&experimental, "experimental", false,

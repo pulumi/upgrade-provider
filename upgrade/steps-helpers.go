@@ -110,7 +110,9 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTargets UpstreamVersions, goM
 		fmt.Fprintf(b, "\n")
 	}
 	for _, t := range upgradeTargets {
-		fmt.Fprintf(b, "Fixes #%d\n", t.Number)
+		if t.Number > 0 {
+			fmt.Fprintf(b, "Fixes #%d\n", t.Number)
+		}
 	}
 	return b.String()
 }
