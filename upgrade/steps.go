@@ -496,7 +496,6 @@ func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
 func GetExpectedTarget(ctx Context, name string) (*UpstreamUpgradeTarget, string, error) {
 	target := &UpstreamUpgradeTarget{Version: ctx.TargetVersion}
 	if ctx.TargetVersion != nil {
-		target.Version = ctx.TargetVersion
 		return target, "", nil
 	}
 
