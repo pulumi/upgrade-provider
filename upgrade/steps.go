@@ -493,9 +493,11 @@ func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
 // sorted by semantic version. The list may be empty.
 //
 // The second argument represents a message to describe the result. It may be empty.
-func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, error) {
+func GetExpectedTarget(ctx Context, name string) (*UpstreamUpgradeTarget, string, error) {
+	target := &UpstreamUpgradeTarget{Version: ctx.TargetVersion}
 	if ctx.TargetVersion != nil {
-		return []UpgradeTargetIssue{{Version: ctx.TargetVersion, Number: 0}}, "", nil
+		target.Version = ctx.TargetVersion
+		return target, "", nil
 	}
 
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
@@ -519,7 +521,7 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 		return nil, "", err
 	}
 
-	var versions []UpgradeTargetIssue
+	var versions UpstreamVersions
 	var versionConstrained bool
 	for _, title := range titles {
 		_, nameToVersion, found := strings.Cut(title.Title, "Upgrade terraform-provider-")
@@ -557,7 +559,9 @@ func GetExpectedTarget(ctx Context, name string) ([]UpgradeTargetIssue, string, 
 		return nil, "", fmt.Errorf("possible upgrades exist, but non match %s", ctx.TargetVersion)
 	}
 
-	return versions, "", nil
+	target.GHIssues = versions
+	target.Version = versions.Latest()
+	return target, "", nil
 }
 
 func OrgProviderRepos(ctx Context, org, repo string) step.Step {

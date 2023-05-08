@@ -28,7 +28,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		org:  repoOrg,
 	}
 	var targetBridgeVersion string
-	var upgradeTargets UpstreamVersions
+	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
 
 	ok := step.Run(step.Combined("Setting Up Environment",
@@ -58,14 +58,13 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Provider Update", func() (string, error) {
 				var msg string
-				upgradeTargets, msg, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName)
+				upgradeTarget, msg, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName)
 				if err != nil {
 					return "", err
 				}
 
 				// If we have upgrades to perform, we list the new version we will target
-				// unless a version was passed in via `--provider-version`
-				if len(upgradeTargets) == 0 {
+				if upgradeTarget.Version == nil {
 					// Otherwise, we don't bother to try to upgrade the provider.
 					ctx.UpgradeProviderVersion = false
 					ctx.MajorVersionBump = false
@@ -90,14 +89,14 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				var previous string
 				if repo.currentUpstreamVersion != nil {
 					if semver.Compare(repo.currentUpstreamVersion.String(),
-						upgradeTargets.Latest().String()) > 0 {
+						upgradeTarget.Version.String()) > 0 {
 						return "", fmt.Errorf("current upstream version %v is greater than target version %v",
-							repo.currentUpstreamVersion, upgradeTargets.Latest())
+							repo.currentUpstreamVersion, upgradeTarget.Version)
 					}
 					previous = fmt.Sprintf("%s -> ", repo.currentUpstreamVersion)
 				}
 
-				return previous + upgradeTargets.Latest().String() + msg, nil
+				return previous + upgradeTarget.Version.String() + msg, nil
 			}))
 	}
 
@@ -138,13 +137,13 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 
 	if ctx.UpgradeProviderVersion {
-		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTargets.Latest().Major()
+		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTarget.Version.Major()
 		if ctx.MajorVersionBump && !shouldMajorVersionBump {
 			return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
 				repo.currentUpstreamVersion.Major())
 		} else if !ctx.MajorVersionBump && shouldMajorVersionBump {
 			return fmt.Errorf("This is a major version update (v%d -> v%d), but --major was not passed",
-				repo.currentUpstreamVersion.Major(), upgradeTargets.Latest().Major())
+				repo.currentUpstreamVersion.Major(), upgradeTarget.Version.Major())
 		}
 	}
 
@@ -167,7 +166,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() && ctx.UpgradeProviderVersion {
-		ok = step.Run(upgradeUpstreamFork(ctx, repo.name, upgradeTargets.Latest(), goMod).
+		ok = step.Run(upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod).
 			AssignTo(&forkedProviderUpstreamCommit))
 		if !ok {
 			return ErrHandled
@@ -177,7 +176,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	var targetSHA string
 	if ctx.UpgradeProviderVersion {
 		repo.workingBranch = fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s",
-			ctx.UpstreamProviderName, upgradeTargets.Latest())
+			ctx.UpstreamProviderName, upgradeTarget.Version)
 	} else if ctx.UpgradeBridgeVersion {
 		contract.Assertf(targetBridgeVersion != "",
 			"We are upgrading the bridge, so we must have a target version")
@@ -193,7 +192,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 
 	if ctx.MajorVersionBump {
-		steps = append(steps, MajorVersionBump(ctx, goMod, upgradeTargets, repo))
+		steps = append(steps, MajorVersionBump(ctx, goMod, upgradeTarget.GHIssues, repo))
 
 		defer func() {
 			fmt.Printf("\n\n" + colorize.Warn("Major Version Updates are not fully automated!") + "\n")
@@ -206,7 +205,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 
 	if ctx.UpgradeProviderVersion {
-		steps = append(steps, UpgradeProviderVersion(ctx, goMod, upgradeTargets.Latest(), repo,
+		steps = append(steps, UpgradeProviderVersion(ctx, goMod, upgradeTarget.Version, repo,
 			targetSHA, forkedProviderUpstreamCommit))
 	} else if goMod.Kind.IsPatched() {
 		// If we are upgrading the provider version, then the upgrade will leave
@@ -282,7 +281,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		}),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		GitCommit(ctx, "make build_sdks").In(&repo.root),
-		InformGitHub(ctx, upgradeTargets, repo, goMod, targetBridgeVersion),
+		InformGitHub(ctx, upgradeTarget.GHIssues, repo, goMod, targetBridgeVersion),
 	)
 
 	ok = step.Run(step.Combined("Update Artifacts", artifacts...))

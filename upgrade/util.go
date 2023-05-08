@@ -72,6 +72,13 @@ type GoMod struct {
 	Bridge   module.Version
 }
 
+type UpstreamUpgradeTarget struct {
+	// The version we are targeting. `nil` indicates that no upstream upgrade was found.
+	Version *semver.Version
+	// The list of issues that this upgrade will close.
+	GHIssues []UpgradeTargetIssue
+}
+
 type UpgradeTargetIssue struct {
 	Version *semver.Version `json:"-"`
 	Number  int             `json:"number"`
