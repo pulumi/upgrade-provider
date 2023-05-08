@@ -17,6 +17,7 @@ type Context struct {
 	MaxVersion *semver.Version
 
 	UpgradeBridgeVersion bool
+	UpgradeSdkVersion    bool
 
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
