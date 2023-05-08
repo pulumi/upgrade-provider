@@ -286,7 +286,7 @@ func UpgradeProviderVersion(
 }
 
 func InformGitHub(
-	ctx Context, target UpstreamVersions, repo ProviderRepo,
+	ctx Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion string,
 ) step.Step {
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
@@ -295,7 +295,7 @@ func InformGitHub(
 	var prTitle string
 	if ctx.UpgradeProviderVersion {
 		prTitle = fmt.Sprintf("Upgrade %s to v%s",
-			ctx.UpstreamProviderName, target.Latest())
+			ctx.UpstreamProviderName, target.Version)
 	} else if ctx.UpgradeBridgeVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
 	} else if ctx.UpgradeCodeMigration {
@@ -323,8 +323,8 @@ func InformGitHub(
 
 			// This PR will close issues, so we assign the issues to @me, just like
 			// the PR itself.
-			issues := make([]step.Step, len(target))
-			for i, t := range target {
+			issues := make([]step.Step, len(target.GHIssues))
+			for i, t := range target.GHIssues {
 				issues[i] = step.Cmd(exec.CommandContext(ctx,
 					"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
 					"--add-assignee", "@me")).In(&repo.root)
@@ -604,7 +604,7 @@ func PullDefaultBranch(ctx Context, remote string) step.Step {
 	).Return(&defaultBranch)
 }
 
-func MajorVersionBump(ctx Context, goMod *GoMod, targets UpstreamVersions, repo ProviderRepo) step.Step {
+func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo) step.Step {
 	if repo.currentVersion.Major() == 0 {
 		// None of these steps are necessary or appropriate when moving from
 		// version 0.x to 1.0 because Go modules only require a version suffix for
@@ -665,7 +665,7 @@ func MajorVersionBump(ctx Context, goMod *GoMod, targets UpstreamVersions, repo 
 					if idx := versionSuffix.FindStringIndex(goMod.Upstream.Path); idx != nil {
 						newUpstream := fmt.Sprintf("%s/v%d",
 							goMod.Upstream.Path[:idx[0]],
-							targets.Latest().Major(),
+							target.Version,
 						)
 						new = bytes.ReplaceAll(data,
 							[]byte(goMod.Upstream.Path),

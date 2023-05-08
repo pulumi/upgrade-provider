@@ -192,7 +192,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 
 	if ctx.MajorVersionBump {
-		steps = append(steps, MajorVersionBump(ctx, goMod, upgradeTarget.GHIssues, repo))
+		steps = append(steps, MajorVersionBump(ctx, goMod, upgradeTarget, repo))
 
 		defer func() {
 			fmt.Printf("\n\n" + colorize.Warn("Major Version Updates are not fully automated!") + "\n")
@@ -281,7 +281,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		}),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		GitCommit(ctx, "make build_sdks").In(&repo.root),
-		InformGitHub(ctx, upgradeTarget.GHIssues, repo, goMod, targetBridgeVersion),
+		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion),
 	)
 
 	ok = step.Run(step.Combined("Update Artifacts", artifacts...))
