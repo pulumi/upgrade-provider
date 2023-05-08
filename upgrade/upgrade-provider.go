@@ -221,7 +221,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			In(repo.providerDir()))
 	}
 	if ctx.UpgradeSdkVersion {
-		steps = append(steps,
+		steps = append(steps, step.Combined("Upgrade Pulumi SDK",
 			step.Cmd(exec.CommandContext(ctx,
 				"go", "get", "github.com/pulumi/pulumi/sdk/v3")).
 				In(repo.providerDir()),
