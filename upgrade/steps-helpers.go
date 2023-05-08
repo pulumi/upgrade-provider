@@ -91,7 +91,7 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget
 	fmt.Fprintf(b, "\n---\n\n")
 
 	if ctx.MajorVersionBump {
-		fmt.Fprintf(b, "Updating major version from %s to %s.\n", repo.currentVersion, repo.currentVersion.IncMajor())
+		fmt.Fprintf(b, "- Updating major version from %s to %s.\n", repo.currentVersion, repo.currentVersion.IncMajor())
 	}
 
 	if ctx.UpgradeProviderVersion {
@@ -100,7 +100,7 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget
 		if repo.currentUpstreamVersion != nil {
 			prev = fmt.Sprintf("from %s ", repo.currentUpstreamVersion)
 		}
-		fmt.Fprintf(b, "Upgrading %s %s to %s.\n",
+		fmt.Fprintf(b, "- Upgrading %s %s to %s.\n",
 			ctx.UpstreamProviderName, prev, upgradeTarget.Version)
 		for _, t := range upgradeTarget.GHIssues {
 			if t.Number > 0 {
@@ -109,7 +109,7 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget
 		}
 	}
 	if ctx.UpgradeBridgeVersion {
-		fmt.Fprintf(b, "Upgrading pulumi-terraform-bridge from %s to %s.\n",
+		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge from %s to %s.\n",
 			goMod.Bridge.Version, targetBridge)
 	}
 
