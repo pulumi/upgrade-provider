@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 )
@@ -94,12 +95,18 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget
 	}
 
 	if ctx.UpgradeProviderVersion {
+		contract.Assertf(upgradeTarget != nil, "upgradeTarget should always be non-nil")
 		var prev string
 		if repo.currentUpstreamVersion != nil {
 			prev = fmt.Sprintf("from %s ", repo.currentUpstreamVersion)
 		}
 		fmt.Fprintf(b, "Upgrading %s %s to %s.\n",
 			ctx.UpstreamProviderName, prev, upgradeTarget.Version)
+		for _, t := range upgradeTarget.GHIssues {
+			if t.Number > 0 {
+				fmt.Fprintf(b, "Fixes #%d\n", t.Number)
+			}
+		}
 	}
 	if ctx.UpgradeBridgeVersion {
 		fmt.Fprintf(b, "Upgrading pulumi-terraform-bridge from %s to %s.\n",
@@ -109,11 +116,7 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget
 	if len(upgradeTarget.GHIssues) > 0 {
 		fmt.Fprintf(b, "\n")
 	}
-	for _, t := range upgradeTarget.GHIssues {
-		if t.Number > 0 {
-			fmt.Fprintf(b, "Fixes #%d\n", t.Number)
-		}
-	}
+
 	return b.String()
 }
 

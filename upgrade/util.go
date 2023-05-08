@@ -83,10 +83,3 @@ type UpgradeTargetIssue struct {
 	Version *semver.Version `json:"-"`
 	Number  int             `json:"number"`
 }
-
-// The sorted list of upstream versions that will be fixed with this update.
-type UpstreamVersions []UpgradeTargetIssue
-
-func (p UpstreamVersions) Latest() *semver.Version {
-	return p[0].Version
-}

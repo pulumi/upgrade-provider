@@ -520,7 +520,7 @@ func GetExpectedTarget(ctx Context, name string) (*UpstreamUpgradeTarget, string
 		return nil, "", err
 	}
 
-	var versions UpstreamVersions
+	var versions []UpgradeTargetIssue
 	var versionConstrained bool
 	for _, title := range titles {
 		_, nameToVersion, found := strings.Cut(title.Title, "Upgrade terraform-provider-")
@@ -559,7 +559,7 @@ func GetExpectedTarget(ctx Context, name string) (*UpstreamUpgradeTarget, string
 	}
 
 	target.GHIssues = versions
-	target.Version = versions.Latest()
+	target.Version = versions[0].Version
 	return target, "", nil
 }
 
