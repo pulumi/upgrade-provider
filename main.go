@@ -145,7 +145,7 @@ If the passed version does not exist, an error is signaled.`)
 		If both '--target-version' and '--pulumi-infer-version' are passed,
 		we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DEV]`)
 	err := cmd.PersistentFlags().MarkHidden("pulumi-infer-version")
-	contract.AssertNoErrorf(err, "error: %w", err)
+	contract.AssertNoErrorf(err, "could not mark `pulumi-infer-version` flag as hidden")
 
 	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
 		`Upgrade the provider to a new major version.`)
