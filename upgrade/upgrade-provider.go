@@ -176,7 +176,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 	var targetSHA string
 	if ctx.UpgradeProviderVersion {
-		repo.workingBranch = fmt.Sprintf("upgrade-terraform-provider-%s-to-v%s",
+		repo.workingBranch = fmt.Sprintf("upgrade-%s-to-v%s",
 			ctx.UpstreamProviderName, upgradeTarget.Version)
 	} else if ctx.UpgradeBridgeVersion {
 		contract.Assertf(targetBridgeVersion != "",
