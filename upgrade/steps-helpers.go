@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/pulumi/pulumi/sdk/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 )
@@ -358,10 +358,11 @@ func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) 
 //
 // The second argument represents a message to describe the result. It may be empty.
 func GetExpectedTarget(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, string, error) {
-	if ctx.TargetVersion != nil {
-		return &UpstreamUpgradeTarget{Version: ctx.TargetVersion}, "", nil
+	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
+	if ctx.InferVersion {
+		return getExpectedTargetFromIssues(ctx, name)
 	}
-	if !ctx.InferVersion {
+	if ctx.TargetVersion != nil {
 		return getExpectedTargetLatest(ctx, name, upstreamOrg)
 	}
 	return getExpectedTargetFromIssues(ctx, name)
