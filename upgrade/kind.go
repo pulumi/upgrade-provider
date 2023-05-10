@@ -183,6 +183,9 @@ func GetRepoKind(ctx Context, repo ProviderRepo) (*GoMod, error) {
 		Fork:     fork,
 		Bridge:   bridge,
 	}
+	// get the org name that hosts the upstream repo
+	tok := strings.Split(modPathWithoutVersion(upstream.Mod.Path), "/")
+	out.UpstreamProviderOrg = tok[len(tok)-2]
 
 	if fork == nil {
 		out.Kind = Plain

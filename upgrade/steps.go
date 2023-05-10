@@ -4,7 +4,6 @@ package upgrade
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
@@ -487,80 +485,6 @@ func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
 			return step.Cmd(exec.CommandContext(ctx, "git", "checkout", branchName))
 		}),
 	)
-}
-
-// Fetch the expected upgrade target from github. Return a list of open upgrade issues,
-// sorted by semantic version. The list may be empty.
-//
-// The second argument represents a message to describe the result. It may be empty.
-func GetExpectedTarget(ctx Context, name string) (*UpstreamUpgradeTarget, string, error) {
-	target := &UpstreamUpgradeTarget{Version: ctx.TargetVersion}
-	if ctx.TargetVersion != nil {
-		return target, "", nil
-	}
-
-	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
-		"--state=open",
-		"--author=pulumi-bot",
-		"--repo="+name,
-		"--limit=100",
-		"--json=title,number")
-	bytes := new(bytes.Buffer)
-	getIssues.Stdout = bytes
-	err := getIssues.Run()
-	if err != nil {
-		return nil, "", err
-	}
-	titles := []struct {
-		Title  string `json:"title"`
-		Number int    `json:"number"`
-	}{}
-	err = json.Unmarshal(bytes.Bytes(), &titles)
-	if err != nil {
-		return nil, "", err
-	}
-
-	var versions []UpgradeTargetIssue
-	var versionConstrained bool
-	for _, title := range titles {
-		_, nameToVersion, found := strings.Cut(title.Title, "Upgrade terraform-provider-")
-		if !found {
-			continue
-		}
-		_, version, found := strings.Cut(nameToVersion, " to ")
-		if !found {
-			continue
-		}
-		v, err := semver.NewVersion(version)
-		if err == nil {
-			if ctx.InferVersion && !(ctx.TargetVersion == nil || ctx.TargetVersion.Equal(v) || ctx.TargetVersion.GreaterThan(v)) {
-				versionConstrained = true
-				continue
-			}
-			versions = append(versions, UpgradeTargetIssue{
-				Version: v,
-				Number:  title.Number,
-			})
-		}
-	}
-	if len(versions) == 0 {
-		var extra string
-		if ctx.InferVersion && versionConstrained {
-			extra = " (a version was found but it was greater then the specified max)"
-		}
-		return nil, extra, nil
-	}
-	sort.Slice(versions, func(i, j int) bool {
-		return versions[j].Version.LessThan(versions[i].Version)
-	})
-
-	if ctx.InferVersion && ctx.TargetVersion != nil && !versions[0].Version.Equal(ctx.TargetVersion) {
-		return nil, "", fmt.Errorf("possible upgrades exist, but non match %s", ctx.TargetVersion)
-	}
-
-	target.GHIssues = versions
-	target.Version = versions[0].Version
-	return target, "", nil
 }
 
 func OrgProviderRepos(ctx Context, org, repo string) step.Step {
