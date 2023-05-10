@@ -381,9 +381,10 @@ func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUp
 	if err != nil {
 		return nil, "", err
 	}
-	out := strings.Split(bytes.String(), " ")
-	fmt.Println(out)
-	v, err := semver.NewVersion(out[0])
+
+	tok := strings.Fields(bytes.String())
+	contract.Assertf(len(tok) > 0, fmt.Sprintf("no releases found in %s/%s", upstreamOrg, ctx.UpstreamProviderName))
+	v, err := semver.NewVersion(tok[0])
 	if err != nil {
 		return nil, "", err
 	}
