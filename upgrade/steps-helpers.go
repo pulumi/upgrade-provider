@@ -370,7 +370,7 @@ func GetExpectedTarget(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeT
 func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, string, error) {
 	latest := exec.CommandContext(ctx, "gh", "release", "list",
 		"--repo="+upstreamOrg+"/"+ctx.UpstreamProviderName,
-		"-L=1",
+		"--limit=1",
 		"--exclude-drafts",
 		"--exclude-pre-releases")
 	bytes := new(bytes.Buffer)
