@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/briandowns/spinner v1.20.0
+	github.com/pulumi/pulumi/sdk v1.14.1
 	github.com/pulumi/pulumi/sdk/v3 v3.63.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5

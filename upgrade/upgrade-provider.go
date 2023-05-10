@@ -58,7 +58,8 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Provider Update", func() (string, error) {
 				var msg string
-				upgradeTarget, msg, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName)
+				upgradeTarget, msg, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName,
+					goMod.UpstreamProviderOrg)
 				if err != nil {
 					return "", err
 				}
