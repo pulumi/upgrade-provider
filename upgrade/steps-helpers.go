@@ -380,18 +380,9 @@ func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUp
 	if err != nil {
 		return nil, "", err
 	}
-	release := []struct {
-		Title string `json:"TITLE"`
-		Type  string `json:"TYPE"`
-	}{}
-	err = json.Unmarshal(bytes.Bytes(), &release)
-	if err != nil {
-		return nil, "", err
-	}
-
-	contract.Assert(len(release) == 1)
-	contract.Assert(release[0].Type == "Latest")
-	v, err := semver.NewVersion(release[0].Title)
+	out := strings.Split(bytes.String(), " ")
+	fmt.Println(out)
+	v, err := semver.NewVersion(out[0])
 	if err != nil {
 		return nil, "", err
 	}
