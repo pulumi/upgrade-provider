@@ -363,9 +363,10 @@ func GetExpectedTarget(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeT
 		return getExpectedTargetFromIssues(ctx, name)
 	}
 	if ctx.TargetVersion != nil {
-		return getExpectedTargetLatest(ctx, name, upstreamOrg)
+		return &UpstreamUpgradeTarget{Version: ctx.TargetVersion}, "", nil
+
 	}
-	return getExpectedTargetFromIssues(ctx, name)
+	return getExpectedTargetLatest(ctx, name, upstreamOrg)
 }
 
 func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, string, error) {
