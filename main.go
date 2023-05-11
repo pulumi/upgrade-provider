@@ -62,6 +62,8 @@ func cmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			context.InferVersion = inferVersion
+
 			// Validate argument is {org}/{repo}
 			tok := strings.Split(args[0], "/")
 			if len(tok) != 2 {
