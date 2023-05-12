@@ -27,7 +27,6 @@ const (
 )
 
 func cmd() *cobra.Command {
-	var inferVersion bool
 	var targetVersion string
 	gopath, ok := os.LookupEnv("GOPATH")
 	if !ok {
@@ -143,7 +142,7 @@ func cmd() *cobra.Command {
 
 If the passed version does not exist, an error is signaled.`)
 
-	cmd.PersistentFlags().BoolVar(&inferVersion, "pulumi-infer-version", false,
+	cmd.PersistentFlags().BoolVar(&context.InferVersion, "pulumi-infer-version", false,
 		`Use our GH issues to infer the target upgrade version.
 		If both '--target-version' and '--pulumi-infer-version' are passed,
 		we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DEV]`)
