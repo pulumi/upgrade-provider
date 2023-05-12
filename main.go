@@ -54,8 +54,8 @@ func cmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "upgrade-provider",
-		Short: "upgrade-provider automatics the process of upgrading a TF-bridged provider",
+		Use:   "upgrade-provider <provider>",
+		Short: "upgrade-provider automates the process of upgrading a TF-bridged provider",
 		Args:  cobra.ExactArgs(1),
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			err := initializeConfig(cmd)
@@ -169,7 +169,8 @@ If the passed version does not exist, an error is signaled.`)
 - "autoalias": Apply auto aliasing to the provider.`)
 
 	cmd.PersistentFlags().StringVar(&context.UpstreamProviderName, "upstream-provider-name", "",
-		`The name of the upstream provider.`)
+		`The name of the upstream provider. 
+Required unless running from provider root and set in upgrade-config.yml.`)
 
 	return cmd
 }

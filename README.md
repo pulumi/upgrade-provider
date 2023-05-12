@@ -1,40 +1,68 @@
 # upgrade-provider
 
 This repo contains the `upgrade-provider` tool. `upgrade-provider` aims to reduce the
-amount of human intervention necessary for upgrading providers to a limit of zero.
+amount of human intervention necessary for upgrading bridged Pulumi providers to a limit of zero.
 
 With our current bridged provider structure, we can reduce provider upgrades to 3 manual
 operations:
 
 - resolving merge dependencies for forked providers
-- manual provider mappings in `resources.go`
+- manual provider mappings in `resources.go`, if using (we recommend upgrading to auto token mapping!) // TODO: send a link to example
 - resolving build conflicts on updates
 
 The rest of an upgrade is formulaic, and can thus be automated. This tool attempts to do
 the rest.
 
+## Functions
+
+- Upgrade the provider's version of the terraform bridge
+- Upgrade the version of pulumi used in the provider
+- Upgrade to the latest version of the upstream provider (or a specified target version)
+- Perform a major version upgrade
+
 ## Installation
 
-We don't currently maintain releases for this tool. To install this tool onto your path,
-clone the repository and run `make install`.
+`go get -u github.com/pulumi/upgrade-provider`
 
 ## Requirements
+
 - Go version `1.20`
 - `git` version `>=2.36.0`
+- [GitHub CLI](https://cli.github.com/)
+
+Additionally, `upgrade-provider` relies on all tools necessary for a manual provider upgrade. 
+That generally means `pulumi`, `make`, and the build toolchain for each released SDK.
+
 
 ## Usage
 
-`upgrade-provider` relies on the command line utilities `gh` and `git` to run, as well as
-all tools necessary for a manual provider upgrade. That generally means `pulumi`, `make`
-and the build toolchain for each released SDK.
+### From the command line
 
-`upgrade-provider` takes exactly one option: the name of the Pulumi repository to upgrade.
-There is not setup necessary, nor is it required to have local copies of
+```bash
+Usage:
+  upgrade-provider <provider> [flags]
 
-A typical run for a forked provider will look like this:
+Flags:
+      --experimental                    Enable experimental features, such as auto token mapping and auto aliasing
+  -h, --help                            help for upgrade-provider
+      --kind strings                    The kind of upgrade to perform:
+                                        - "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code".
+                                        - "bridge":  Upgrade the bridge only.
+                                        - "provider": Upgrade the upstream provider only.
+                                        - "sdk": Upgrade the Pulumi sdk only.
+                                        - "code":     Perform some number of code migrations. (default [all])
+      --major                           Upgrade the provider to a new major version.
+      --target-version string           Upgrade the provider to the passed version.
+                                        
+                                        If the passed version does not exist, an error is signaled.
+      --upstream-provider-name string   The name of the upstream provider.
+                                        Required unless running from provider root and set in upgrade-config.yml.
+```
+
+A typical run for a patched provider with an upgrade configuration file will look like this:
 
 ```
-❯ ./upgrade-provider pulumi-snowflake
+❯ upgrade-provider pulumi/pulumi-snowflake
 ---- Discovering Repository ----
 - Ensure 'github.com/pulumi/pulumi-snowflake'
   - ✓ Expected Location: /Users/ianwahbe/go/src/github.com/pulumi/pulumi-snowflake
@@ -73,7 +101,7 @@ A typical run for a forked provider will look like this:
     - ✓ /usr/local/bin/gh issue edit 181 --add-assignee @me: done
 ```
 
-If the process succeeds, you can go to GH and open a new PR. All local work is done.
+If the process succeeds, you can go to GitHub and find a pull request opened on your behalf.
 
 ### Dealing with manual steps
 
@@ -88,6 +116,21 @@ To fix an error:
 - Re-run the tool. It will include your changes on the next attempt.
 
 Repeat as necessary for a working upgrade.
+
+### In a GitHub Action (experimental)
+
+1. Ensure you have an [`upgrade-config.yml`](#Configuration) set in the root of your provider:
+   ```yaml---
+     upstream-provider-name: terraform-provider-snowflake
+   ```
+
+2. Add the [Pulumi Upgrade Provider Action](https://github.com/pulumi/pulumi-upgrade-provider-action)
+   to your publishing workflow(s):
+   ```yaml    
+   - name: Call upgrade provider action
+     uses: pulumi/pulumi-upgrade-provider-action@v0.0.4
+   ```
+
 
 ## How it works
 
@@ -116,7 +159,7 @@ ok = step.Run(step.Combined("Upgrading Provider",
 `upgrade-provider` executes the same process to upgrade a Pulumi provider as a manual
 upgrade. The basic pipeline goes as follows:
 
-1. Download the pulumi provider repository if its not present.
+1. Download the pulumi provider repository if it's not present.
 2. Check with github to get the version to upgrade to.
 3. Determine the type of upgrade to perform (forked or normal).
 
@@ -145,7 +188,6 @@ Values include:
 - `upstream-provider-name`: The name of the upstream provider repo, i.e. `terraform-provider-docker`
 - `experimental`: Whether to enable experimental `pulumi-terraform-bridge` features https://github.com/pulumi/pulumi-terraform-bridge/tree/master/pkg/tfbridge/x. Value must be [true, false].
 
-
 ## Project Guidelines
 
 ### Goals
@@ -153,9 +195,9 @@ Values include:
 - Automate the boring stuff. If a task is simple enough for a computer to do, then we
   should let the computer do it.
 - Treat all upgrades the same. Upgrading a provider shouldn't have different steps
-  depending on if we maintain an upstream fork.
-- Easy to understand. `upgrade-provider` should inform the user what it's doing. If
-  something breaks, the user should be able to diagnose and complte the process on their
+  depending on if we maintain an upstream fork or a patch.
+- Intuitive to understand. `upgrade-provider` should inform the user what it's doing. If
+  something breaks, the user should be able to diagnose and complete the process on their
   own.
 - Idempotent. It should always be safe to run `upgrade-provider`, regardless of where the
   user is in an upgrade.
