@@ -137,6 +137,9 @@ func cmd() *cobra.Command {
 		},
 	}
 
+	cmd.PersistentFlags().StringVar(&context.RepoPath, "repo-path", "",
+		`Clone the provider repo to the specified path.`)
+
 	cmd.PersistentFlags().StringVar(&targetVersion, "target-version", "",
 		`Upgrade the provider to the passed version.
 

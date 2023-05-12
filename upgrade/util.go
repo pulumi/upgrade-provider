@@ -12,7 +12,8 @@ import (
 type Context struct {
 	context.Context
 
-	GoPath string
+	GoPath   string
+	RepoPath string
 
 	TargetVersion *semver.Version
 	InferVersion  bool
