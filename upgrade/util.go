@@ -12,7 +12,9 @@ import (
 type Context struct {
 	context.Context
 
-	GoPath   string
+	// The user's GOPATH env var
+	GoPath string
+	// An optional path to clone the provider repo to
 	RepoPath string
 
 	TargetVersion *semver.Version
