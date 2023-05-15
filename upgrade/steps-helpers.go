@@ -320,7 +320,7 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 // 1) --repo-path: if set, returns the specified repo path
 // 2) current working directory: returns the path to the cwd if it is a provider directory
 // or subdirectory, i.e. `user/home/pulumi/pulumi-docker/provider` it
-// 3) default: $GOPATH/src/github.com/org.
+// 3) default: $GOPATH/src/module, i.e. $GOPATH/src/github.com/pulumi/pulumi-datadog
 func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) {
 	// We assume the user passed in a valid path, either absolute or relative.
 	if ctx.RepoPath != "" {
