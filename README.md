@@ -33,6 +33,12 @@ the rest.
 Additionally, `upgrade-provider` relies on all tools necessary for a manual provider upgrade. 
 That generally means `pulumi`, `make`, and the build toolchain for each released SDK.
 
+### Auto Token Mapping
+
+To take full advantage of this tool, you can choose to use the new auto token mapping functionality.
+This feature is still experimental, and may be subject to change.
+[An implementation example can be found in pulumi-okta.](https://github.com/pulumi/pulumi-okta/pull/273/files#diff-34c57e622183cb0d8dd0d3f9eaa0861b3340120e9b2ad811bac7ac7be4cea4b1L561)
+
 
 ## Usage
 
@@ -58,6 +64,7 @@ Flags:
       --upstream-provider-name string   The name of the upstream provider.
                                         Required unless running from provider root and set in upgrade-config.yml.
 ```
+
 
 A typical run for a patched provider with an upgrade configuration file will look like this:
 
