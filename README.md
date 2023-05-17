@@ -22,7 +22,7 @@ the rest.
 
 ## Installation
 
-`go get -u github.com/pulumi/upgrade-provider`
+`go install github.com/pulumi/upgrade-provider@main`
 
 ## Requirements
 
@@ -43,6 +43,9 @@ This feature is still experimental, and may be subject to change.
 ## Usage
 
 ### From the command line
+
+`upgrade-provider` takes in one required positional argument: the org/repo of the provider, i.e. `pulumi/pulumi-docker`.
+The flag `--upstream-provider-name` is required; it is recommended to set it in [the config file](#configuration) while running `upgrade-provider` in CI. 
 
 ```bash
 Usage:
