@@ -2,6 +2,7 @@ package upgrade
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -62,6 +63,9 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 					goMod.UpstreamProviderOrg)
 				if err != nil {
 					return "", err
+				}
+				if upgradeTarget == nil {
+					return "", errors.New("could not determine an upstream version")
 				}
 
 				// If we have upgrades to perform, we list the new version we will target
