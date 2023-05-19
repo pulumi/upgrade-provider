@@ -114,10 +114,6 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget
 			goMod.Bridge.Version, targetBridge)
 	}
 
-	if len(upgradeTarget.GHIssues) > 0 {
-		fmt.Fprintf(b, "\n")
-	}
-
 	return b.String()
 }
 

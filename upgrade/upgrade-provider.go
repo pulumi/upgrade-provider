@@ -2,6 +2,7 @@ package upgrade
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -63,6 +64,9 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				if err != nil {
 					return "", err
 				}
+				if upgradeTarget == nil {
+					return "", errors.New("could not determine an upstream version")
+				}
 
 				// If we have upgrades to perform, we list the new version we will target
 				if upgradeTarget.Version == nil {
@@ -89,9 +93,9 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 				var previous string
 				if repo.currentUpstreamVersion != nil {
-					if semver.Compare(repo.currentUpstreamVersion.String(),
-						upgradeTarget.Version.String()) > 0 {
-						return "", fmt.Errorf("current upstream version %v is greater than target version %v",
+					if semver.Compare("v"+repo.currentUpstreamVersion.String(),
+						"v"+upgradeTarget.Version.String()) != -1 {
+						return "", fmt.Errorf("current upstream version %v is greater than/ equal to the target version %v",
 							repo.currentUpstreamVersion, upgradeTarget.Version)
 					}
 					previous = fmt.Sprintf("%s -> ", repo.currentUpstreamVersion)
