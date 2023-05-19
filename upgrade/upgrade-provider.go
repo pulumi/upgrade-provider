@@ -90,8 +90,8 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				var previous string
 				if repo.currentUpstreamVersion != nil {
 					if semver.Compare(repo.currentUpstreamVersion.String(),
-						upgradeTarget.Version.String()) > 0 {
-						return "", fmt.Errorf("current upstream version %v is greater than target version %v",
+						upgradeTarget.Version.String()) >= 0 {
+						return "", fmt.Errorf("current upstream version %v is greater than/ equal to the target version %v",
 							repo.currentUpstreamVersion, upgradeTarget.Version)
 					}
 					previous = fmt.Sprintf("%s -> ", repo.currentUpstreamVersion)
