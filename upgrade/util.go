@@ -27,6 +27,8 @@ type Context struct {
 
 	UpgradeCodeMigration bool
 	MigrationOpts        []string
+
+	RemovePlugins bool
 }
 
 type HandledError struct{}

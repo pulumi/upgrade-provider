@@ -168,8 +168,13 @@ If the passed version does not exist, an error is signaled.`)
 - "autoalias": Apply auto aliasing to the provider.`)
 
 	cmd.PersistentFlags().StringVar(&context.UpstreamProviderName, "upstream-provider-name", "",
-		`The name of the upstream provider. 
+		`The name of the upstream provider.
 Required unless running from provider root and set in upgrade-config.yml.`)
+
+	cmd.PersistentFlags().BoolVar(&context.RemovePlugins, "remove-plugins", false,
+		`Remove all pulumi plugins from cache before running the upgrade.
+		It is possible that the generated examples may be non-deterministic depending on which
+		plugins are used if existing versions are present in the cache.`)
 
 	return cmd
 }
