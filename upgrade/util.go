@@ -35,7 +35,7 @@ type Context struct {
 }
 
 func (c Context) SetRepoPath(p string) {
-	c.repoPath = &p
+	*c.repoPath = p
 }
 
 type HandledError struct{}
