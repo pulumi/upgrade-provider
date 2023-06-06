@@ -36,6 +36,7 @@ func cmd() *cobra.Command {
 	var experimental bool
 	var repoName string
 	var repoOrg string
+	var repoPath string
 
 	context := upgrade.Context{
 		Context: context.Background(),
@@ -124,6 +125,8 @@ func cmd() *cobra.Command {
 						upgradeKind)
 				}
 			}
+			// Set repoPath if specified
+			context.SetRepoPath(repoPath)
 
 			if context.TargetVersion != nil && !context.UpgradeProviderVersion {
 				return fmt.Errorf(
@@ -137,7 +140,7 @@ func cmd() *cobra.Command {
 		},
 	}
 
-	cmd.PersistentFlags().StringVar(&context.RepoPath, "repo-path", "",
+	cmd.PersistentFlags().StringVar(&repoPath, "repo-path", "",
 		`Clone the provider repo to the specified path.`)
 
 	cmd.PersistentFlags().StringVar(&targetVersion, "target-version", "",
