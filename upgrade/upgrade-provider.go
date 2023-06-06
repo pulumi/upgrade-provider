@@ -155,7 +155,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		!ctx.UpgradeCodeMigration && ctx.UpgradeSdkVersion {
+		!ctx.UpgradeCodeMigration && !ctx.UpgradeSdkVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
