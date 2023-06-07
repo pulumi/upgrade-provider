@@ -15,7 +15,7 @@ type Context struct {
 	// The user's GOPATH env var
 	GoPath string
 	// An optional path to clone the provider repo to
-	repoPath *string
+	repoPath string
 
 	TargetVersion *semver.Version
 	InferVersion  bool
@@ -34,8 +34,8 @@ type Context struct {
 	RemovePlugins bool
 }
 
-func (c Context) SetRepoPath(p string) {
-	*c.repoPath = p
+func (c *Context) SetRepoPath(p string) {
+	c.repoPath = p
 }
 
 type HandledError struct{}

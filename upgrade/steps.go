@@ -138,18 +138,26 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 			}
 			return expectedLocation, nil
 		}),
-		step.F("Downloading", func() (string, error) {
+		step.Computed(func() step.Step {
+			const tag = "Downloading"
 			if repoExists {
-				return "skipped", nil
+				return step.F(tag, func() (string, error) {
+					return "skipped - already exists", nil
+				})
 			}
 			targetDir := filepath.Dir(expectedLocation)
-			err := os.MkdirAll(targetDir, 0700)
-			if err != nil && !os.IsExist(err) {
-				return "", err
-			}
-
-			targetURL := fmt.Sprintf("https://%s.git", repoPath)
-			return "done", downloadRepo(ctx, targetURL, expectedLocation)
+			return step.Combined(tag,
+				step.F("Ensuring Path", func() (string, error) {
+					err := os.MkdirAll(targetDir, 0700)
+					if err != nil && !os.IsExist(err) {
+						return "", err
+					}
+					return "", nil
+				}),
+				step.Cmd(exec.CommandContext(ctx, "git", "clone",
+					fmt.Sprintf("https://%s.git", repoPath),
+					expectedLocation)),
+			)
 		}),
 		step.F("Validating", func() (string, error) {
 			return "done", exec.CommandContext(ctx, "git", "status", "--short").Run()
