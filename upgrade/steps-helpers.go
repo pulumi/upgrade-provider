@@ -20,11 +20,6 @@ import (
 
 var versionSuffix = regexp.MustCompile("/v[2-9][0-9]*$")
 
-func downloadRepo(ctx Context, url, dst string) error {
-	cmd := exec.CommandContext(ctx, "git", "clone", url, dst)
-	return cmd.Run()
-}
-
 func runGitCommand[T any](
 	ctx context.Context, filter func([]byte) (T, error), args ...string,
 ) (result T, err error) {
@@ -323,8 +318,8 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 // 3) default: $GOPATH/src/module, i.e. $GOPATH/src/github.com/pulumi/pulumi-datadog
 func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) {
 	// We assume the user passed in a valid path, either absolute or relative.
-	if ctx.repoPath != nil {
-		return *ctx.repoPath, nil
+	if ctx.repoPath != "" {
+		return ctx.repoPath, nil
 	}
 
 	// Strip version
