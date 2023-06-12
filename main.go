@@ -182,6 +182,9 @@ Required unless running from provider root and set in upgrade-config.yml.`)
 		It is possible that the generated examples may be non-deterministic depending on which
 		plugins are used if existing versions are present in the cache.`)
 
+	cmd.PersistentFlags().StringVar(&context.PrReviewers, "pr-reviewers", "",
+		`A comma separated list of reviewers to assign the upgrade PR to.`)
+
 	return cmd
 }
 

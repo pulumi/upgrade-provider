@@ -32,6 +32,7 @@ type Context struct {
 	MigrationOpts        []string
 
 	RemovePlugins bool
+	PrReviewers   string
 }
 
 func (c *Context) SetRepoPath(p string) {
