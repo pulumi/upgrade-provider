@@ -142,7 +142,7 @@ func cmd() *cobra.Command {
 			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
 			if err != nil {
 				msg, err := createFailureIssue(context, repoOrg, repoName)
-				if err != nil {
+				if err != nil && context.InferVersion {
 					fmt.Println(msg)
 				}
 			}
