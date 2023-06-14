@@ -312,7 +312,7 @@ func InformGitHub(
 
 	reviewerFlag := ""
 	if ctx.PrReviewers != "" {
-		reviewerFlag = fmt.Sprintf("--reviewer=%s", ctx.PrReviewers)
+		reviewerFlag = fmt.Sprintf("--reviewer=\"%s\"", ctx.PrReviewers)
 	}
 	createPR := step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
 		"--assignee", "@me",
