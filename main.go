@@ -141,7 +141,7 @@ func cmd() *cobra.Command {
 		Run: func(_ *cobra.Command, args []string) {
 			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
 			if err != nil {
-				msg, err := createFailureIssue(context, repoOrg, repoName, err.Error())
+				msg, err := createFailureIssue(context, repoOrg, repoName)
 				if err != nil {
 					fmt.Println(msg)
 				}
@@ -258,12 +258,15 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 }
 
 // Create an issue in the provider repo with a message describing the upgrade failure
-func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string, errMsg string) (string, error) {
+func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (string, error) {
 	now := time.Now()
-	h, min, _ := now.Clock()
-	y, m, d := now.Date()
-	title := fmt.Sprintf("Upgrade provider failure: %v %v, %v @ %v:%v", m, d, y, h, min)
-	errMsg = "Error: \n`" + errMsg + "`"
+	hr, min, _ := now.Clock()
+	yr, mth, day := now.Date()
+	minStr := fmt.Sprintf("%v", min)
+	if min < 10 {
+		minStr = fmt.Sprintf("0%v", min)
+	}
+	title := fmt.Sprintf("Upgrade provider failure: %v %v, %v @ %v:%v", mth, day, yr, hr, minStr)
 
 	getLatestWorkflowRun := exec.CommandContext(ctx, "gh", "run", "list",
 		"--workflow="+"upgrade-provider.yml",
@@ -314,7 +317,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string, er
 		cmd := exec.Command(
 			"gh", "issue", "create",
 			"--repo="+repoOrg+"/"+repoName,
-			"--body="+fmt.Sprintf("%s\n\nView the latest workflow run: %s", errMsg, workflowUrl),
+			"--body="+fmt.Sprintf("View the latest workflow run: %s", workflowUrl),
 			"--title="+title,
 			"--label="+"needs-triage",
 		)
@@ -329,7 +332,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string, er
 		cmd := exec.Command("gh", "issue", "comment",
 			fmt.Sprintf("%v", t.Number),
 			"--repo="+repoOrg+"/"+repoName,
-			"--body="+fmt.Sprintf("%s\n%s\n\nView the latest workflow run: %s", title, errMsg, workflowUrl),
+			"--body="+fmt.Sprintf("%s\n\nView the latest workflow run: %s", title, workflowUrl),
 		)
 		if err := cmd.Run(); err != nil {
 			return "createFailureIssue error: Failed to update existing issue", err
