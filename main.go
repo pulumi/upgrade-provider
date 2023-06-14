@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"go/build"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
@@ -136,6 +140,12 @@ func cmd() *cobra.Command {
 		},
 		Run: func(_ *cobra.Command, args []string) {
 			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
+			if err != nil {
+				msg, err := createFailureIssue(context, repoOrg, repoName, err.Error())
+				if err != nil {
+					fmt.Println(msg)
+				}
+			}
 			exitOnError(err)
 		},
 	}
@@ -245,4 +255,53 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 			contract.AssertNoErrorf(err, "error setting flag")
 		}
 	})
+}
+
+// Create an issue in the provider repo with a message describing the upgrade failure
+func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string, errMsg string) (string, error) {
+	now := time.Now()
+	y, m, d := now.Date()
+	title := fmt.Sprintf("Upgrade provider failure: %v %v %v", y, m, d)
+
+	getIssues := exec.CommandContext(ctx, "gh", "search", "issues",
+		"Upgrade provider failure: ",
+		"--repo="+repoOrg+"/"+repoName,
+		"--json=title,number",
+	)
+	bytes := new(bytes.Buffer)
+	getIssues.Stdout = bytes
+	err := getIssues.Run()
+	if err != nil {
+		return "Failed to create failure issue: failed to search existing issues", err
+	}
+	titles := []struct {
+		Title  string `json:"title"`
+		Number int    `json:"number"`
+	}{}
+	err = json.Unmarshal(bytes.Bytes(), &titles)
+	if err != nil {
+		return "Failed to create failure issue: failed to unmarshal gh output", err
+	}
+	for _, t := range titles {
+		cmd := exec.Command("gh", "issue", "delete",
+			fmt.Sprintf("%v", t.Number),
+			"--repo="+repoOrg+"/"+repoName,
+			"--yes",
+		)
+		if err := cmd.Run(); err != nil {
+			return "Failed to create failure issue: failed to delete old failure issues", err
+		}
+	}
+
+	cmd := exec.Command(
+		"gh", "issue", "create",
+		"--repo="+repoOrg+"/"+repoName,
+		"--body="+fmt.Sprintf("%q", errMsg),
+		"--title="+fmt.Sprintf("%q", title),
+	)
+	if err := cmd.Run(); err != nil {
+		return "Failed to create failure issue: failed to create new issue", err
+	}
+
+	return "", err
 }
