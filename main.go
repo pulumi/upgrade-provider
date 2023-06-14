@@ -260,48 +260,80 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 // Create an issue in the provider repo with a message describing the upgrade failure
 func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string, errMsg string) (string, error) {
 	now := time.Now()
+	h, min, _ := now.Clock()
 	y, m, d := now.Date()
-	title := fmt.Sprintf("Upgrade provider failure: %v %v %v", y, m, d)
+	title := fmt.Sprintf("Upgrade provider failure: %v %v, %v @ %v:%v", m, d, y, h, min)
+	errMsg = "Error: \n`" + errMsg + "`"
+
+	getLatestWorkflowRun := exec.CommandContext(ctx, "gh", "run", "list",
+		"--workflow="+"upgrade-provider.yml",
+		"--repo="+repoOrg+"/"+repoName,
+		"--limit=1",
+		"--json=url",
+	)
+	bytes1 := new(bytes.Buffer)
+	getLatestWorkflowRun.Stdout = bytes1
+	err := getLatestWorkflowRun.Run()
+	if err != nil {
+		return "createFailureIssue error: failed to query latest workflow run", err
+	}
+	workflowRunUrls := []struct {
+		Url string `json:"url"`
+	}{}
+	err = json.Unmarshal(bytes1.Bytes(), &workflowRunUrls)
+	if err != nil {
+		return "createFailureIssue error: failed to unmarshal `gh run list` output", err
+	}
+	if len(workflowRunUrls) == 0 {
+		return "createFailureIssue error: no workflow runs detected", err
+	}
+	workflowUrl := workflowRunUrls[0].Url
 
 	getIssues := exec.CommandContext(ctx, "gh", "search", "issues",
 		"Upgrade provider failure: ",
 		"--repo="+repoOrg+"/"+repoName,
 		"--json=title,number",
 	)
-	bytes := new(bytes.Buffer)
-	getIssues.Stdout = bytes
-	err := getIssues.Run()
+	bytes2 := new(bytes.Buffer)
+	getIssues.Stdout = bytes2
+	err = getIssues.Run()
 	if err != nil {
-		return "Failed to create failure issue: failed to search existing issues", err
+		return "createFailureIssue error: failed to search existing issues", err
 	}
 	titles := []struct {
 		Title  string `json:"title"`
 		Number int    `json:"number"`
 	}{}
-	err = json.Unmarshal(bytes.Bytes(), &titles)
+	err = json.Unmarshal(bytes2.Bytes(), &titles)
 	if err != nil {
-		return "Failed to create failure issue: failed to unmarshal gh output", err
+		return "createFailureIssue error: failed to unmarshal `gh search issues` output", err
 	}
-	for _, t := range titles {
-		cmd := exec.Command("gh", "issue", "delete",
-			fmt.Sprintf("%v", t.Number),
+
+	// create new issue if none exist
+	if len(titles) == 0 {
+		cmd := exec.Command(
+			"gh", "issue", "create",
 			"--repo="+repoOrg+"/"+repoName,
-			"--yes",
+			"--body="+fmt.Sprintf("%s\n\nView the latest workflow run: %s", errMsg, workflowUrl),
+			"--title="+title,
+			"--label="+"needs-triage",
 		)
 		if err := cmd.Run(); err != nil {
-			return "Failed to create failure issue: failed to delete old failure issues", err
+			return "createFailureIssue error: failed to create new issue", err
+		}
+
+		return "", err
+	}
+	// otherwise, comment on existing issue(s) with a link to the latest workflow ID
+	for _, t := range titles {
+		cmd := exec.Command("gh", "issue", "comment",
+			fmt.Sprintf("%v", t.Number),
+			"--repo="+repoOrg+"/"+repoName,
+			"--body="+fmt.Sprintf("%s\n%s\n\nView the latest workflow run: %s", title, errMsg, workflowUrl),
+		)
+		if err := cmd.Run(); err != nil {
+			return "createFailureIssue error: Failed to update existing issue", err
 		}
 	}
-
-	cmd := exec.Command(
-		"gh", "issue", "create",
-		"--repo="+repoOrg+"/"+repoName,
-		"--body="+fmt.Sprintf("%q", errMsg),
-		"--title="+fmt.Sprintf("%q", title),
-	)
-	if err := cmd.Run(); err != nil {
-		return "Failed to create failure issue: failed to create new issue", err
-	}
-
 	return "", err
 }
