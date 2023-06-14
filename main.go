@@ -103,13 +103,20 @@ func cmd() *cobra.Command {
 				case "all":
 					context.UpgradeBridgeVersion = true
 					context.UpgradeProviderVersion = true
-					context.UpgradeSdkVersion = true
 					if experimental {
 						context.UpgradeCodeMigration = true
 					}
+
 					if len(upgradeKind) > 1 {
-						warnedAll = true
-						warn("`--kind=all` implies all other options")
+						for _, v := range upgradeKind {
+							if v == "sdk" {
+								context.UpgradeSdkVersion = true
+							}
+						}
+						if !context.UpgradeSdkVersion {
+							warnedAll = true
+							warn("`--kind=all` implies all of bridge,provider,code options")
+						}
 					}
 				case "bridge":
 					set(&context.UpgradeBridgeVersion)
@@ -121,7 +128,7 @@ func cmd() *cobra.Command {
 					set(&context.UpgradeSdkVersion)
 				default:
 					return fmt.Errorf(
-						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, or `code`.",
+						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, `code`, or `sdk`.",
 						upgradeKind)
 				}
 			}
