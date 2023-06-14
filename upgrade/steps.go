@@ -310,15 +310,11 @@ func InformGitHub(
 		panic("Unknown action")
 	}
 
-	reviewerFlag := ""
-	if ctx.PrReviewers != "" {
-		reviewerFlag = fmt.Sprintf("--reviewer=%s", ctx.PrReviewers)
-	}
 	createPR := step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
 		"--assignee", "@me",
 		"--base", repo.defaultBranch,
 		"--head", repo.workingBranch,
-		reviewerFlag,
+		"--reviewer", ctx.PrReviewers,
 		"--title", prTitle,
 		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion),
 	)).In(&repo.root)
