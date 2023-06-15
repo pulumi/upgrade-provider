@@ -297,6 +297,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 		"--repo="+repoOrg+"/"+repoName,
 		"--json=title,number",
 		"--state=open",
+		"--author=pulumi-bot",
 	)
 	getIssues.Stdout = new(bytes.Buffer)
 	err = getIssues.Run()
