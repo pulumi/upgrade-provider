@@ -280,9 +280,9 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 	if err != nil {
 		return "createFailureIssue error: failed to query latest workflow run", err
 	}
-	workflowRunUrls := []struct {
+	var workflowRunUrls []struct {
 		Url string `json:"url"`
-	}{}
+	}
 	err = json.Unmarshal(bytes1.Bytes(), &workflowRunUrls)
 	if err != nil {
 		return "createFailureIssue error: failed to unmarshal `gh run list` output", err
@@ -296,9 +296,9 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 		"Upgrade provider failure: ",
 		"--repo="+repoOrg+"/"+repoName,
 		"--json=title,number",
+		"--state=open",
 	)
-	bytes2 := new(bytes.Buffer)
-	getIssues.Stdout = bytes2
+	getIssues.Stdout = new(bytes.Buffer)
 	err = getIssues.Run()
 	if err != nil {
 		return "createFailureIssue error: failed to search existing issues", err
@@ -307,7 +307,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 		Title  string `json:"title"`
 		Number int    `json:"number"`
 	}{}
-	err = json.Unmarshal(bytes2.Bytes(), &titles)
+	err = json.Unmarshal(getIssues.Stdout.Bytes(), &titles)
 	if err != nil {
 		return "createFailureIssue error: failed to unmarshal `gh search issues` output", err
 	}
@@ -317,7 +317,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 		cmd := exec.Command(
 			"gh", "issue", "create",
 			"--repo="+repoOrg+"/"+repoName,
-			"--body="+fmt.Sprintf("View the latest workflow run: %s", workflowUrl),
+			"--body=View the latest workflow run: "+workflowUrl,
 			"--title="+title,
 			"--label="+"needs-triage",
 		)
