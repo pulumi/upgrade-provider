@@ -274,8 +274,8 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 		"--limit=1",
 		"--json=url",
 	)
-	bytes1 := new(bytes.Buffer)
-	getLatestWorkflowRun.Stdout = bytes1
+	ghRunBytes := new(bytes.Buffer)
+	getLatestWorkflowRun.Stdout = ghRunBytes
 	err := getLatestWorkflowRun.Run()
 	if err != nil {
 		return "createFailureIssue error: failed to query latest workflow run", err
@@ -283,7 +283,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 	var workflowRunUrls []struct {
 		Url string `json:"url"`
 	}
-	err = json.Unmarshal(bytes1.Bytes(), &workflowRunUrls)
+	err = json.Unmarshal(ghRunBytes.Bytes(), &workflowRunUrls)
 	if err != nil {
 		return "createFailureIssue error: failed to unmarshal `gh run list` output", err
 	}
@@ -299,7 +299,8 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 		"--state=open",
 		"--author=pulumi-bot",
 	)
-	getIssues.Stdout = new(bytes.Buffer)
+	ghSearchBytes := new(bytes.Buffer)
+	getIssues.Stdout = ghSearchBytes
 	err = getIssues.Run()
 	if err != nil {
 		return "createFailureIssue error: failed to search existing issues", err
@@ -308,7 +309,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 		Title  string `json:"title"`
 		Number int    `json:"number"`
 	}{}
-	err = json.Unmarshal(getIssues.Stdout.Bytes(), &titles)
+	err = json.Unmarshal(ghSearchBytes.Bytes(), &titles)
 	if err != nil {
 		return "createFailureIssue error: failed to unmarshal `gh search issues` output", err
 	}
