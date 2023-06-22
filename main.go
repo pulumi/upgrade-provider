@@ -140,9 +140,9 @@ func cmd() *cobra.Command {
 		},
 		Run: func(_ *cobra.Command, args []string) {
 			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
-			if err != nil {
+			if err != nil && context.InferVersion {
 				msg, err := createFailureIssue(context, repoOrg, repoName)
-				if err != nil && context.InferVersion {
+				if err != nil {
 					fmt.Println(msg)
 				}
 			}
