@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"go/build"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
@@ -143,6 +147,12 @@ func cmd() *cobra.Command {
 		},
 		Run: func(_ *cobra.Command, args []string) {
 			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
+			if err != nil && context.InferVersion {
+				msg, err := createFailureIssue(context, repoOrg, repoName)
+				if err != nil {
+					fmt.Println(msg)
+				}
+			}
 			exitOnError(err)
 		},
 	}
@@ -252,4 +262,90 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 			contract.AssertNoErrorf(err, "error setting flag")
 		}
 	})
+}
+
+// Create an issue in the provider repo with a message describing the upgrade failure
+func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (string, error) {
+	now := time.Now()
+	hr, min, _ := now.Clock()
+	yr, mth, day := now.Date()
+	minStr := fmt.Sprintf("%v", min)
+	if min < 10 {
+		minStr = fmt.Sprintf("0%v", min)
+	}
+	title := fmt.Sprintf("Upgrade provider failure: %v %v, %v @ %v:%v", mth, day, yr, hr, minStr)
+
+	getLatestWorkflowRun := exec.CommandContext(ctx, "gh", "run", "list",
+		"--workflow="+"upgrade-provider.yml",
+		"--repo="+repoOrg+"/"+repoName,
+		"--limit=1",
+		"--json=url",
+	)
+	ghRunBytes := new(bytes.Buffer)
+	getLatestWorkflowRun.Stdout = ghRunBytes
+	err := getLatestWorkflowRun.Run()
+	if err != nil {
+		return "createFailureIssue error: failed to query latest workflow run", err
+	}
+	var workflowRunUrls []struct {
+		Url string `json:"url"`
+	}
+	err = json.Unmarshal(ghRunBytes.Bytes(), &workflowRunUrls)
+	if err != nil {
+		return "createFailureIssue error: failed to unmarshal `gh run list` output", err
+	}
+	if len(workflowRunUrls) == 0 {
+		return "createFailureIssue error: no workflow runs detected", err
+	}
+	workflowUrl := workflowRunUrls[0].Url
+
+	getIssues := exec.CommandContext(ctx, "gh", "search", "issues",
+		"Upgrade provider failure: ",
+		"--repo="+repoOrg+"/"+repoName,
+		"--json=title,number",
+		"--state=open",
+		"--author=pulumi-bot",
+	)
+	ghSearchBytes := new(bytes.Buffer)
+	getIssues.Stdout = ghSearchBytes
+	err = getIssues.Run()
+	if err != nil {
+		return "createFailureIssue error: failed to search existing issues", err
+	}
+	titles := []struct {
+		Title  string `json:"title"`
+		Number int    `json:"number"`
+	}{}
+	err = json.Unmarshal(ghSearchBytes.Bytes(), &titles)
+	if err != nil {
+		return "createFailureIssue error: failed to unmarshal `gh search issues` output", err
+	}
+
+	// create new issue if none exist
+	if len(titles) == 0 {
+		cmd := exec.Command(
+			"gh", "issue", "create",
+			"--repo="+repoOrg+"/"+repoName,
+			"--body=View the latest workflow run: "+workflowUrl,
+			"--title="+title,
+			"--label="+"needs-triage",
+		)
+		if err := cmd.Run(); err != nil {
+			return "createFailureIssue error: failed to create new issue", err
+		}
+
+		return "", err
+	}
+	// otherwise, comment on existing issue(s) with a link to the latest workflow ID
+	for _, t := range titles {
+		cmd := exec.Command("gh", "issue", "comment",
+			fmt.Sprintf("%v", t.Number),
+			"--repo="+repoOrg+"/"+repoName,
+			"--body="+fmt.Sprintf("%s\n\nView the latest workflow run: %s", title, workflowUrl),
+		)
+		if err := cmd.Run(); err != nil {
+			return "createFailureIssue error: Failed to update existing issue", err
+		}
+	}
+	return "", err
 }
