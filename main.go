@@ -273,7 +273,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 	if min < 10 {
 		minStr = fmt.Sprintf("0%v", min)
 	}
-	title := fmt.Sprintf("Upgrade provider failure: %v %v, %v @ %v:%v", mth, day, yr, hr, minStr)
+	title := fmt.Sprintf("Workflow failure: Upgrade provider | %v %v, %v @ %v:%v", mth, day, yr, hr, minStr)
 
 	getLatestWorkflowRun := exec.CommandContext(ctx, "gh", "run", "list",
 		"--workflow="+"upgrade-provider.yml",
@@ -300,7 +300,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 	workflowUrl := workflowRunUrls[0].Url
 
 	getIssues := exec.CommandContext(ctx, "gh", "search", "issues",
-		"Upgrade provider failure: ",
+		"Workflow failure: Upgrade provider",
 		"--repo="+repoOrg+"/"+repoName,
 		"--json=title,number",
 		"--state=open",
