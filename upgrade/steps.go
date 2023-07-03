@@ -576,6 +576,20 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 			"github.com/pulumi/"+name+"/{}/pkg").In(&repo.root),
 		replaceInFile("Update Go Module", "go.mod",
 			"module github.com/pulumi/"+name+"/{}").In(repo.providerDir()),
+		step.F("Update sdk/go.mod", func() (string, error) {
+			path := "sdk/go.mod"
+			f, err := os.ReadFile(path)
+			if err != nil {
+				return "", err
+			}
+			mod := fmt.Sprintf("github.com/%s/%s/sdk", repo.org, repo.name)
+			var prev string
+			if m := repo.currentVersion.Major(); m > 1 {
+				prev = fmt.Sprintf("/%d", m)
+			}
+			f = bytes.ReplaceAll(f, []byte(mod+prev), []byte(mod+nextMajorVersion))
+			return "", os.WriteFile(path, f, 0600)
+		}).In(&repo.root),
 		step.F("Update Go Imports", func() (string, error) {
 			var filesUpdated int
 			var fn filepath.WalkFunc = func(path string, info fs.FileInfo, err error) error {
