@@ -34,7 +34,12 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 	ok := step.Run(step.Combined("Setting Up Environment",
 		step.Env("GOWORK", "off"),
-		step.Env("PULUMI_MISSING_DOCS_ERROR", "true"),
+		step.Env("PULUMI_MISSING_DOCS_ERROR", func() string {
+			if ctx.AllowMissingDocs {
+				return "false"
+			}
+			return "true"
+		}()),
 		step.Env("PULUMI_CONVERT_EXAMPLES_CACHE_DIR", ""),
 	))
 	if !ok {
