@@ -148,9 +148,16 @@ func cmd() *cobra.Command {
 		Run: func(_ *cobra.Command, args []string) {
 			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
 			if err != nil && context.InferVersion {
-				msg, err := createFailureIssue(context, repoOrg, repoName)
-				if err != nil {
-					fmt.Println(msg)
+				// $GITHUB_ACTION is a default env var within github
+				// actions, but is unlikely to be defined elsewhere.
+				//
+				// We do this to test that we are being run inside a GH
+				// action.
+				if _, ci := os.LookupEnv("GITHUB_ACTION"); ci {
+					msg, err := createFailureIssue(context, repoOrg, repoName)
+					if err != nil {
+						fmt.Println(msg)
+					}
 				}
 			}
 			exitOnError(err)
@@ -279,40 +286,26 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 	}
 	title := fmt.Sprintf("Workflow failure: Upgrade provider | %v %v, %v @ %v:%v", mth, day, yr, hr, minStr)
 
-	getLatestWorkflowRun := exec.CommandContext(ctx, "gh", "run", "list",
-		"--workflow="+"upgrade-provider.yml",
-		"--repo="+repoOrg+"/"+repoName,
-		"--limit=1",
-		"--json=url",
-	)
-	ghRunBytes := new(bytes.Buffer)
-	getLatestWorkflowRun.Stdout = ghRunBytes
-	err := getLatestWorkflowRun.Run()
-	if err != nil {
-		return "createFailureIssue error: failed to query latest workflow run", err
-	}
-	var workflowRunUrls []struct {
-		Url string `json:"url"`
-	}
-	err = json.Unmarshal(ghRunBytes.Bytes(), &workflowRunUrls)
-	if err != nil {
-		return "createFailureIssue error: failed to unmarshal `gh run list` output", err
-	}
-	if len(workflowRunUrls) == 0 {
-		return "createFailureIssue error: no workflow runs detected", err
-	}
-	workflowUrl := workflowRunUrls[0].Url
+	// From https://docs.github.com/en/actions/learn-github-actions/variables:
+	//
+	//	If you need to use a workflow run's URL from within a job, you can combine
+	//	these variables:
+	//	$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+	workflowURL := fmt.Sprintf("%s/%s/actions/runs/%s",
+		os.Getenv("GITHUB_SERVER_URL"),
+		os.Getenv("GITHUB_REPOSITORY"),
+		os.Getenv("GITHUB_RUN_ID"))
 
 	getIssues := exec.CommandContext(ctx, "gh", "search", "issues",
 		"Workflow failure: Upgrade provider",
 		"--repo="+repoOrg+"/"+repoName,
 		"--json=title,number",
 		"--state=open",
-		"--author=pulumi-bot",
+		"--author=@me",
 	)
 	ghSearchBytes := new(bytes.Buffer)
 	getIssues.Stdout = ghSearchBytes
-	err = getIssues.Run()
+	err := getIssues.Run()
 	if err != nil {
 		return "createFailureIssue error: failed to search existing issues", err
 	}
@@ -330,7 +323,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 		cmd := exec.Command(
 			"gh", "issue", "create",
 			"--repo="+repoOrg+"/"+repoName,
-			"--body=View the latest workflow run: "+workflowUrl,
+			"--body=View the latest workflow run: "+workflowURL,
 			"--title="+title,
 			"--label="+"needs-triage",
 		)
@@ -345,7 +338,7 @@ func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (s
 		cmd := exec.Command("gh", "issue", "comment",
 			fmt.Sprintf("%v", t.Number),
 			"--repo="+repoOrg+"/"+repoName,
-			"--body="+fmt.Sprintf("%s\n\nView the latest workflow run: %s", title, workflowUrl),
+			"--body="+fmt.Sprintf("%s\n\nView the latest workflow run: %s", title, workflowURL),
 		)
 		if err := cmd.Run(); err != nil {
 			return "createFailureIssue error: Failed to update existing issue", err
