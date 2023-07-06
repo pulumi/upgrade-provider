@@ -31,9 +31,10 @@ type Context struct {
 	UpgradeCodeMigration bool
 	MigrationOpts        []string
 
-	RemovePlugins    bool
-	AllowMissingDocs bool
-	PrReviewers      string
+	AllowMissingDocs   bool
+	RemovePlugins      bool
+	PrReviewers        string
+	CreateFailureIssue bool
 }
 
 func (c *Context) SetRepoPath(p string) {

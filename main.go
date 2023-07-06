@@ -147,7 +147,7 @@ func cmd() *cobra.Command {
 		},
 		Run: func(_ *cobra.Command, args []string) {
 			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
-			if err != nil && context.InferVersion {
+			if err != nil && context.CreateFailureIssue {
 				// $GITHUB_ACTION is a default env var within github
 				// actions, but is unlikely to be defined elsewhere.
 				//
@@ -212,6 +212,9 @@ Required unless running from provider root and set in upgrade-config.yml.`)
 	cmd.PersistentFlags().BoolVarP(&context.AllowMissingDocs, "allow-missing-docs", "", false,
 		`If true, don't error on missing docs during tfgen.
 This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
+
+	cmd.PersistentFlags().BoolVar(&context.CreateFailureIssue, "create-failure-issue", false,
+		`Create an issue in the target repository if the upgrade attempt fails in CI.`)
 
 	return cmd
 }
