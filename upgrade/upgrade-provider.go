@@ -7,9 +7,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
-	"golang.org/x/mod/semver"
+	"golang.org/x/mod/module"
+	goSemver "golang.org/x/mod/semver"
 
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
@@ -28,7 +31,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		name: repoName,
 		org:  repoOrg,
 	}
-	var targetBridgeVersion string
+	var targetBridgeVersion, tfSDKUpgrade string
 	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
 
@@ -98,7 +101,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 				var previous string
 				if repo.currentUpstreamVersion != nil {
-					if semver.Compare("v"+repo.currentUpstreamVersion.String(),
+					if goSemver.Compare("v"+repo.currentUpstreamVersion.String(),
 						"v"+upgradeTarget.Version.String()) != -1 {
 						return "", fmt.Errorf("current upstream version %v is greater than/ equal to the target version %v",
 							repo.currentUpstreamVersion, upgradeTarget.Version)
@@ -126,7 +129,63 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 				targetBridgeVersion = latest.Original()
 				return fmt.Sprintf("%s -> %s", goMod.Bridge.Version, latest.Original()), nil
-			}))
+			}),
+			step.F("Planning Plugin SDK Update", func() (string, error) {
+				current, ok, err := originalGoVersionOf(ctx, repo, "provider/go.mod",
+					"github.com/pulumi/terraform-plugin-sdk/v2")
+				if err != nil {
+					return "", err
+				}
+				if !ok {
+					return "not found", nil
+				}
+				refs, err := gitRefsOf(ctx,
+					"https://github.com/pulumi/terraform-plugin-sdk.git", "heads")
+				if err != nil {
+					return "", err
+				}
+				currentRef, err := module.PseudoVersionRev(current.Version)
+				if err != nil {
+					return "", fmt.Errorf("unable to parse PseudoVersionRef %q: %w",
+						current.Version, err)
+				}
+				currentBranch, ok := refs.labelOf(currentRef)
+				if !ok {
+					return "", fmt.Errorf("Did not recognize branch")
+				}
+
+				trim := func(branch string) string {
+					const p = "refs/heads/upstream-"
+					return strings.TrimPrefix(branch, p)
+				}
+				currentBranch = trim(currentBranch)
+
+				parse := func(branch string) *semver.Version {
+					version := trim(branch)
+					v, err := semver.NewVersion(version)
+					if err != nil {
+						return nil
+					}
+					return v
+				}
+				sorted := refs.sortedLabels(func(a, b string) bool {
+					vA, vB := parse(a), parse(b)
+					switch {
+					case vA == nil:
+						return false
+					case vB == nil:
+						return true
+					default:
+						return vA.GreaterThan(vB)
+					}
+				})
+				latest := trim(sorted[0])
+				if latest == currentBranch {
+					return fmt.Sprintf("Up to date at %s", latest), nil
+				}
+				return fmt.Sprintf("%s -> %s", currentBranch, latest), nil
+			}).AssignTo(&tfSDKUpgrade),
+		)
 	}
 
 	if ctx.MajorVersionBump {
@@ -306,7 +365,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		}),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		GitCommit(ctx, "make build_sdks").In(&repo.root),
-		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion),
+		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, tfSDKUpgrade),
 	)
 
 	ok = step.Run(step.Combined("Update Artifacts", artifacts...))

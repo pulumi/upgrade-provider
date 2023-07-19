@@ -215,16 +215,15 @@ func UpgradeProviderVersion(
 		// It they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func() (string, error) {
-				return runGitCommand(ctx, func(b []byte) (string, error) {
-					for _, line := range strings.Split(string(b), "\n") {
-						parts := strings.Split(line, "\t")
-						contract.Assertf(len(parts) == 2, "expected git ls-remote to give '\t' separated values, found line '%s'", line)
-						if parts[1] == "refs/tags/v"+target.String() {
-							return parts[0], nil
-						}
-					}
-					return "", fmt.Errorf("could not find SHA for tag '%s'", target.Original())
-				}, "ls-remote", "--tags", "https://"+modPathWithoutVersion(goMod.Upstream.Path))
+				refs, err := gitRefsOf(ctx, "tags",
+					"https://"+modPathWithoutVersion(goMod.Upstream.Path))
+				if err != nil {
+					return "", err
+				}
+				if ref, ok := refs.shaOf("refs/tags/v" + target.String()); ok {
+					return ref, nil
+				}
+				return "", fmt.Errorf("could not find SHA for tag '%s'", target.Original())
 			}).AssignTo(&targetSHA))
 	}
 
@@ -293,7 +292,7 @@ func UpgradeProviderVersion(
 
 func InformGitHub(
 	ctx Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
-	goMod *GoMod, targetBridgeVersion string,
+	goMod *GoMod, targetBridgeVersion, tfSDKUpgrade string,
 ) step.Step {
 	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
 		"origin", repo.workingBranch)).In(&repo.root)
@@ -316,7 +315,7 @@ func InformGitHub(
 		"--head", repo.workingBranch,
 		"--reviewer", ctx.PrReviewers,
 		"--title", prTitle,
-		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion),
+		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade),
 	)).In(&repo.root)
 	return step.Combined("GitHub",
 		pushBranch,
