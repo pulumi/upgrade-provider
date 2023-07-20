@@ -48,12 +48,9 @@ func modPathWithoutVersion(path string) string {
 // Find the go module version of needleModule, searching from the default repo branch, not
 // the currently checked out code.
 func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleModule string) (module.Version, bool, error) {
-	cmd := exec.CommandContext(ctx, "git", "show", repo.defaultBranch+":"+file)
-	cmd.Dir = repo.root
-	data, err := cmd.Output()
+	data, err := baseFileAt(ctx, repo, file)
 	if err != nil {
-		return module.Version{}, false, fmt.Errorf("%s:%s: %w",
-			repo.defaultBranch, file, err)
+		return module.Version{}, false, err
 	}
 
 	goMod, err := modfile.Parse(file, data, nil)
@@ -79,7 +76,19 @@ func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleMod
 	return module.Version{}, false, nil
 }
 
-func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod, targetBridge string) string {
+func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "git", "show", repo.defaultBranch+":"+file)
+	cmd.Dir = repo.root
+	data, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%s:%s: %w", repo.defaultBranch, file, err)
+	}
+	return data, nil
+}
+
+func prBody(ctx Context, repo ProviderRepo,
+	upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
+	targetBridge, tfSDKUpgrade string) string {
 	b := new(strings.Builder)
 	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n",
 		strings.Join(os.Args[1:], " "))
@@ -107,6 +116,10 @@ func prBody(ctx Context, repo ProviderRepo, upgradeTarget *UpstreamUpgradeTarget
 	if ctx.UpgradeBridgeVersion {
 		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge from %s to %s.\n",
 			goMod.Bridge.Version, targetBridge)
+	}
+	if parts := strings.Split(tfSDKUpgrade, " -> "); len(parts) == 2 {
+		fmt.Fprintf(b, "- Upgrading pulumi/terraform-plugin-sdk from %s to %s.\n",
+			parts[0], parts[1])
 	}
 
 	return b.String()
@@ -290,6 +303,59 @@ func setUpstreamFromRemoteRepo(
 		return nil
 	}
 	return fmt.Errorf("no tag commit that matched '%s' in '%s'", rev, url)
+}
+
+func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
+	args := []string{"ls-remote", "--" + kind, url}
+	cmd := exec.CommandContext(ctx, "git", args...)
+	out := new(bytes.Buffer)
+	cmd.Stdout = out
+	if err := cmd.Run(); err != nil {
+		return gitRepoRefs{}, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	refsToBranches := map[string]string{}
+	for i, line := range strings.Split(out.String(), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		contract.Assertf(len(parts) == 2,
+			"expected git ls-remote to give '\t' separated values, found line %d: '%s'",
+			i, line)
+		refsToBranches[parts[0]] = parts[1]
+	}
+	return gitRepoRefs{refsToBranches}, nil
+}
+
+type gitRepoRefs struct{ refsToLabel map[string]string }
+
+func (g gitRepoRefs) shaOf(label string) (string, bool) {
+	for ref, l := range g.refsToLabel {
+		if l == label {
+			return ref, true
+		}
+	}
+	return "", false
+}
+
+func (g gitRepoRefs) labelOf(sha string) (string, bool) {
+	for ref, label := range g.refsToLabel {
+		if strings.HasPrefix(ref, sha) {
+			return label, true
+		}
+	}
+	return "", false
+}
+
+func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
+	labels := make([]string, 0, len(g.refsToLabel))
+	for _, label := range g.refsToLabel {
+		labels = append(labels, label)
+	}
+	sort.Slice(labels, func(i, j int) bool {
+		return less(labels[i], labels[j])
+	})
+	return labels
 }
 
 func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
