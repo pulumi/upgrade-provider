@@ -297,7 +297,10 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				In(repo.providerDir()),
 			step.Cmd(exec.CommandContext(ctx,
 				"go", "get", "github.com/pulumi/pulumi/pkg/v3")).
-				In(repo.providerDir())))
+				In(repo.providerDir())),
+			step.Cmd(exec.CommandContext(ctx,
+				"go", "get", "github.com/pulumi/pulumi/pkg/v3")).
+				In(repo.examplesDir()))
 	}
 
 	if ctx.UpgradeCodeMigration {

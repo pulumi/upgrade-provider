@@ -107,6 +107,7 @@ func cmd() *cobra.Command {
 				case "all":
 					context.UpgradeBridgeVersion = true
 					context.UpgradeProviderVersion = true
+					context.UpgradeSdkVersion = true
 					if experimental {
 						context.UpgradeCodeMigration = true
 					}
