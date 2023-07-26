@@ -169,23 +169,7 @@ func UpgradeProviderVersion(
 	ctx Context, goMod *GoMod, target *semver.Version,
 	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
-	updateLatestPluginSDK, didUpdate := getLatestTFPluginSDKReplace(ctx, repo)
-
-	// We start by updating the terraform-plugin-sdk because later updates sometimes
-	// rely on it.
-	steps := []step.Step{
-		updateLatestPluginSDK,
-		// If we updated the pinned plugin sdk, then we need to run `go mod tidy`
-		// to normalize the ref.
-		step.Computed(func() step.Step {
-			if !(*didUpdate) {
-				return nil
-			}
-			return step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).
-				In(repo.providerDir())
-		}),
-	}
-
+	steps := []step.Step{}
 	if goMod.Kind.IsPatched() {
 		// If the provider is patched, we don't use the go module system at all. Instead
 		// we update the module referenced to the new tag.
@@ -207,7 +191,24 @@ func UpgradeProviderVersion(
 			// provider` would succeed.
 			step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root),
 		))
-	} else if !goMod.Kind.IsForked() {
+	}
+	// We first check if the provider is patched, and ensure the upstream is initialized if so.
+	updateLatestPluginSDK, didUpdate := getLatestTFPluginSDKReplace(ctx, repo)
+	// We then start by updating the terraform-plugin-sdk because later updates sometimes
+	// rely on it.
+
+	steps = append(steps, updateLatestPluginSDK,
+		// If we updated the pinned plugin sdk, then we need to run `go mod tidy`
+		// to normalize the ref.
+		step.Computed(func() step.Step {
+			if !(*didUpdate) {
+				return nil
+			}
+			return step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).
+				In(repo.providerDir())
+		}))
+
+	if !goMod.Kind.IsForked() {
 		// We have an upstream we don't control, so we need to get it's SHA. We do this
 		// instead of using version tags because we can't ensure that the upstream is
 		// versioning their go modules correctly.
