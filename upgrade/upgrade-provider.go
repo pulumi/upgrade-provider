@@ -291,6 +291,11 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				"go", "get", "github.com/pulumi/pulumi/pkg/v3")).
 				In(repo.examplesDir()))
 	}
+	if ctx.UpgradePfVersion {
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/pf")).
+			In(repo.providerDir()))
+	}
 
 	if ctx.UpgradeCodeMigration {
 		applied := make(map[string]struct{})

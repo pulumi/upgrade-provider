@@ -130,6 +130,8 @@ func cmd() *cobra.Command {
 					set(&context.UpgradeCodeMigration)
 				case "sdk":
 					set(&context.UpgradeSdkVersion)
+				case "pf":
+					set(&context.UpgradePfVersion)
 				default:
 					return fmt.Errorf(
 						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, `code`, or `sdk`.",
@@ -188,6 +190,7 @@ If the passed version does not exist, an error is signaled.`)
 - "bridge":  Upgrade the bridge only.
 - "provider": Upgrade the upstream provider only.
 - "sdk": Upgrade the Pulumi sdk only.
+- "pf": Upgrade the Plugin Framework only.
 - "code":     Perform some number of code migrations.`)
 
 	cmd.PersistentFlags().BoolVar(&experimental, "experimental", false,

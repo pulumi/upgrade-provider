@@ -23,6 +23,7 @@ type Context struct {
 
 	UpgradeBridgeVersion bool
 	UpgradeSdkVersion    bool
+	UpgradePfVersion     bool
 
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
