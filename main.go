@@ -107,6 +107,7 @@ func cmd() *cobra.Command {
 				case "all":
 					context.UpgradeBridgeVersion = true
 					context.UpgradeProviderVersion = true
+					context.UpgradePfVersion = true
 					if experimental {
 						context.UpgradeCodeMigration = true
 					}
@@ -186,7 +187,7 @@ If the passed version does not exist, an error is signaled.`)
 
 	cmd.PersistentFlags().StringSliceVar(&upgradeKind, "kind", []string{"all"},
 		`The kind of upgrade to perform:
-- "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code".
+- "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code,pf".
 - "bridge":  Upgrade the bridge only.
 - "provider": Upgrade the upstream provider only.
 - "sdk": Upgrade the Pulumi sdk only.

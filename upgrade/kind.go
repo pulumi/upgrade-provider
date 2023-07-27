@@ -99,6 +99,11 @@ func GetRepoKind(ctx Context, repo ProviderRepo) (*GoMod, error) {
 	} else if !ok {
 		return nil, fmt.Errorf(bridgeMissingMsg)
 	}
+	pf, ok, err := originalGoVersionOf(ctx, repo, filepath.Join("provider", "go.mod"), "github.com/pulumi/pulumi-terraform-bridge/pf")
+	if (err != nil || !ok) && ctx.UpgradePfVersion {
+		fmt.Println("No version of github.com/pulumi/pulumi-terraform-bridge/pf detected")
+		ctx.UpgradePfVersion = false
+	}
 
 	tfProviderRepoName := ctx.UpstreamProviderName
 
@@ -182,6 +187,7 @@ func GetRepoKind(ctx Context, repo ProviderRepo) (*GoMod, error) {
 		Upstream: upstream.Mod,
 		Fork:     fork,
 		Bridge:   bridge,
+		Pf:       pf,
 	}
 	// get the org name that hosts the upstream repo
 	tok := strings.Split(modPathWithoutVersion(upstream.Mod.Path), "/")

@@ -86,6 +86,7 @@ type GoMod struct {
 	Upstream module.Version
 	Fork     *modfile.Replace
 	Bridge   module.Version
+	Pf       module.Version
 
 	UpstreamProviderOrg string
 }

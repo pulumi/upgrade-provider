@@ -30,7 +30,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		name: repoName,
 		org:  repoOrg,
 	}
-	var targetBridgeVersion, tfSDKUpgrade string
+	var targetBridgeVersion, targetPfVersion, tfSDKUpgrade string
 	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
 
@@ -173,6 +173,24 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			}).AssignTo(&tfSDKUpgrade),
 		)
 	}
+	if ctx.UpgradePfVersion {
+		discoverSteps = append(discoverSteps,
+			step.F("Planning Plugin Framework Update", func() (string, error) {
+				latest, err := latestRelease(ctx, "pulumi/pulumi-terraform-bridge")
+				if err != nil {
+					return "", err
+				}
+
+				// If our target upgrade version is the same as our current version, we skip the update.
+				if latest.Original() == goMod.Pf.Version {
+					ctx.UpgradePfVersion = false
+					return fmt.Sprintf("Up to date at %s", latest.Original()), nil
+				}
+
+				targetPfVersion = latest.Original()
+				return fmt.Sprintf("%s -> %s", goMod.Pf.Version, latest.Original()), nil
+			}))
+	}
 
 	if ctx.MajorVersionBump {
 		discoverSteps = append(discoverSteps,
@@ -293,7 +311,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 	if ctx.UpgradePfVersion {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/pf")).
+			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion)).
 			In(repo.providerDir()))
 	}
 
