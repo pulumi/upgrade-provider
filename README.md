@@ -30,7 +30,7 @@ the rest.
 - `git` version `>=2.36.0`
 - [GitHub CLI](https://cli.github.com/)
 
-Additionally, `upgrade-provider` relies on all tools necessary for a manual provider upgrade. 
+Additionally, `upgrade-provider` relies on all tools necessary for a manual provider upgrade.
 That generally means `pulumi`, `make`, and the build toolchain for each released SDK.
 
 ### Auto Token Mapping
@@ -39,13 +39,12 @@ To take full advantage of this tool, you can choose to use the new auto token ma
 This feature is still experimental, and may be subject to change.
 [An implementation example can be found in pulumi-okta.](https://github.com/pulumi/pulumi-okta/pull/273/files#diff-34c57e622183cb0d8dd0d3f9eaa0861b3340120e9b2ad811bac7ac7be4cea4b1L561)
 
-
 ## Usage
 
 ### From the command line
 
 `upgrade-provider` takes in one required positional argument: the org/repo of the provider, i.e. `pulumi/pulumi-docker`.
-The flag `--upstream-provider-name` is required; it is recommended to set it in [the config file](#configuration) while running `upgrade-provider` in CI. 
+The flag `--upstream-provider-name` is required; it is recommended to set it in [the config file](#configuration) while running `upgrade-provider` in CI.
 
 ```bash
 Usage:
@@ -62,12 +61,11 @@ Flags:
                                         - "code":     Perform some number of code migrations. (default [all])
       --major                           Upgrade the provider to a new major version.
       --target-version string           Upgrade the provider to the passed version.
-                                        
+
                                         If the passed version does not exist, an error is signaled.
       --upstream-provider-name string   The name of the upstream provider.
                                         Required unless running from provider root and set in upgrade-config.yml.
 ```
-
 
 A typical run for a patched provider with an upgrade configuration file will look like this:
 
@@ -130,17 +128,17 @@ Repeat as necessary for a working upgrade.
 ### In a GitHub Action (experimental)
 
 1. Ensure you have an [`upgrade-config.yml`](#Configuration) set in the root of your provider:
+
    ```yaml---
      upstream-provider-name: terraform-provider-snowflake
    ```
 
 2. Add the [Pulumi Upgrade Provider Action](https://github.com/pulumi/pulumi-upgrade-provider-action)
    to your publishing workflow(s):
-   ```yaml    
+   ```yaml
    - name: Call upgrade provider action
      uses: pulumi/pulumi-upgrade-provider-action@v0.0.4
    ```
-
 
 ## How it works
 
@@ -195,10 +193,12 @@ If `shim` is a subfolder of `provider`, then upgrades will be performed in `shim
 
 A configuration file `.upgrade-config.{yml/json}` may be defined within the provider directory.
 Values include:
+
 - `upstream-provider-name`: The name of the upstream provider repo, i.e. `terraform-provider-docker`
 - `experimental`: Whether to enable experimental `pulumi-terraform-bridge` features https://github.com/pulumi/pulumi-terraform-bridge/tree/master/pkg/tfbridge/x. Value must be [true, false (default)].
 - `remove-plugins`: Whether to clear all Pulumi plugins from cache before running the upgrade. It is possible that the generated examples may be non-deterministic depending on which plugins are used if existing versions are present in the cache. Values must be [true, false (default)].
 - `pr-reviewers`: A comma separated list of reviewers to assign the upgrade PR to.
+- `pr-assign`: A user to assign the upgrade PR to (default: `@me`).
 
 ## Project Guidelines
 
