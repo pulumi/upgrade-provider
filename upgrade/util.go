@@ -34,6 +34,7 @@ type Context struct {
 	AllowMissingDocs   bool
 	RemovePlugins      bool
 	PrReviewers        string
+	PrAssign           string
 	CreateFailureIssue bool
 }
 
