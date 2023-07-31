@@ -210,7 +210,7 @@ Required unless running from provider root and set in upgrade-config.yml.`)
 		`A comma separated list of reviewers to assign the upgrade PR to.`)
 
 	cmd.PersistentFlags().StringVar(&context.PrAssign, "pr-assign", "@me",
-		`A user to assign the upgrade PR to (default: @me).`)
+		`A user to assign the upgrade PR to.`)
 
 	cmd.PersistentFlags().BoolVarP(&context.AllowMissingDocs, "allow-missing-docs", "", false,
 		`If true, don't error on missing docs during tfgen.
