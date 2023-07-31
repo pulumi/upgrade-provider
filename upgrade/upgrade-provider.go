@@ -176,19 +176,30 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	if ctx.UpgradePfVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Plugin Framework Update", func() (string, error) {
-				latest, err := latestRelease(ctx, "pulumi/pulumi-terraform-bridge")
+				refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
+					"tags")
 				if err != nil {
 					return "", err
 				}
+				sortedRefs := refs.sortedLabels(func(a string, b string) bool { return a > b })
 
-				// If our target upgrade version is the same as our current version, we skip the update.
-				if latest.Original() == goMod.Pf.Version {
-					ctx.UpgradePfVersion = false
-					return fmt.Sprintf("Up to date at %s", latest.Original()), nil
+				var targetVersion semver.Version
+				for _, r := range sortedRefs {
+					if v := strings.TrimPrefix(r, "refs/tags/pf/"); v != r {
+						if targetVersion.LessThan(semver.MustParse(v)) {
+							targetVersion = *semver.MustParse(v)
+						}
+					}
 				}
 
-				targetPfVersion = latest.Original()
-				return fmt.Sprintf("%s -> %s", goMod.Pf.Version, latest.Original()), nil
+				// If our target upgrade version is the same as our current version, we skip the update.
+				if targetVersion.String() == goMod.Pf.Version {
+					ctx.UpgradePfVersion = false
+					return fmt.Sprintf("Up to date at %s", targetVersion.String()), nil
+				}
+
+				targetPfVersion = targetVersion.String()
+				return fmt.Sprintf("%s -> %s", goMod.Pf.Version, targetVersion.String()), nil
 			}))
 	}
 
