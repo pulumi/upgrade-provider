@@ -311,7 +311,7 @@ func InformGitHub(
 	}
 
 	createPR := step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
-		"--assignee", "@me",
+		"--assignee", ctx.PrAssign,
 		"--base", repo.defaultBranch,
 		"--head", repo.workingBranch,
 		"--reviewer", ctx.PrReviewers,
@@ -328,15 +328,15 @@ func InformGitHub(
 				return nil
 			}
 
-			// This PR will close issues, so we assign the issues to @me, just like
+			// This PR will close issues, so we assign the issues same assignee as
 			// the PR itself.
 			issues := make([]step.Step, len(target.GHIssues))
 			for i, t := range target.GHIssues {
 				issues[i] = step.Cmd(exec.CommandContext(ctx,
 					"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-					"--add-assignee", "@me")).In(&repo.root)
+					"--add-assignee", ctx.PrAssign)).In(&repo.root)
 			}
-			return step.Combined("Self Assign Issues", issues...)
+			return step.Combined("Assign Issues", issues...)
 		}),
 	)
 }
