@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/module"
 	goSemver "golang.org/x/mod/semver"
@@ -116,12 +115,16 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	if ctx.UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Bridge Update", func() (string, error) {
-				latest, err := latestRelease(ctx, "pulumi/pulumi-terraform-bridge")
+				refs, err := gitRefsOf(ctx,
+					"https://github.com/pulumi/pulumi-terraform-bridge.git", "tags")
 				if err != nil {
 					return "", err
 				}
 
-				// If our target upgrade version is the same as our current version, we skip the update.
+				latest := latestSemverTag("", refs)
+
+				// If our target upgrade version is the same as our
+				// current version, we skip the update.
 				if latest.Original() == goMod.Bridge.Version {
 					ctx.UpgradeBridgeVersion = false
 					return fmt.Sprintf("Up to date at %s", latest.Original()), nil
@@ -160,27 +163,10 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				}
 				currentBranch = trim(currentBranch)
 
-				parse := func(branch string) *semver.Version {
-					version := trim(branch)
-					v, err := semver.NewVersion(version)
-					if err != nil {
-						return nil
-					}
-					return v
-				}
-				sorted := refs.sortedLabels(func(a, b string) bool {
-					vA, vB := parse(a), parse(b)
-					switch {
-					case vA == nil:
-						return false
-					case vB == nil:
-						return true
-					default:
-						return vA.GreaterThan(vB)
-					}
-				})
-				latest := trim(sorted[0])
-				if latest == currentBranch {
+				// We are guaranteed to get a non-nil result because there
+				// are semver tags released tags with this prefix.
+				latest := latestSemverTag("upstream-", refs)
+				if latest.Original() == currentBranch {
 					return fmt.Sprintf("Up to date at %s", latest), nil
 				}
 				return fmt.Sprintf("%s -> %s", currentBranch, latest), nil

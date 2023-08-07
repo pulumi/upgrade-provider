@@ -324,10 +324,13 @@ func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
 			i, line)
 		refsToBranches[parts[0]] = parts[1]
 	}
-	return gitRepoRefs{refsToBranches}, nil
+	return gitRepoRefs{refsToBranches, kind}, nil
 }
 
-type gitRepoRefs struct{ refsToLabel map[string]string }
+type gitRepoRefs struct{
+	refsToLabel map[string]string
+	kind string
+}
 
 func (g gitRepoRefs) shaOf(label string) (string, bool) {
 	for ref, l := range g.refsToLabel {
