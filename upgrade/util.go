@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"path/filepath"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/mod/modfile"
@@ -98,4 +99,41 @@ type UpstreamUpgradeTarget struct {
 type UpgradeTargetIssue struct {
 	Version *semver.Version `json:"-"`
 	Number  int             `json:"number"`
+}
+
+// Sort git tags by semver.
+//
+// Tags that don't parse as semver are considered to be less then any tag that does parse.
+func latestSemverTag(prefix string, refs gitRepoRefs) *semver.Version {
+	trim := func(branch string) string {
+		p := "refs/" + refs.kind + "/" + prefix
+		if strings.HasPrefix(branch, p) {
+			return strings.TrimPrefix(branch, p)
+		}
+		return ""
+	}
+	parse := func(branch string) *semver.Version {
+		version := trim(branch)
+		v, err := semver.NewVersion(version)
+		if err != nil {
+			return nil
+		}
+		return v
+	}
+	sorted := refs.sortedLabels(func(a, b string) bool {
+		vA, vB := parse(a), parse(b)
+		switch {
+		case vA == nil:
+			return false
+		case vB == nil:
+			return true
+		default:
+			return vA.GreaterThan(vB)
+		}
+	})
+	if len(sorted) == 0 {
+		return nil
+	}
+	v, _ := semver.NewVersion(trim(sorted[0]))
+	return v
 }
