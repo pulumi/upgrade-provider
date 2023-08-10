@@ -30,7 +30,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		name: repoName,
 		org:  repoOrg,
 	}
-	var targetBridgeVersion, tfSDKUpgrade string
+	var targetBridgeVersion, targetPfVersion, tfSDKUpgrade string
 	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
 
@@ -173,6 +173,26 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			}).AssignTo(&tfSDKUpgrade),
 		)
 	}
+	if ctx.UpgradePfVersion {
+		discoverSteps = append(discoverSteps,
+			step.F("Planning Plugin Framework Update", func() (string, error) {
+				refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
+					"tags")
+				if err != nil {
+					return "", err
+				}
+				targetVersion := latestSemverTag("pf/", refs)
+
+				// If our target upgrade version is the same as our current version, we skip the update.
+				if targetVersion.Original() == goMod.Pf.Version {
+					ctx.UpgradePfVersion = false
+					return fmt.Sprintf("Up to date at %s", targetVersion.String()), nil
+				}
+
+				targetPfVersion = "v" + targetVersion.String()
+				return fmt.Sprintf("%s -> %s", goMod.Pf.Version, targetVersion.String()), nil
+			}))
+	}
 
 	if ctx.MajorVersionBump {
 		discoverSteps = append(discoverSteps,
@@ -205,7 +225,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		!ctx.UpgradeCodeMigration && !ctx.UpgradeSdkVersion {
+		!ctx.UpgradeCodeMigration && !ctx.UpgradeSdkVersion && !ctx.UpgradePfVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -240,6 +260,8 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			targetBridgeVersion)
 	} else if ctx.UpgradeCodeMigration {
 		repo.workingBranch = "upgrade-code-migration"
+	} else if ctx.UpgradePfVersion {
+		repo.workingBranch = fmt.Sprintf("upgrade-pf-version-to-%s", targetPfVersion)
 	} else {
 		return fmt.Errorf("calculating branch name: unknown action")
 	}
@@ -290,6 +312,11 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			step.Cmd(exec.CommandContext(ctx,
 				"go", "get", "github.com/pulumi/pulumi/pkg/v3")).
 				In(repo.examplesDir()))
+	}
+	if ctx.UpgradePfVersion {
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion)).
+			In(repo.providerDir()))
 	}
 
 	if ctx.UpgradeCodeMigration {
@@ -357,7 +384,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		}),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		GitCommit(ctx, "make build_sdks").In(&repo.root),
-		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, tfSDKUpgrade),
+		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade),
 	)
 
 	ok = step.Run(step.Combined("Update Artifacts", artifacts...))

@@ -23,6 +23,7 @@ type Context struct {
 
 	UpgradeBridgeVersion bool
 	UpgradeSdkVersion    bool
+	UpgradePfVersion     bool
 
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
@@ -85,6 +86,7 @@ type GoMod struct {
 	Upstream module.Version
 	Fork     *modfile.Replace
 	Bridge   module.Version
+	Pf       module.Version
 
 	UpstreamProviderOrg string
 }
