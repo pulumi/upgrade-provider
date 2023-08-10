@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/module"
 	goSemver "golang.org/x/mod/semver"
@@ -182,19 +181,10 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				if err != nil {
 					return "", err
 				}
-				sortedRefs := refs.sortedLabels(func(a string, b string) bool { return a > b })
-
-				var targetVersion semver.Version
-				for _, r := range sortedRefs {
-					if v := strings.TrimPrefix(r, "refs/tags/pf/"); v != r {
-						if targetVersion.LessThan(semver.MustParse(v)) {
-							targetVersion = *semver.MustParse(v)
-						}
-					}
-				}
+				targetVersion := latestSemverTag("pf/", refs)
 
 				// If our target upgrade version is the same as our current version, we skip the update.
-				if targetVersion.String() == goMod.Pf.Version {
+				if targetVersion.Original() == goMod.Pf.Version {
 					ctx.UpgradePfVersion = false
 					return fmt.Sprintf("Up to date at %s", targetVersion.String()), nil
 				}
