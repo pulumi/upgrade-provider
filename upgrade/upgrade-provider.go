@@ -176,6 +176,12 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	if ctx.UpgradePfVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Plugin Framework Update", func() (string, error) {
+				if goMod.Pf.Version == "" {
+					// PF is not used on this provider, so we disable
+					// the upgrade attempt and move on.
+					ctx.UpgradePfVersion = false
+					return "Unused", nil
+				}
 				refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
 					"tags")
 				if err != nil {
