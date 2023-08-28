@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -555,7 +556,7 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 		prev += fmt.Sprintf("/v%d", repo.currentVersion.Major())
 	}
 
-	nextMajorVersion := fmt.Sprintf("v%d", repo.currentVersion.Major()+1)
+	nextMajorVersion := fmt.Sprintf("v%d", repo.currentVersion.IncMajor().Major())
 
 	// Replace s in file, where {} is interpolated into the old and new provider
 	// component of the path.
@@ -574,27 +575,34 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 			return nextMajorVersion, nil
 		}),
 		replaceInFile("Update PROVIDER_PATH", "Makefile",
-			"PROVIDER_PATH := {}").In(&repo.root),
+			"PROVIDER_PATH := {}",
+		).In(&repo.root),
 		replaceInFile("Update -X Version", ".goreleaser.yml",
-			"github.com/pulumi/"+name+"/{}/pkg").In(&repo.root),
+			"github.com/pulumi/"+name+"/{}/pkg",
+		).In(&repo.root),
 		replaceInFile("Update -X Version", ".goreleaser.prerelease.yml",
-			"github.com/pulumi/"+name+"/{}/pkg").In(&repo.root),
-		replaceInFile("Update Go Module", "go.mod",
-			"module github.com/pulumi/"+name+"/{}").In(repo.providerDir()),
-		step.F("Update sdk/go.mod", func() (string, error) {
-			path := "sdk/go.mod"
-			f, err := os.ReadFile(path)
-			if err != nil {
-				return "", err
+			"github.com/pulumi/"+name+"/{}/pkg",
+		).In(&repo.root),
+		UpdateFile("Update Go Module in provider/go.mod", "go.mod",
+			func(src []byte) ([]byte, error) {
+				base := "module github.com/pulumi/" + name + "/provider"
+				old := base
+				if repo.currentVersion.Major() > 1 {
+					old += fmt.Sprintf("/v%d", repo.currentVersion.Major())
+				}
+				new := base + fmt.Sprintf("/v%d", repo.currentVersion.IncMajor().Major())
+
+				return bytes.ReplaceAll(src, []byte(old), []byte(new)), nil
+			}).In(repo.providerDir()),
+		UpdateFile("Update Go Module in sdk/go.mod", "go.mod", func(src []byte) ([]byte, error) {
+			base := "module github.com/pulumi/" + name + "/sdk"
+			old := base
+			if repo.currentVersion.Major() > 1 {
+				old += fmt.Sprintf("/v%d", repo.currentVersion.Major())
 			}
-			mod := fmt.Sprintf("github.com/%s/%s/sdk", repo.org, repo.name)
-			var prev string
-			if m := repo.currentVersion.Major(); m > 1 {
-				prev = fmt.Sprintf("/%d", m)
-			}
-			f = bytes.ReplaceAll(f, []byte(mod+prev), []byte(mod+nextMajorVersion))
-			return "", os.WriteFile(path, f, 0600)
-		}).In(&repo.root),
+			new := base + fmt.Sprintf("/v%d", repo.currentVersion.IncMajor().Major())
+			return bytes.ReplaceAll(src, []byte(old), []byte(new)), nil
+		}).In(repo.sdkDir()),
 		step.F("Update Go Imports", func() (string, error) {
 			var filesUpdated int
 			var fn filepath.WalkFunc = func(path string, info fs.FileInfo, err error) error {
@@ -625,20 +633,7 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 					}
 				}
 
-				// If the length changed, then something changed
-				updated := len(data) != len(new)
-				if !updated {
-					// If the length stayed the same, we can check
-					// each bit.
-					for i := 0; i < len(data); i++ {
-						if data[i] != new[i] {
-							updated = true
-							break
-						}
-					}
-				}
-
-				if updated {
+				if !reflect.DeepEqual(data, new) {
 					filesUpdated++
 					return os.WriteFile(path, new, info.Mode().Perm())
 				}
@@ -770,11 +765,14 @@ func UpdateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
 		if err != nil {
 			return "", err
 		}
-		bytes, err = f(bytes)
+		newBytes, err := f(bytes)
 		if err != nil {
 			return "", err
 		}
-		return "", os.WriteFile(path, bytes, stats.Mode().Perm())
+		if reflect.DeepEqual(newBytes, bytes) {
+			return "no change", nil
+		}
+		return "", os.WriteFile(path, newBytes, stats.Mode().Perm())
 	})
 }
 
