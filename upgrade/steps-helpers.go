@@ -331,9 +331,9 @@ func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
 	return gitRepoRefs{refsToBranches, kind}, nil
 }
 
-type gitRepoRefs struct{
+type gitRepoRefs struct {
 	refsToLabel map[string]string
-	kind string
+	kind        string
 }
 
 func (g gitRepoRefs) shaOf(label string) (string, bool) {
@@ -384,6 +384,18 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 	return semver.NewVersion(result.Latest.TagName)
 }
 
+func getGitHubPath(repoPath string) (string, error) {
+	if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
+		name := strings.TrimPrefix(repo, "terraform-provider-")
+		org, ok := ProviderOrgs[name]
+		if !ok {
+			return "", fmt.Errorf("terraform-providers based path: missing remap for '%s'", name)
+		}
+		repoPath = prefix + "/" + org + "/" + repo
+	}
+	return repoPath, nil
+}
+
 // getRepoExpectedLocation will return one of the following:
 // 1) --repo-path: if set, returns the specified repo path
 // 2) current working directory: returns the path to the cwd if it is a provider directory
@@ -400,13 +412,9 @@ func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) 
 		repoPath = repoPath[:match[0]]
 	}
 
-	if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
-		name := strings.TrimPrefix(repo, "terraform-provider-")
-		org, ok := ProviderOrgs[name]
-		if !ok {
-			return "", fmt.Errorf("terraform-providers based path: missing remap for '%s'", name)
-		}
-		repoPath = prefix + "/" + org + "/" + repo
+	repoPath, err := getGitHubPath(repoPath)
+	if err != nil {
+		return "", fmt.Errorf("repo location: %w", err)
 	}
 
 	// from github.com/org/repo to $GOPATH/src/github.com/org
