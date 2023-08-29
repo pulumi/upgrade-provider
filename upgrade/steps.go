@@ -216,7 +216,11 @@ func UpgradeProviderVersion(
 		// It they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func() (string, error) {
-				refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Upstream.Path),
+				path, err := getGitHubPath(goMod.Upstream.Path)
+				if err != nil {
+					return "", err
+				}
+				refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(path),
 					"tags")
 				if err != nil {
 					return "", err
@@ -559,7 +563,6 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 		return UpdateFile(desc+" in "+path, path, func(src []byte) ([]byte, error) {
 			old := strings.ReplaceAll(s, "{}", prev)
 			new := strings.ReplaceAll(s, "{}", "provider/"+nextMajorVersion)
-
 			return bytes.ReplaceAll(src, []byte(old), []byte(new)), nil
 		})
 	}
