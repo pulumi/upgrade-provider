@@ -551,19 +551,18 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 		return nil
 	}
 
-	prev := "provider"
+	prev := ""
 	if repo.currentVersion.Major() > 1 {
 		prev += fmt.Sprintf("/v%d", repo.currentVersion.Major())
 	}
-
-	nextMajorVersion := fmt.Sprintf("v%d", repo.currentVersion.IncMajor().Major())
+	next := fmt.Sprintf("/v%d", repo.currentVersion.IncMajor().Major())
 
 	// Replace s in file, where {} is interpolated into the old and new provider
 	// component of the path.
 	replaceInFile := func(desc, path, s string) step.Step {
 		return UpdateFile(desc+" in "+path, path, func(src []byte) ([]byte, error) {
 			old := strings.ReplaceAll(s, "{}", prev)
-			new := strings.ReplaceAll(s, "{}", "provider/"+nextMajorVersion)
+			new := strings.ReplaceAll(s, "{}", next)
 			return bytes.ReplaceAll(src, []byte(old), []byte(new)), nil
 		})
 	}
@@ -572,37 +571,23 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 	return step.Combined("Increment Major Version",
 		step.F("Next major version", func() (string, error) {
 			// This step displays the next major version to the user.
-			return nextMajorVersion, nil
+			return repo.currentVersion.IncMajor().String(), nil
 		}),
 		replaceInFile("Update PROVIDER_PATH", "Makefile",
-			"PROVIDER_PATH := {}",
+			"PROVIDER_PATH := provider{}",
 		).In(&repo.root),
 		replaceInFile("Update -X Version", ".goreleaser.yml",
-			"github.com/pulumi/"+name+"/{}/pkg",
+			"github.com/pulumi/"+name+"/provider{}/pkg",
 		).In(&repo.root),
 		replaceInFile("Update -X Version", ".goreleaser.prerelease.yml",
-			"github.com/pulumi/"+name+"/{}/pkg",
+			"github.com/pulumi/"+name+"/provider{}/pkg",
 		).In(&repo.root),
-		UpdateFile("Update Go Module in provider/go.mod", "go.mod",
-			func(src []byte) ([]byte, error) {
-				base := "module github.com/pulumi/" + name + "/provider"
-				old := base
-				if repo.currentVersion.Major() > 1 {
-					old += fmt.Sprintf("/v%d", repo.currentVersion.Major())
-				}
-				new := base + fmt.Sprintf("/v%d", repo.currentVersion.IncMajor().Major())
-
-				return bytes.ReplaceAll(src, []byte(old), []byte(new)), nil
-			}).In(repo.providerDir()),
-		UpdateFile("Update Go Module in sdk/go.mod", "go.mod", func(src []byte) ([]byte, error) {
-			base := "module github.com/pulumi/" + name + "/sdk"
-			old := base
-			if repo.currentVersion.Major() > 1 {
-				old += fmt.Sprintf("/v%d", repo.currentVersion.Major())
-			}
-			new := base + fmt.Sprintf("/v%d", repo.currentVersion.IncMajor().Major())
-			return bytes.ReplaceAll(src, []byte(old), []byte(new)), nil
-		}).In(repo.sdkDir()),
+		replaceInFile("Update Go Module (provider)", "go.mod",
+			"module github.com/pulumi/"+name+"/provider{}",
+		).In(repo.providerDir()),
+		replaceInFile("Update Go Module (sdk)", "go.mod",
+			"module github.com/pulumi/"+name+"/sdk{}",
+		).In(repo.sdkDir()),
 		step.F("Update Go Imports", func() (string, error) {
 			var filesUpdated int
 			var fn filepath.WalkFunc = func(path string, info fs.FileInfo, err error) error {
@@ -616,8 +601,8 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 				}
 
 				new := bytes.ReplaceAll(data,
-					[]byte("github.com/pulumi/"+name+"/"+prev),
-					[]byte("github.com/pulumi/"+name+"/"+"provider/"+nextMajorVersion),
+					[]byte("github.com/pulumi/"+name+"/provider"+prev),
+					[]byte("github.com/pulumi/"+name+"/provider"+next),
 				)
 
 				if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
