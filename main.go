@@ -57,6 +57,11 @@ func cmd() *cobra.Command {
 		os.Exit(1)
 	}
 
+	// If PersistentPreRunE returns an error, then cobra displays the error *and*
+	// displays the result of `upgrade-provider --help`. If we don't want help to be
+	// displayed, we can set failedPreRun and return. Run will immediately fail with
+	// this error.
+	var failedPreRun error
 	cmd := &cobra.Command{
 		Use:   "upgrade-provider <provider>",
 		Short: "upgrade-provider automates the process of upgrading a TF-bridged provider",
@@ -64,7 +69,8 @@ func cmd() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			err := initializeConfig(cmd)
 			if err != nil {
-				return err
+				failedPreRun = err
+				return nil
 			}
 			// Validate argument is {org}/{repo}
 			tok := strings.Split(args[0], "/")
@@ -149,6 +155,7 @@ func cmd() *cobra.Command {
 			return nil
 		},
 		Run: func(_ *cobra.Command, args []string) {
+			exitOnError(failedPreRun)
 			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
 			if err != nil && context.CreateFailureIssue {
 				// $GITHUB_ACTION is a default env var within github
@@ -228,7 +235,9 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 
 func main() {
 	err := cmd().Execute()
-	contract.IgnoreError(err)
+	if err != nil {
+		os.Exit(1)
+	}
 }
 
 // Adapted from https://github.com/carolynvs/stingoftheviper/blob/main/main.go
