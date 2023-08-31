@@ -81,6 +81,11 @@ func (p ProviderRepo) examplesDir() *string {
 	return &dir
 }
 
+func (p ProviderRepo) sdkDir() *string {
+	dir := filepath.Join(p.root, "sdk")
+	return &dir
+}
+
 type GoMod struct {
 	Kind     RepoKind
 	Upstream module.Version
