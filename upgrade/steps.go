@@ -193,21 +193,6 @@ func UpgradeProviderVersion(
 			step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root),
 		))
 	}
-	// We first check if the provider is patched, and ensure the upstream is initialized if so.
-	updateLatestPluginSDK, didUpdate := getLatestTFPluginSDKReplace(ctx, repo)
-	// We then start by updating the terraform-plugin-sdk because later updates sometimes
-	// rely on it.
-
-	steps = append(steps, updateLatestPluginSDK,
-		// If we updated the pinned plugin sdk, then we need to run `go mod tidy`
-		// to normalize the ref.
-		step.Computed(func() step.Step {
-			if !(*didUpdate) {
-				return nil
-			}
-			return step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).
-				In(repo.providerDir())
-		}))
 
 	if !goMod.Kind.IsForked() {
 		// We have an upstream we don't control, so we need to get it's SHA. We do this
