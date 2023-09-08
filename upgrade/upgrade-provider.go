@@ -328,6 +328,22 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
 			In(repo.providerDir()))
+
+		// If we update the bridge, then we should update our terraform-plugin-sdk
+		// fork, since the bridge assumes that it is up to date.
+		updatePluginSDK, didUpdate := getLatestTFPluginSDKReplace(ctx, repo)
+
+		steps = append(steps, updatePluginSDK,
+			// If we updated the pinned plugin sdk, then we need to run `go mod tidy`
+			// to normalize the ref.
+			step.Computed(func() step.Step {
+				if !(*didUpdate) {
+					return nil
+				}
+				return step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).
+					In(repo.providerDir())
+			}))
+
 	}
 	if ctx.UpgradeSdkVersion {
 		steps = append(steps, step.Combined("Upgrade Pulumi SDK",
@@ -377,15 +393,16 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		}
 	}
 
-	addPluginStep := step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes"))
-	if !ctx.RemovePlugins {
-		addPluginStep = step.Cmd(exec.Command("echo", "Plugins not removed."))
-	}
-
 	artifacts := append(steps,
 		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
 		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.examplesDir()),
-		addPluginStep,
+		step.Computed(func() step.Step {
+			if ctx.RemovePlugins {
+				return step.Cmd(exec.CommandContext(ctx,
+					"pulumi", "plugin", "rm", "--all", "--yes"))
+			}
+			return nil
+		}),
 		step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&repo.root),
 		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
 		GitCommit(ctx, "make tfgen").In(&repo.root),
