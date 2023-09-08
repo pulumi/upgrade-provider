@@ -85,6 +85,12 @@ func cmd() *cobra.Command {
 			// Require `upstream-provider-name` to be set
 			if context.UpstreamProviderName == "" {
 				return errors.New("`upstream-provider-name` must be provided")
+			} else if strings.ContainsRune(context.UpstreamProviderName, '/') {
+				var s string
+				if split := strings.Split(context.UpstreamProviderName, "/"); len(split) > 1 {
+					s = fmt.Sprintf(": try %q", split[len(split)-1])
+				}
+				return fmt.Errorf(`"upstream-provider-name" must not be fully qualified%s`, s)
 			}
 
 			// Validate that targetVersion is a valid version

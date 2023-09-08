@@ -28,6 +28,12 @@ type Context struct {
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
 
+	// The unqualified name of the upstream provider.
+	//
+	// As an example, Pulumi's AWS provider has:
+	//
+	//	pulumi-aws
+	//
 	UpstreamProviderName string
 
 	UpgradeCodeMigration bool
