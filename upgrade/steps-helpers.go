@@ -520,8 +520,20 @@ func getExpectedTargetFromIssues(ctx Context, name string) (*UpstreamUpgradeTarg
 		return versions[j].Version.LessThan(versions[i].Version)
 	})
 
-	if ctx.TargetVersion != nil && !versions[0].Version.Equal(ctx.TargetVersion) {
-		return nil, fmt.Errorf("possible upgrades exist, but non match %s", ctx.TargetVersion)
+	if ctx.TargetVersion != nil {
+		var foundTarget bool
+		for i, v := range versions {
+			if v.Version.Equal(ctx.TargetVersion) {
+				// Change the target version to be the latest that we
+				// found.
+				versions = versions[i:]
+				foundTarget = true
+				break
+			}
+		}
+		if !foundTarget {
+			return nil, fmt.Errorf("possible upgrades exist, but none match %s", ctx.TargetVersion)
+		}
 	}
 
 	target.GHIssues = versions
