@@ -65,8 +65,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	if ctx.UpgradeProviderVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Provider Update", func() (string, error) {
-				var msg string
-				upgradeTarget, msg, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName,
+				upgradeTarget, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName,
 					goMod.UpstreamProviderOrg)
 				if err != nil {
 					return "", fmt.Errorf("expected target: %w", err)
@@ -75,13 +74,14 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 					return "", errors.New("could not determine an upstream version")
 				}
 
-				// If we have upgrades to perform, we list the new version we will target
+				// If we don't have any upgrades to target, assume that we don't need to upgrade.
 				if upgradeTarget.Version == nil {
 					// Otherwise, we don't bother to try to upgrade the provider.
 					ctx.UpgradeProviderVersion = false
 					ctx.MajorVersionBump = false
-					return "Up to date" + msg, nil
+					return "Up to date", nil
 				}
+
 				switch {
 				case goMod.Kind.IsPatched():
 					err = setCurrentUpstreamFromPatched(ctx, &repo)
@@ -98,17 +98,42 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 					return "", fmt.Errorf("current upstream version: %w", err)
 				}
 
-				var previous string
+				// If we have a target version, we need to make sure that
+				// it is valid for an upgrade.
+				var result string
 				if repo.currentUpstreamVersion != nil {
-					if goSemver.Compare("v"+repo.currentUpstreamVersion.String(),
-						"v"+upgradeTarget.Version.String()) != -1 {
-						return "", fmt.Errorf("current upstream version %v is greater than/ equal to the target version %v",
-							repo.currentUpstreamVersion, upgradeTarget.Version)
+					switch goSemver.Compare("v"+repo.currentUpstreamVersion.String(),
+						"v"+upgradeTarget.Version.String()) {
+
+					// Target version is less then the current version
+					case 1:
+						// This is a weird situation, so we warn
+						result = colorize.Warnf(
+							" no upgrade: %s (current) > %s (target)",
+							repo.currentUpstreamVersion,
+							upgradeTarget.Version)
+						ctx.UpgradeProviderVersion = false
+						ctx.MajorVersionBump = false
+
+					// Target version is equal to the current version
+					case 0:
+						ctx.UpgradeProviderVersion = false
+						ctx.MajorVersionBump = false
+						result = "Up to date"
+
+					// Target version is greater then the current version, so upgrade
+					case -1:
+						result = fmt.Sprintf("%s -> %s",
+							repo.currentUpstreamVersion,
+							upgradeTarget.Version)
 					}
-					previous = fmt.Sprintf("%s -> ", repo.currentUpstreamVersion)
+				} else {
+					// If we don't have an old version, just assume
+					// that we will upgrade.
+					result = upgradeTarget.Version.String()
 				}
 
-				return previous + upgradeTarget.Version.String() + msg, nil
+				return result, nil
 			}))
 	}
 
