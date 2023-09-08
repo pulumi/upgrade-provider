@@ -69,7 +69,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				upgradeTarget, msg, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName,
 					goMod.UpstreamProviderOrg)
 				if err != nil {
-					return "", err
+					return "", fmt.Errorf("expected target: %w", err)
 				}
 				if upgradeTarget == nil {
 					return "", errors.New("could not determine an upstream version")
