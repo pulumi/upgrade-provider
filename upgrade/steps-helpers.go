@@ -436,19 +436,19 @@ func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) 
 // sorted by semantic version. The list may be empty.
 //
 // The second argument represents a message to describe the result. It may be empty.
-func GetExpectedTarget(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, string, error) {
+func GetExpectedTarget(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
 	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
 	if ctx.InferVersion {
 		return getExpectedTargetFromIssues(ctx, name)
 	}
 	if ctx.TargetVersion != nil {
-		return &UpstreamUpgradeTarget{Version: ctx.TargetVersion}, "", nil
+		return &UpstreamUpgradeTarget{Version: ctx.TargetVersion}, nil
 
 	}
 	return getExpectedTargetLatest(ctx, name, upstreamOrg)
 }
 
-func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, string, error) {
+func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
 	latest := exec.CommandContext(ctx, "gh", "release", "list",
 		"--repo="+upstreamOrg+"/"+ctx.UpstreamProviderName,
 		"--limit=1",
@@ -458,7 +458,7 @@ func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUp
 	latest.Stdout = bytes
 	err := latest.Run()
 	if err != nil {
-		return nil, "", fmt.Errorf("%v: %w", latest.Args, err)
+		return nil, fmt.Errorf("%v: %w", latest.Args, err)
 	}
 
 	tok := strings.Fields(bytes.String())
@@ -466,12 +466,12 @@ func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUp
 		upstreamOrg, ctx.UpstreamProviderName))
 	v, err := semver.NewVersion(tok[0])
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return &UpstreamUpgradeTarget{Version: v}, "", nil
+	return &UpstreamUpgradeTarget{Version: v}, nil
 }
 
-func getExpectedTargetFromIssues(ctx Context, name string) (*UpstreamUpgradeTarget, string, error) {
+func getExpectedTargetFromIssues(ctx Context, name string) (*UpstreamUpgradeTarget, error) {
 	target := &UpstreamUpgradeTarget{}
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
 		"--state=open",
@@ -483,7 +483,7 @@ func getExpectedTargetFromIssues(ctx Context, name string) (*UpstreamUpgradeTarg
 	getIssues.Stdout = bytes
 	err := getIssues.Run()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	titles := []struct {
 		Title  string `json:"title"`
@@ -491,11 +491,10 @@ func getExpectedTargetFromIssues(ctx Context, name string) (*UpstreamUpgradeTarg
 	}{}
 	err = json.Unmarshal(bytes.Bytes(), &titles)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	var versions []UpgradeTargetIssue
-	var versionConstrained bool
 	for _, title := range titles {
 		_, nameToVersion, found := strings.Cut(title.Title, "Upgrade terraform-provider-")
 		if !found {
@@ -506,33 +505,26 @@ func getExpectedTargetFromIssues(ctx Context, name string) (*UpstreamUpgradeTarg
 			continue
 		}
 		v, err := semver.NewVersion(version)
-		if err == nil {
-			if ctx.InferVersion && !(ctx.TargetVersion == nil || ctx.TargetVersion.Equal(v) || ctx.TargetVersion.GreaterThan(v)) {
-				versionConstrained = true
-				continue
-			}
-			versions = append(versions, UpgradeTargetIssue{
-				Version: v,
-				Number:  title.Number,
-			})
+		if err != nil {
+			continue
 		}
+		versions = append(versions, UpgradeTargetIssue{
+			Version: v,
+			Number:  title.Number,
+		})
 	}
 	if len(versions) == 0 {
-		var extra string
-		if ctx.InferVersion && versionConstrained {
-			extra = " (a version was found but it was greater then the specified max)"
-		}
-		return nil, extra, nil
+		return nil, nil
 	}
 	sort.Slice(versions, func(i, j int) bool {
 		return versions[j].Version.LessThan(versions[i].Version)
 	})
 
-	if ctx.InferVersion && ctx.TargetVersion != nil && !versions[0].Version.Equal(ctx.TargetVersion) {
-		return nil, "", fmt.Errorf("possible upgrades exist, but non match %s", ctx.TargetVersion)
+	if ctx.TargetVersion != nil && !versions[0].Version.Equal(ctx.TargetVersion) {
+		return nil, fmt.Errorf("possible upgrades exist, but non match %s", ctx.TargetVersion)
 	}
 
 	target.GHIssues = versions
 	target.Version = versions[0].Version
-	return target, "", nil
+	return target, nil
 }
