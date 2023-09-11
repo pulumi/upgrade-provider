@@ -76,6 +76,35 @@ func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleMod
 	return module.Version{}, false, nil
 }
 
+// Look up the version of the go dependency requirement of a given module in a given modfile.
+func currentGoVersionOf(modFile, lookupModule string) (module.Version, bool, error) {
+	fileData, err := os.ReadFile(modFile)
+	if err != nil {
+		return module.Version{}, false, err
+	}
+	goMod, err := modfile.Parse(modFile, fileData, nil)
+	if err != nil {
+		return module.Version{}, false, fmt.Errorf("%s: %w",
+			modFile, err)
+	}
+
+	// We can only look up requirements in this way.
+	for _, replacement := range goMod.Replace {
+		if replacement.Old.Path == lookupModule {
+			return module.Version{}, false, fmt.Errorf(
+				"module %s is being replaced, cannot lookup version", lookupModule,
+			)
+		}
+	}
+
+	for _, requirement := range goMod.Require {
+		if requirement.Mod.Path == lookupModule {
+			return requirement.Mod, true, nil
+		}
+	}
+	return module.Version{}, false, nil
+}
+
 func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", "show", repo.defaultBranch+":"+file)
 	cmd.Dir = repo.root
