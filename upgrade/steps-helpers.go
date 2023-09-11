@@ -121,6 +121,10 @@ func prBody(ctx Context, repo ProviderRepo,
 		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge/pf from %s to %s.\n",
 			goMod.Pf.Version, targetBridge)
 	}
+
+	if ctx.UpgradeSdkVersion {
+		fmt.Fprintf(b, "- Upgrading pulumi SDK to `latest`.\n")
+	}
 	if parts := strings.Split(tfSDKUpgrade, " -> "); len(parts) == 2 {
 		fmt.Fprintf(b, "- Upgrading pulumi/terraform-plugin-sdk from %s to %s.\n",
 			parts[0], parts[1])
