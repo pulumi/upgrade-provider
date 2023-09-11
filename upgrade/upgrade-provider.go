@@ -293,6 +293,8 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		repo.workingBranch = "upgrade-code-migration"
 	} else if ctx.UpgradePfVersion {
 		repo.workingBranch = fmt.Sprintf("upgrade-pf-version-to-%s", targetPfVersion)
+	} else if ctx.UpgradeSdkVersion {
+		repo.workingBranch = "upgrade-pulumi-sdk"
 	} else {
 		return fmt.Errorf("calculating branch name: unknown action")
 	}

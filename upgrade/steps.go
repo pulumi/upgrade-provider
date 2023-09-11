@@ -298,6 +298,8 @@ func InformGitHub(
 		prTitle = fmt.Sprintf("Code migration: %s", strings.Join(ctx.MigrationOpts, ", "))
 	} else if ctx.UpgradePfVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge/pf to " + targetPfVersion
+	} else if ctx.UpgradeSdkVersion {
+		prTitle = "Upgrade Pulumi SDK dependency"
 	} else {
 		panic("Unknown action")
 	}
