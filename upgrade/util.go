@@ -144,6 +144,7 @@ func latestSemverTag(prefix string, refs gitRepoRefs) *semver.Version {
 			return vA.GreaterThan(vB)
 		}
 	})
+	//fmt.Println("sorted", sorted)
 	if len(sorted) == 0 {
 		return nil
 	}

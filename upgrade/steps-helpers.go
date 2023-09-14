@@ -350,7 +350,7 @@ func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
 	if err := cmd.Run(); err != nil {
 		return gitRepoRefs{}, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
-	refsToBranches := map[string]string{}
+	branchesToRefs := map[string]string{}
 	for i, line := range strings.Split(out.String(), "\n") {
 		if line == "" {
 			continue
@@ -359,18 +359,19 @@ func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
 		contract.Assertf(len(parts) == 2,
 			"expected git ls-remote to give '\t' separated values, found line %d: '%s'",
 			i, line)
-		refsToBranches[parts[0]] = parts[1]
+		branchesToRefs[parts[1]] = parts[0]
 	}
-	return gitRepoRefs{refsToBranches, kind}, nil
+	return gitRepoRefs{branchesToRefs, kind}, nil
+
 }
 
 type gitRepoRefs struct {
-	refsToLabel map[string]string
-	kind        string
+	LabelToRef map[string]string
+	kind       string
 }
 
 func (g gitRepoRefs) shaOf(label string) (string, bool) {
-	for ref, l := range g.refsToLabel {
+	for l, ref := range g.LabelToRef {
 		if l == label {
 			return ref, true
 		}
@@ -379,7 +380,7 @@ func (g gitRepoRefs) shaOf(label string) (string, bool) {
 }
 
 func (g gitRepoRefs) labelOf(sha string) (string, bool) {
-	for ref, label := range g.refsToLabel {
+	for label, ref := range g.LabelToRef {
 		if strings.HasPrefix(ref, sha) {
 			return label, true
 		}
@@ -388,8 +389,8 @@ func (g gitRepoRefs) labelOf(sha string) (string, bool) {
 }
 
 func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
-	labels := make([]string, 0, len(g.refsToLabel))
-	for _, label := range g.refsToLabel {
+	labels := make([]string, 0, len(g.LabelToRef))
+	for label, _ := range g.LabelToRef {
 		labels = append(labels, label)
 	}
 	sort.Slice(labels, func(i, j int) bool {
