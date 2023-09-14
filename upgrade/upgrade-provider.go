@@ -363,10 +363,32 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 		}).AssignTo(&newSdkVersion)
 
-		updateToBridgePulumiVersionStep := step.Computed(func() step.Step {
-			return step.Cmd(exec.CommandContext(ctx, "go", "get", "github.com/pulumi/pulumi/sdk/v3@"+newSdkVersion)).In(repo.sdkDir())
+		bridgePulumiVersionSdkStep := step.Computed(func() step.Step {
+			return step.Cmd(exec.CommandContext(ctx,
+				"go",
+				"get",
+				"github.com/pulumi/pulumi/sdk/v3@"+newSdkVersion)).In(repo.sdkDir())
 		})
-		steps = append(steps, getNewPulumiVersionStep, updateToBridgePulumiVersionStep)
+		bridgePulumiVersionExamplesStep := step.Computed(func() step.Step {
+			return step.Cmd(exec.CommandContext(ctx,
+				"go",
+				"get",
+				"github.com/pulumi/pulumi/sdk/v3@"+newSdkVersion)).In(repo.examplesDir())
+		})
+		// In examples/ folder, we use pulumi/pkg as well. We should keep this in sync also.
+		examplesPulumiPkgStep := step.Computed(func() step.Step {
+			return step.Cmd(exec.CommandContext(ctx,
+				"go",
+				"get",
+				"github.com/pulumi/pulumi/pkg/v3@"+newSdkVersion)).In(repo.examplesDir())
+		})
+
+		steps = append(steps,
+			getNewPulumiVersionStep,
+			bridgePulumiVersionSdkStep,
+			bridgePulumiVersionExamplesStep,
+			examplesPulumiPkgStep,
+		)
 
 	}
 	if ctx.UpgradeSdkVersion {
