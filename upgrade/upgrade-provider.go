@@ -337,6 +337,9 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "get", "github.com/hashicorp/terraform-plugin-mux")).
 			In(repo.providerDir()))
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "mod", "tidy")).
+			In(repo.providerDir()))
 
 		// If we update the bridge, then we should update our terraform-plugin-sdk
 		// fork, since the bridge assumes that it is up to date.
