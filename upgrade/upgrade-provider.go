@@ -346,49 +346,13 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 					In(repo.providerDir())
 			}))
 
-		// Now that we've updated the bridge version, we need to update the corresponding pulumi version in sdk/go.mod.
-		// It needs to match the version used in provider/go.mod, which is *not* necessarily `latest`.
-		var newSdkVersion string
-		getNewPulumiVersionStep := step.F("Get Pulumi SDK version", func() (string, error) {
-			modFile := filepath.Join(repo.root, "provider", "go.mod")
-			lookupModule := "github.com/pulumi/pulumi/sdk/v3"
-			pulumiMod, found, err := currentGoVersionOf(modFile, lookupModule)
-			if err != nil {
-				return "", err
-			}
-			if !found {
-				return "", fmt.Errorf("%s: %s not found\n", modFile, lookupModule)
-			}
-			return pulumiMod.Version, nil
-
-		}).AssignTo(&newSdkVersion)
-
-		bridgePulumiVersionSdkStep := step.Computed(func() step.Step {
-			return step.Cmd(exec.CommandContext(ctx,
-				"go",
-				"get",
-				"github.com/pulumi/pulumi/sdk/v3@"+newSdkVersion)).In(repo.sdkDir())
-		})
-		bridgePulumiVersionExamplesStep := step.Computed(func() step.Step {
-			return step.Cmd(exec.CommandContext(ctx,
-				"go",
-				"get",
-				"github.com/pulumi/pulumi/sdk/v3@"+newSdkVersion)).In(repo.examplesDir())
-		})
-		// In examples/ folder, we use pulumi/pkg as well. We should keep this in sync also.
-		examplesPulumiPkgStep := step.Computed(func() step.Step {
-			return step.Cmd(exec.CommandContext(ctx,
-				"go",
-				"get",
-				"github.com/pulumi/pulumi/pkg/v3@"+newSdkVersion)).In(repo.examplesDir())
-		})
-
-		steps = append(steps,
-			getNewPulumiVersionStep,
-			bridgePulumiVersionSdkStep,
-			bridgePulumiVersionExamplesStep,
-			examplesPulumiPkgStep,
-		)
+		// Now that we've upgraded the bridge, we want the other places in the repo to use the bridge's
+		// Pulumi version.
+		upgradePulumiEverywhereStep, err := BridgePulumiVersions(ctx, repo)
+		if err != nil {
+			return err
+		}
+		steps = append(steps, upgradePulumiEverywhereStep)
 
 	}
 	if ctx.UpgradeSdkVersion {
