@@ -724,3 +724,44 @@ func ReplaceAssertNoError(ctx Context, repo ProviderRepo) (step.Step, error) {
 	}
 	return step.Combined("Replace AssertNoError with AssertNoErrorf", steps...), nil
 }
+
+// UpgradePulumiVersions reads the current Pulumi SDK version from go.mod and applies it to:
+// sdk/go.mod
+// examples/go.mod - we also infer the `pkg` version here and add it.
+func BridgePulumiVersions(ctx Context, repo ProviderRepo) step.Step {
+	// When we've updated the bridge version, we need to update the corresponding pulumi version in sdk/go.mod.
+	// It needs to match the version used in provider/go.mod, which is *not* necessarily `latest`.
+	var newSdkVersion string
+	steps := []step.Step{}
+	getNewPulumiVersionStep := step.F("Get Pulumi SDK version", func() (string, error) {
+		modFile := filepath.Join(repo.root, "provider", "go.mod")
+		lookupModule := "github.com/pulumi/pulumi/sdk/v3"
+		pulumiMod, found, err := currentGoVersionOf(modFile, lookupModule)
+		if err != nil {
+			return "", err
+		}
+		if !found {
+			return "", fmt.Errorf("%s: %s not found\n", modFile, lookupModule)
+		}
+		return pulumiMod.Version, nil
+
+	}).AssignTo(&newSdkVersion)
+
+	goGet := func(pack string) step.Step {
+		return step.Computed(func() step.Step {
+			return step.Cmd(exec.CommandContext(ctx,
+				"go",
+				"get",
+				"github.com/pulumi/pulumi/"+pack+"/v3@"+newSdkVersion))
+		})
+	}
+
+	steps = append(steps,
+		getNewPulumiVersionStep,
+		goGet("sdk").In(repo.sdkDir()),
+		goGet("sdk").In(repo.examplesDir()),
+		goGet("pkg").In(repo.examplesDir()),
+	)
+
+	return step.Combined("Upgrade Pulumi version in all places", steps...)
+}
