@@ -390,7 +390,7 @@ func (g gitRepoRefs) labelOf(sha string) (string, bool) {
 
 func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
 	labels := make([]string, 0, len(g.labelToRef))
-	for label, _ := range g.labelToRef {
+	for label := range g.labelToRef {
 		labels = append(labels, label)
 	}
 	sort.Slice(labels, func(i, j int) bool {
