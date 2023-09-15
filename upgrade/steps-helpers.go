@@ -366,12 +366,12 @@ func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
 }
 
 type gitRepoRefs struct {
-	LabelToRef map[string]string
+	labelToRef map[string]string
 	kind       string
 }
 
 func (g gitRepoRefs) shaOf(label string) (string, bool) {
-	for l, ref := range g.LabelToRef {
+	for l, ref := range g.labelToRef {
 		if l == label {
 			return ref, true
 		}
@@ -380,7 +380,7 @@ func (g gitRepoRefs) shaOf(label string) (string, bool) {
 }
 
 func (g gitRepoRefs) labelOf(sha string) (string, bool) {
-	for label, ref := range g.LabelToRef {
+	for label, ref := range g.labelToRef {
 		if strings.HasPrefix(ref, sha) {
 			return label, true
 		}
@@ -389,8 +389,8 @@ func (g gitRepoRefs) labelOf(sha string) (string, bool) {
 }
 
 func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
-	labels := make([]string, 0, len(g.LabelToRef))
-	for label, _ := range g.LabelToRef {
+	labels := make([]string, 0, len(g.labelToRef))
+	for label, _ := range g.labelToRef {
 		labels = append(labels, label)
 	}
 	sort.Slice(labels, func(i, j int) bool {
