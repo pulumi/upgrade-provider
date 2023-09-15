@@ -348,10 +348,8 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 		// Now that we've upgraded the bridge, we want the other places in the repo to use the bridge's
 		// Pulumi version.
-		upgradePulumiEverywhereStep, err := BridgePulumiVersions(ctx, repo)
-		if err != nil {
-			return err
-		}
+		upgradePulumiEverywhereStep := BridgePulumiVersions(ctx, repo)
+
 		steps = append(steps, upgradePulumiEverywhereStep)
 
 	}
