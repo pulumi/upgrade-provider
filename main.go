@@ -137,6 +137,7 @@ func cmd() *cobra.Command {
 					}
 				case "bridge":
 					set(&context.UpgradeBridgeVersion)
+					set(&context.UpgradePfVersion)
 				case "provider":
 					set(&context.UpgradeProviderVersion)
 				case "code":
