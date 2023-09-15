@@ -331,6 +331,16 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
 			In(repo.providerDir()))
 
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "get", "github.com/hashicorp/terraform-plugin-framework")).
+			In(repo.providerDir()))
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "get", "github.com/hashicorp/terraform-plugin-mux")).
+			In(repo.providerDir()))
+		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
+			"go", "mod", "tidy")).
+			In(repo.providerDir()))
+
 		// If we update the bridge, then we should update our terraform-plugin-sdk
 		// fork, since the bridge assumes that it is up to date.
 		updatePluginSDK, didUpdate := getLatestTFPluginSDKReplace(ctx, repo)
