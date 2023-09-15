@@ -17,7 +17,6 @@ import (
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
-	"golang.org/x/mod/module"
 	"gopkg.in/yaml.v3"
 
 	"github.com/pulumi/upgrade-provider/step"
@@ -339,116 +338,36 @@ func InformGitHub(
 //
 // This is predicated on updating to the latest version being safe. We will need to
 // revisit this when a new major version of the plugin SDK is released.
-func getLatestTFPluginSDKReplace(ctx context.Context, repo ProviderRepo) (step.Step, *bool) {
-	name := "Update TF Plugin SDK Fork"
-	stepFail := func(msg string, a ...any) step.Step {
-		return step.F(name, func() (string, error) {
-			return "", fmt.Errorf(msg, a...)
-		})
-	}
-
-	didReplace := new(bool)
-
+func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA *string) step.Step {
 	// We do discover in a step.Computed so if the fork isn't present, it isn't
 	// displayed to the user.
-	return step.Computed(func() step.Step {
+	return step.F("Update TF Plugin SDK Fork", func() (string, error) {
 		goModFile, err := os.ReadFile("go.mod")
 		if err != nil {
-			return stepFail("could not fine go.mod: %w", err)
+			return "", fmt.Errorf("could not find go.mod: %w", err)
 		}
 		goMod, err := modfile.Parse("go.mod", goModFile, nil)
 		if err != nil {
-			return stepFail("could not parse go.mod: %w", err)
+			return "", fmt.Errorf("failed to parse go.mod: %w", err)
 		}
 
-		const targetSrc = "github.com/hashicorp/terraform-plugin-sdk/v2"
-
-		var require *modfile.Require
-		for _, r := range goMod.Require {
-			if r.Mod.Path == targetSrc {
-				require = r
-			}
-		}
-		if require == nil {
-			return nil
+		// Otherwise, we need to replace the old version. goMod.AddReplace
+		// will handle replacing existing `replace` directives.
+		err = goMod.AddReplace("github.com/hashicorp/terraform-plugin-sdk/v2", "",
+			"github.com/pulumi/terraform-plugin-sdk/v2", *targetSHA)
+		if err != nil {
+			return "", fmt.Errorf("failed to update version: %w", err)
 		}
 
-		var replace *modfile.Replace
-		for _, r := range goMod.Replace {
-			if r.Old.Path == targetSrc {
-				replace = r
-				break
-			}
+		// We now write out the new file over the old file.
+		goMod.Cleanup()
+		goModFile, err = goMod.Format()
+		if err != nil {
+			return "", fmt.Errorf("failed to format file as bytes: %w", err)
 		}
-		if replace == nil {
-			return nil
-		}
-
-		return step.F(name, func() (string, error) {
-			// If the fork is present, we need to figure out the SHA of the
-			// latest upstream version to use.
-			const hostRepo = "https://github.com/pulumi/terraform-plugin-sdk.git"
-			result, err := exec.CommandContext(ctx, "git",
-				"ls-remote", "--heads", hostRepo).Output()
-			if err != nil {
-				return "", fmt.Errorf("could not get branches: %w", err)
-			}
-			lines := strings.Split(string(result), "\n")
-			versions := make([]*semver.Version, len(lines))
-			shas := make([]string, len(lines))
-			highest := -1
-			for i, line := range lines {
-				split := strings.Split(strings.TrimSpace(line), "\t")
-				if len(split) < 2 {
-					continue
-				}
-				shas[i] = split[0]
-				version, hasVersion := strings.CutPrefix(split[1], "refs/heads/upstream-")
-				if !hasVersion {
-					continue
-				}
-				if v, err := semver.NewVersion(version); err == nil {
-					versions[i] = v
-					if highest == -1 || versions[highest].LessThan(v) {
-						highest = i
-					}
-				}
-			}
-			if highest == -1 {
-				return "", fmt.Errorf("no upstream version found")
-			}
-
-			// We now compare the pseudo vision and the latest SHA.
-			pseudo, err := module.PseudoVersionRev(replace.New.Version)
-			if err != nil {
-				return "", fmt.Errorf("not using a branch based replace")
-			}
-
-			// If the pseudo version matches the latest SHA, we are already up
-			// to date. We don't need to do any edits.
-			if strings.HasPrefix(shas[highest], pseudo) {
-				return "already up to date", nil
-			}
-
-			// Otherwise, we need to replace the old version. goMod.AddReplace
-			// will handle replacing existing `replace` directives.
-			err = goMod.AddReplace(replace.Old.Path, replace.Old.Version,
-				replace.New.Path, shas[highest])
-			if err != nil {
-				return "", fmt.Errorf("failed to update version: %w", err)
-			}
-
-			// We now write out the new file over the old file.
-			goMod.Cleanup()
-			goModFile, err = goMod.Format()
-			if err != nil {
-				return "", fmt.Errorf("failed to format file as bytes: %w", err)
-			}
-			err = os.WriteFile("go.mod", goModFile, 0600)
-			*didReplace = true
-			return "updated", err
-		})
-	}).In(repo.providerDir()), didReplace
+		err = os.WriteFile("go.mod", goModFile, 0600)
+		return "updated", err
+	}).In(repo.providerDir())
 }
 
 func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {

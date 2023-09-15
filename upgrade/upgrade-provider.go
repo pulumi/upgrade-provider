@@ -31,6 +31,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		org:  repoOrg,
 	}
 	var targetBridgeVersion, targetPfVersion, tfSDKUpgrade string
+	var tfSDKTargetSHA string
 	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
 
@@ -194,6 +195,11 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				if latest.Original() == currentBranch {
 					return fmt.Sprintf("Up to date at %s", latest), nil
 				}
+				latestTag := fmt.Sprintf("refs/heads/upstream-%s", latest.Original())
+				latestSha, ok := refs.shaOf(latestTag)
+				contract.Assertf(ok, "Failed to lookup sha of known tag: %q not in %#v",
+					latestTag, refs.labelToRef)
+				tfSDKTargetSHA = latestSha
 				return fmt.Sprintf("%s -> %s", currentBranch, latest), nil
 			}).AssignTo(&tfSDKUpgrade),
 		)
@@ -315,6 +321,17 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		}()
 	}
 
+	steps = append(steps, step.Computed(func() step.Step {
+		// No upgrade was planned, so exit
+		if tfSDKTargetSHA == "" {
+			return nil
+		}
+		return step.Combined("Update Plugin SDK",
+			setTFPluginSDKReplace(ctx, repo, &tfSDKTargetSHA),
+			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
+		)
+	}))
+
 	if ctx.UpgradeProviderVersion {
 		steps = append(steps, UpgradeProviderVersion(ctx, goMod, upgradeTarget.Version, repo,
 			targetSHA, forkedProviderUpstreamCommit))
@@ -340,21 +357,6 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
 			"go", "mod", "tidy")).
 			In(repo.providerDir()))
-
-		// If we update the bridge, then we should update our terraform-plugin-sdk
-		// fork, since the bridge assumes that it is up to date.
-		updatePluginSDK, didUpdate := getLatestTFPluginSDKReplace(ctx, repo)
-
-		steps = append(steps, updatePluginSDK,
-			// If we updated the pinned plugin sdk, then we need to run `go mod tidy`
-			// to normalize the ref.
-			step.Computed(func() step.Step {
-				if !(*didUpdate) {
-					return nil
-				}
-				return step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).
-					In(repo.providerDir())
-			}))
 
 		// Now that we've updated the bridge version, we need to update the corresponding pulumi version in sdk/go.mod.
 		// It needs to match the version used in provider/go.mod, which is *not* necessarily `latest`.
