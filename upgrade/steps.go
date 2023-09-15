@@ -338,43 +338,10 @@ func InformGitHub(
 //
 // This is predicated on updating to the latest version being safe. We will need to
 // revisit this when a new major version of the plugin SDK is released.
-func getLatestTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA *string) step.Step {
+func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA *string) step.Step {
 	// We do discover in a step.Computed so if the fork isn't present, it isn't
 	// displayed to the user.
 	return step.F("Update TF Plugin SDK Fork", func() (string, error) {
-		// If the fork is present, we need to figure out the SHA of the
-		// latest upstream version to use.
-		const hostRepo = "https://github.com/pulumi/terraform-plugin-sdk.git"
-		result, err := exec.CommandContext(ctx, "git",
-			"ls-remote", "--heads", hostRepo).Output()
-		if err != nil {
-			return "", fmt.Errorf("could not get branches: %w", err)
-		}
-		lines := strings.Split(string(result), "\n")
-		versions := make([]*semver.Version, len(lines))
-		shas := make([]string, len(lines))
-		highest := -1
-		for i, line := range lines {
-			split := strings.Split(strings.TrimSpace(line), "\t")
-			if len(split) < 2 {
-				continue
-			}
-			shas[i] = split[0]
-			version, hasVersion := strings.CutPrefix(split[1], "refs/heads/upstream-")
-			if !hasVersion {
-				continue
-			}
-			if v, err := semver.NewVersion(version); err == nil {
-				versions[i] = v
-				if highest == -1 || versions[highest].LessThan(v) {
-					highest = i
-				}
-			}
-		}
-		if highest == -1 {
-			return "", fmt.Errorf("no upstream version found")
-		}
-
 		goModFile, err := os.ReadFile("go.mod")
 		if err != nil {
 			return "", fmt.Errorf("could not find go.mod: %w", err)

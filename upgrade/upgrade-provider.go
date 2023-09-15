@@ -327,7 +327,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			return nil
 		}
 		return step.Combined("Update Plugin SDK",
-			getLatestTFPluginSDKReplace(ctx, repo, &tfSDKTargetSHA),
+			setTFPluginSDKReplace(ctx, repo, &tfSDKTargetSHA),
 			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
 		)
 	}))
