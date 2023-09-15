@@ -198,7 +198,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				latestTag := fmt.Sprintf("refs/heads/upstream-%s", latest.Original())
 				latestSha, ok := refs.shaOf(latestTag)
 				contract.Assertf(ok, "Failed to lookup sha of known tag: %q not in %#v",
-					latestTag, refs.refsToLabel)
+					latestTag, refs.labelToRef)
 				tfSDKTargetSHA = latestSha
 				return fmt.Sprintf("%s -> %s", currentBranch, latest), nil
 			}).AssignTo(&tfSDKUpgrade),
