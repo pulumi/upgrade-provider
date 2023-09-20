@@ -177,9 +177,13 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 					return "", fmt.Errorf("unable to parse PseudoVersionRef %q: %w",
 						current.Version, err)
 				}
+
 				currentBranch, ok := refs.labelOf(currentRef)
 				if !ok {
-					return "", fmt.Errorf("Did not recognize branch")
+					// use latest versioned branch
+					latest := latestSemverTag("upstream-", refs)
+					return fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
+						"latest branch at %s instead.", currentRef, latest), nil
 				}
 
 				trim := func(branch string) string {
