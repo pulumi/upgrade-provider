@@ -178,9 +178,12 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 					return "", fmt.Errorf("unable to parse PseudoVersionRef %q: %w",
 						current.Version, err)
 				}
+				latest := latestSemverTag("upstream-", refs)
 				currentBranch, ok := refs.labelOf(currentRef)
 				if !ok {
-					return "", fmt.Errorf("Did not recognize branch")
+					// use latest versioned branch
+					return fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
+						"latest branch at %s instead.", currentRef, latest), nil
 				}
 
 				trim := func(branch string) string {
@@ -191,7 +194,6 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 				// We are guaranteed to get a non-nil result because there
 				// are semver tags released tags with this prefix.
-				latest := latestSemverTag("upstream-", refs)
 				if latest.Original() == currentBranch {
 					return fmt.Sprintf("Up to date at %s", latest), nil
 				}
