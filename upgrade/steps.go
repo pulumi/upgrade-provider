@@ -638,9 +638,13 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 
 	var steps []step.Step
 	for _, f := range []string{"master.yml", "main.yml", "run-acceptance-tests.yml"} {
-		f := filepath.Join(".github", "workflows", f)
 		steps = append(steps, step.F(f, func() (string, error) {
-			return "", addPrefix(f)
+			path := filepath.Join(".github", "workflows", f)
+			err := addPrefix(path)
+			if os.IsNotExist(err) && f != "run-acceptance-tests.yml" {
+				return path + " does not exist", nil
+			}
+			return "", err
 		}))
 	}
 	return step.Combined("VERSION_PREFIX workflows", steps...)
