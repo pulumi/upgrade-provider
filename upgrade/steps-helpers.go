@@ -127,6 +127,13 @@ func prBody(ctx Context, repo ProviderRepo,
 	if ctx.MajorVersionBump {
 		fmt.Fprintf(b, "- Updating major version from %s to %s.\n", repo.currentVersion, repo.currentVersion.IncMajor())
 	}
+	if ctx.oldJavaVersion != ctx.JavaVersion && ctx.JavaVersion != "" {
+		var from string
+		if prev := ctx.oldJavaVersion; prev != "" {
+			from = fmt.Sprintf("from %s ", prev)
+		}
+		fmt.Fprintf(b, "- Updating java version %sto %s.\n", from, ctx.JavaVersion)
+	}
 
 	if ctx.UpgradeProviderVersion {
 		contract.Assertf(upgradeTarget != nil, "upgradeTarget should always be non-nil")

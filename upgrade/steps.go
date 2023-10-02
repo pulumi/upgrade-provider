@@ -166,9 +166,21 @@ func UpgradeProviderVersion(
 ) step.Step {
 	steps := []step.Step{}
 	if ctx.JavaVersion != "" {
-		didChange := new(bool)
+		var didChange bool
 		steps = append(steps, step.Combined("Update Java Version",
-			UpdateFileWithSignal("Update Makefile", "Makefile", didChange,
+			step.F("Current Java Version", func(cx context.Context) (string, error) {
+				b, err := baseFileAt(cx, repo, "Makefile")
+				if err != nil {
+					return "", err
+				}
+				found := javaVersion.FindSubmatch(b)
+				if found == nil {
+					return "not found", nil
+				}
+				ctx.oldJavaVersion = string(found[1])
+				return ctx.oldJavaVersion, nil
+			}),
+			UpdateFileWithSignal("Update Makefile", "Makefile", &didChange,
 				func(b []byte) ([]byte, error) {
 					version := javaVersion.FindSubmatchIndex(b)
 					if version == nil {
@@ -180,8 +192,10 @@ func UpgradeProviderVersion(
 					out.Write(b[version[3]:])
 					return out.Bytes(), nil
 				}),
-			step.When(didChange, step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-java-gen"))),
-			step.When(didChange, step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-language-java"))),
+			step.When(&didChange,
+				step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-java-gen"))),
+			step.When(&didChange,
+				step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-language-java"))),
 		))
 	}
 	if goMod.Kind.IsPatched() {
