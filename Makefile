@@ -1,6 +1,8 @@
+bin:
+	mkdir -p bin
 
-build: tidy
-	go build github.com/pulumi/upgrade-provider
+build: tidy bin
+	go build -o ./bin/upgrade-provider github.com/pulumi/upgrade-provider
 
 tidy:
 	go mod tidy

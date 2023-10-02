@@ -5,6 +5,7 @@
 package step
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,17 +24,17 @@ type Step interface {
 	AssignTo(lvalue *string) Step
 	// Override the output of the command, and assign the rvalue
 	Return(rvalue *string) Step
-	run(prefix string) bool
+	run(ctx context.Context, prefix string) bool
 }
 
 type step struct {
 	description string
-	f           func() (string, error)
+	f           func(context.Context) (string, error)
 	path        *string
 	rvalue      *string
 }
 
-func (ds step) run(prefix string) bool {
+func (ds step) run(ctx context.Context, prefix string) bool {
 	options := []string{"|", "/", "-", "\\"}
 	for i, o := range options {
 		options[i] = prefix + o + " " + ds.description
@@ -41,7 +42,7 @@ func (ds step) run(prefix string) bool {
 	spinner := spinner.New(options, time.Millisecond*250,
 		spinner.WithHiddenCursor(true))
 	spinner.Start()
-	result, err := runIn(ds.path, ds.f)
+	result, err := runIn(ctx, ds.path, ds.f)
 	if err != nil {
 		spinner.FinalMSG = prefix + "X"
 		result = err.Error()
@@ -62,7 +63,7 @@ func (ds step) Return(rvalue *string) Step {
 }
 
 // Create a step based around a function.
-func F(description string, action func() (string, error)) Step {
+func F(description string, action func(context.Context) (string, error)) Step {
 	return step{
 		description: description,
 		f:           action,
@@ -70,13 +71,15 @@ func F(description string, action func() (string, error)) Step {
 }
 
 // Create a step from a *exec.Cmd.
-func Cmd(command *exec.Cmd) Step {
+func Cmd(name string, args ...string) Step {
+	cmdNoCtx := exec.Command(name, args...)
 	var output string
-	description := command.String()
+	description := cmdNoCtx.String()
 	if len(description) > 80 {
 		description = description[:80] + "..."
 	}
-	return F(description, func() (string, error) {
+	return F(description, func(ctx context.Context) (string, error) {
+		command := exec.CommandContext(ctx, name, args...)
 		out, err := command.Output()
 		output = string(out)
 		if exit, ok := err.(*exec.ExitError); ok {
@@ -88,7 +91,7 @@ func Cmd(command *exec.Cmd) Step {
 
 // Set an environmental variable.
 func Env(key, value string) Step {
-	return F(fmt.Sprintf("%s=%q", key, value), func() (string, error) {
+	return F(fmt.Sprintf("%s=%q", key, value), func(context.Context) (string, error) {
 		return "", os.Setenv(key, value)
 	})
 }
@@ -99,8 +102,8 @@ func (s step) AssignTo(position *string) Step {
 		description: s.description,
 		path:        s.path,
 		rvalue:      s.rvalue,
-		f: func() (string, error) {
-			r, err := s.f()
+		f: func(ctx context.Context) (string, error) {
+			r, err := s.f(ctx)
 			if s.rvalue != nil {
 				*position = *s.rvalue
 			} else {
@@ -123,9 +126,9 @@ func (s step) In(path *string) Step {
 //
 // An error is returned if there was a failure in changing the directory or if `f`
 // returned an error.
-func runIn[T any](path *string, f func() (T, error)) (T, error) {
+func runIn[T any](ctx context.Context, path *string, f func(context.Context) (T, error)) (T, error) {
 	if path == nil {
-		return f()
+		return f(ctx)
 	}
 	wd, err := os.Getwd()
 	if err != nil {
@@ -143,7 +146,7 @@ func runIn[T any](path *string, f func() (T, error)) (T, error) {
 			err = e
 		}
 	}()
-	return f()
+	return f(ctx)
 }
 
 // A Step that can't be fully computed until it is run. This allows constructing a Step
@@ -195,8 +198,8 @@ func (us unknownStep) Return(rvalue *string) Step {
 	}
 }
 
-func (us unknownStep) run(prefix string) bool {
-	s, err := runIn(us.in, func() (Step, error) { return us.f(), nil })
+func (us unknownStep) run(ctx context.Context, prefix string) bool {
+	s, err := runIn(ctx, us.in, func(context.Context) (Step, error) { return us.f(), nil })
 	if err != nil {
 		fmt.Println("failed to compute step: %w", err)
 		return false
@@ -204,7 +207,7 @@ func (us unknownStep) run(prefix string) bool {
 	if s == nil {
 		return true
 	}
-	return s.run(prefix)
+	return s.run(ctx, prefix)
 }
 
 // Run a series of steps with an under a name.
@@ -239,7 +242,7 @@ func (c combined) AssignTo(position *string) Step {
 	return c
 }
 
-func (c combined) run(prefix string) bool {
+func (c combined) run(ctx context.Context, prefix string) bool {
 	description := prefix + c.description
 	if prefix == "" {
 		description = "---- " + description + " ----"
@@ -258,7 +261,7 @@ func (c combined) run(prefix string) bool {
 				s = s.AssignTo(lvalue)
 			}
 		}
-		ok := s.run(subPrefix + "- ")
+		ok := s.run(ctx, subPrefix+"- ")
 		if !ok {
 			return false
 		}
@@ -271,10 +274,24 @@ func (c combined) run(prefix string) bool {
 	return true
 }
 
+// A step that simply returns a value.
+func Value(desc, s string) Step {
+	return F(desc, func(context.Context) (string, error) {
+		return s, nil
+	})
+}
+
+// A step that simply returns an error.
+func Error(desc string, err error) Step {
+	return F(desc, func(context.Context) (string, error) {
+		return "", err
+	})
+}
+
 // Run a step, returning if the step succeeded.
-func Run(step Step) bool {
+func Run(ctx context.Context, step Step) bool {
 	if step == nil {
 		return true
 	}
-	return step.run("")
+	return step.run(ctx, "")
 }
