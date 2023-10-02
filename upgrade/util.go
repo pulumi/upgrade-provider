@@ -36,6 +36,8 @@ type Context struct {
 	//
 	UpstreamProviderName string
 
+	JavaVersion string
+
 	UpgradeCodeMigration bool
 	MigrationOpts        []string
 

@@ -288,6 +288,16 @@ func Error(desc string, err error) Step {
 	})
 }
 
+// A step that only runs when a condition is true
+func When(condition *bool, then Step) Step {
+	return Computed(func() Step {
+		if *condition {
+			return then
+		}
+		return nil
+	})
+}
+
 // Run a step, returning if the step succeeded.
 func Run(ctx context.Context, step Step) bool {
 	if step == nil {
