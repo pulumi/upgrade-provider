@@ -30,16 +30,12 @@ func GitCommit(ctx context.Context, msg string) step.Step {
 		check, err := exec.CommandContext(ctx, "git", "status", "--porcelain=1").CombinedOutput()
 		description := fmt.Sprintf(`git commit -m "%s"`, msg)
 		if err != nil {
-			return step.F("git commit", func() (string, error) {
-				return "", err
-			})
+			return step.Error("git commit", err)
 		}
 		if len(check) > 0 {
-			return step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", msg))
+			return step.Cmd("git", "commit", "-m", msg)
 		}
-		return step.F(description, func() (string, error) {
-			return "nothing to commit", nil
-		})
+		return step.Value(description, "nothing to commit")
 	})
 }
 
@@ -52,16 +48,16 @@ func upgradeUpstreamFork(ctx Context, name string, target *semver.Version, goMod
 	var previousUpstreamVersion *semver.Version
 	return step.Combined("Upgrading Forked Provider",
 		ensureUpstreamRepo(ctx, goMod.Fork.Old.Path).AssignTo(&upstreamPath),
-		step.F("Ensure Pulumi Remote", func() (string, error) {
+		step.F("Ensure Pulumi Remote", func(context.Context) (string, error) {
 			remoteName := strings.TrimPrefix(name, "pulumi-")
 			if s, ok := ProviderName[remoteName]; ok {
 				remoteName = s
 			}
 			return ensurePulumiRemote(ctx, remoteName)
 		}).In(&upstreamPath),
-		step.Cmd(exec.Command("git", "fetch", "pulumi")).In(&upstreamPath),
-		step.Cmd(exec.Command("git", "fetch", "origin", "--tags")).In(&upstreamPath),
-		step.F("Discover Previous Upstream Version", func() (string, error) {
+		step.Cmd("git", "fetch", "pulumi").In(&upstreamPath),
+		step.Cmd("git", "fetch", "origin", "--tags").In(&upstreamPath),
+		step.F("Discover Previous Upstream Version", func(context.Context) (string, error) {
 			return runGitCommand(ctx, func(b []byte) (string, error) {
 				lines := strings.Split(string(b), "\n")
 				for _, line := range lines {
@@ -81,10 +77,9 @@ func upgradeUpstreamFork(ctx Context, name string, target *semver.Version, goMod
 			}, "branch", "--remote", "--list", "pulumi/upstream-v*")
 		}).In(&upstreamPath),
 		step.Computed(func() step.Step {
-			return step.Cmd(exec.CommandContext(ctx,
-				"git", "checkout", "pulumi/upstream-v"+previousUpstreamVersion.String()))
+			return step.Cmd("git", "checkout", "pulumi/upstream-v"+previousUpstreamVersion.String())
 		}).In(&upstreamPath),
-		step.F("Upstream Branch", func() (string, error) {
+		step.F("Upstream Branch", func(context.Context) (string, error) {
 			target := "upstream-v" + target.String()
 			branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
 				lines := strings.Split(string(b), "\n")
@@ -104,12 +99,10 @@ func upgradeUpstreamFork(ctx Context, name string, target *semver.Version, goMod
 			}
 			return target + " already exists", nil
 		}).In(&upstreamPath),
-		step.Cmd(exec.CommandContext(ctx,
-			"git", "merge", "v"+target.String())).In(&upstreamPath),
-		step.Cmd(exec.CommandContext(ctx, "go", "build", ".")).In(&upstreamPath),
-		step.Cmd(exec.CommandContext(ctx,
-			"git", "push", "pulumi", "upstream-v"+target.String())).In(&upstreamPath),
-		step.F("Get Head Commit", func() (string, error) {
+		step.Cmd("git", "merge", "v"+target.String()).In(&upstreamPath),
+		step.Cmd("go", "build", ".").In(&upstreamPath),
+		step.Cmd("git", "push", "pulumi", "upstream-v"+target.String()).In(&upstreamPath),
+		step.F("Get Head Commit", func(context.Context) (string, error) {
 			return runGitCommand(ctx, func(b []byte) (string, error) {
 				return strings.TrimSpace(string(b)), nil
 			}, "rev-parse", "HEAD")
@@ -121,7 +114,7 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 	var expectedLocation string
 	var repoExists bool
 	return step.Combined("Ensure '"+repoPath+"'",
-		step.F("Expected Location", func() (string, error) {
+		step.F("Expected Location", func(context.Context) (string, error) {
 			cwd, err := os.Getwd()
 			if err != nil {
 				return "", fmt.Errorf("could not resolve cwd: %w", err)
@@ -141,25 +134,25 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 		step.Computed(func() step.Step {
 			const tag = "Downloading"
 			if repoExists {
-				return step.F(tag, func() (string, error) {
+				return step.F(tag, func(context.Context) (string, error) {
 					return "skipped - already exists", nil
 				})
 			}
 			targetDir := filepath.Dir(expectedLocation)
 			return step.Combined(tag,
-				step.F("Ensuring Path", func() (string, error) {
+				step.F("Ensuring Path", func(context.Context) (string, error) {
 					err := os.MkdirAll(targetDir, 0700)
 					if err != nil && !os.IsExist(err) {
 						return "", err
 					}
 					return "", nil
 				}),
-				step.Cmd(exec.CommandContext(ctx, "git", "clone",
+				step.Cmd("git", "clone",
 					fmt.Sprintf("https://%s.git", repoPath),
-					expectedLocation)),
+					expectedLocation),
 			)
 		}),
-		step.F("Validating", func() (string, error) {
+		step.F("Validating", func(ctx context.Context) (string, error) {
 			return "done", exec.CommandContext(ctx, "git", "status", "--short").Run()
 		}).In(&expectedLocation),
 	).Return(&expectedLocation)
@@ -175,21 +168,19 @@ func UpgradeProviderVersion(
 		// we update the module referenced to the new tag.
 		upstreamDir := filepath.Join(repo.root, "upstream")
 		steps = append(steps, step.Combined("update patched provider",
-			step.Cmd(exec.CommandContext(ctx,
-				"git", "submodule", "update", "--force", "--init",
-			)).In(&upstreamDir),
-			step.Cmd(exec.CommandContext(ctx, "git", "fetch", "--tags")).In(&upstreamDir),
+			step.Cmd("git", "submodule", "update", "--force", "--init").In(&upstreamDir),
+			step.Cmd("git", "fetch", "--tags").In(&upstreamDir),
 			// We need to remove any patches to so we can cleanly pull the next upstream version.
-			step.Cmd(exec.CommandContext(ctx, "git", "reset", "HEAD", "--hard")).In(&upstreamDir),
-			step.Cmd(exec.CommandContext(ctx, "git", "checkout", "tags/v"+target.String())).In(&upstreamDir),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "upstream")).In(&repo.root),
+			step.Cmd("git", "reset", "HEAD", "--hard").In(&upstreamDir),
+			step.Cmd("git", "checkout", "tags/v"+target.String()).In(&upstreamDir),
+			step.Cmd("git", "add", "upstream").In(&repo.root),
 			// We re-apply changes, eagerly.
 			//
 			// Failure to perform this step can lead to failures later, for
 			// example, we might have a patched in shim dir that is not yet
 			// restored, causing `go mod tidy` to fail, even where `make
 			// provider` would succeed.
-			step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root),
+			step.Cmd("make", "upstream").In(&repo.root),
 		))
 	}
 
@@ -200,7 +191,7 @@ func UpgradeProviderVersion(
 		//
 		// It they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
-			step.F("Lookup Tag SHA", func() (string, error) {
+			step.F("Lookup Tag SHA", func(context.Context) (string, error) {
 				path, err := getGitHubPath(goMod.Upstream.Path)
 				if err != nil {
 					return "", err
@@ -247,8 +238,7 @@ func UpgradeProviderVersion(
 					target.Major())
 			}
 
-			return step.Cmd(exec.CommandContext(ctx,
-				"go", "get", upstreamPath+"@"+targetV))
+			return step.Cmd("go", "get", upstreamPath+"@"+targetV)
 		}).In(&goModDir))
 	}
 
@@ -258,10 +248,9 @@ func UpgradeProviderVersion(
 		contract.Assertf(forkedProviderUpstreamCommit != "", "fork provider upstream commit cannot be null")
 
 		replaceIn := func(dir *string) {
-			steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-				"go", "mod", "edit", "-replace",
+			steps = append(steps, step.Cmd("go", "mod", "edit", "-replace",
 				goMod.Fork.Old.Path+"="+
-					goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit)).In(dir))
+					goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit).In(dir))
 		}
 
 		replaceIn(&goModDir)
@@ -273,8 +262,7 @@ func UpgradeProviderVersion(
 	if goMod.Kind.IsShimmed() {
 		// When shimmed, we also run `go mod tidy` in the shim directory, and we want to
 		// run that before running `go mod tidy` in the main `provider` directory.
-		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "mod", "tidy")).In(&goModDir))
+		steps = append(steps, step.Cmd("go", "mod", "tidy").In(&goModDir))
 	}
 
 	return step.Combined("Update TF Provider", steps...)
@@ -284,8 +272,8 @@ func InformGitHub(
 	ctx Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade string,
 ) step.Step {
-	pushBranch := step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream",
-		"origin", repo.workingBranch)).In(&repo.root)
+	pushBranch := step.Cmd("git", "push", "--set-upstream",
+		"origin", repo.workingBranch).In(&repo.root)
 
 	var prTitle string
 	if ctx.UpgradeProviderVersion {
@@ -303,14 +291,14 @@ func InformGitHub(
 		panic("Unknown action")
 	}
 
-	createPR := step.Cmd(exec.CommandContext(ctx, "gh", "pr", "create",
+	createPR := step.Cmd("gh", "pr", "create",
 		"--assignee", ctx.PrAssign,
 		"--base", repo.defaultBranch,
 		"--head", repo.workingBranch,
 		"--reviewer", ctx.PrReviewers,
 		"--title", prTitle,
 		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade),
-	)).In(&repo.root)
+	).In(&repo.root)
 	return step.Combined("GitHub",
 		pushBranch,
 		createPR,
@@ -325,9 +313,9 @@ func InformGitHub(
 			// the PR itself.
 			issues := make([]step.Step, len(target.GHIssues))
 			for i, t := range target.GHIssues {
-				issues[i] = step.Cmd(exec.CommandContext(ctx,
+				issues[i] = step.Cmd(
 					"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-					"--add-assignee", ctx.PrAssign)).In(&repo.root)
+					"--add-assignee", ctx.PrAssign).In(&repo.root)
 			}
 			return step.Combined("Assign Issues", issues...)
 		}),
@@ -343,7 +331,7 @@ func InformGitHub(
 func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA *string) step.Step {
 	// We do discover in a step.Computed so if the fork isn't present, it isn't
 	// displayed to the user.
-	return step.F("Update TF Plugin SDK Fork", func() (string, error) {
+	return step.F("Update TF Plugin SDK Fork", func(context.Context) (string, error) {
 		goModFile, err := os.ReadFile("go.mod")
 		if err != nil {
 			return "", fmt.Errorf("could not find go.mod: %w", err)
@@ -377,8 +365,8 @@ func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
 	var alreadyExists bool
 	var alreadyCurrent bool
 	return step.Combined("Ensure Branch",
-		step.Cmd(exec.CommandContext(ctx, "git", "branch")).AssignTo(&branches),
-		step.F("Already exists", func() (string, error) {
+		step.Cmd("git", "branch").AssignTo(&branches),
+		step.F("Already exists", func(context.Context) (string, error) {
 			lines := strings.Split(branches, "\n")
 			for _, line := range lines {
 				line = strings.TrimSpace(line)
@@ -398,13 +386,13 @@ func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
 			if alreadyExists || alreadyCurrent {
 				return nil
 			}
-			return step.Cmd(exec.CommandContext(ctx, "git", "checkout", "-b", branchName))
+			return step.Cmd("git", "checkout", "-b", branchName)
 		}),
 		step.Computed(func() step.Step {
 			if alreadyCurrent {
 				return nil
 			}
-			return step.Cmd(exec.CommandContext(ctx, "git", "checkout", branchName))
+			return step.Cmd("git", "checkout", branchName)
 		}),
 	)
 }
@@ -417,8 +405,8 @@ func PullDefaultBranch(ctx Context, remote string) step.Step {
 	var lsRemoteHeads string
 	var defaultBranch string
 	return step.Combined("pull default branch",
-		step.Cmd(exec.Command("git", "ls-remote", "--heads", remote)).AssignTo(&lsRemoteHeads),
-		step.F("finding default branch", func() (string, error) {
+		step.Cmd("git", "ls-remote", "--heads", remote).AssignTo(&lsRemoteHeads),
+		step.F("finding default branch", func(context.Context) (string, error) {
 			var hasMaster bool
 			lines := strings.Split(lsRemoteHeads, "\n")
 			for _, line := range lines {
@@ -441,11 +429,11 @@ func PullDefaultBranch(ctx Context, remote string) step.Step {
 			}
 			return "", fmt.Errorf("could not find 'master' or 'main' branch")
 		}).AssignTo(&defaultBranch),
-		step.Cmd(exec.CommandContext(ctx, "git", "fetch")),
+		step.Cmd("git", "fetch"),
 		step.Computed(func() step.Step {
-			return step.Cmd(exec.CommandContext(ctx, "git", "checkout", defaultBranch))
+			return step.Cmd("git", "checkout", defaultBranch)
 		}),
-		step.Cmd(exec.CommandContext(ctx, "git", "pull", remote)),
+		step.Cmd("git", "pull", remote),
 	).Return(&defaultBranch)
 }
 
@@ -475,7 +463,7 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 
 	name := filepath.Base(repo.root)
 	return step.Combined("Increment Major Version",
-		step.F("Next major version", func() (string, error) {
+		step.F("Next major version", func(context.Context) (string, error) {
 			// This step displays the next major version to the user.
 			return repo.currentVersion.IncMajor().String(), nil
 		}),
@@ -494,7 +482,7 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 		replaceInFile("Update Go Module (sdk)", "go.mod",
 			"module github.com/pulumi/"+name+"/sdk{}",
 		).In(repo.sdkDir()),
-		step.F("Update Go Imports", func() (string, error) {
+		step.F("Update Go Imports", func(context.Context) (string, error) {
 			var filesUpdated int
 			var fn filepath.WalkFunc = func(path string, info fs.FileInfo, err error) error {
 				if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") {
@@ -538,7 +526,7 @@ func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, 
 			err = filepath.Walk(filepath.Join(repo.root, "examples"), fn)
 			return fmt.Sprintf("Updated %d files", filesUpdated), err
 		}),
-		step.F("info.TFProviderModuleVersion", func() (string, error) {
+		step.F("info.TFProviderModuleVersion", func(context.Context) (string, error) {
 			b, err := os.ReadFile(filepath.Join(*repo.providerDir(), "resources.go"))
 			if err != nil {
 				return "", err
@@ -638,7 +626,7 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 
 	var steps []step.Step
 	for _, f := range []string{"master.yml", "main.yml", "run-acceptance-tests.yml"} {
-		steps = append(steps, step.F(f, func() (string, error) {
+		steps = append(steps, step.F(f, func(context.Context) (string, error) {
 			path := filepath.Join(".github", "workflows", f)
 			err := addPrefix(path)
 			if os.IsNotExist(err) && f != "run-acceptance-tests.yml" {
@@ -651,7 +639,7 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 }
 
 func UpdateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
-	return step.F(desc, func() (string, error) {
+	return step.F(desc, func(context.Context) (string, error) {
 		stats, err := os.Stat(path)
 		if err != nil {
 			return "", err
@@ -677,7 +665,7 @@ func migrationSteps(ctx Context, repo ProviderRepo, providerName string, descrip
 	providerName = strings.TrimPrefix(providerName, "pulumi-")
 	changesMade := false
 	steps = append(steps,
-		step.F(description, func() (string, error) {
+		step.F(description, func(context.Context) (string, error) {
 			changes, err := migrationFunc(filepath.Join(*repo.providerDir(), "resources.go"), providerName)
 			if err != nil {
 				return fmt.Sprintf("failed to perform \"%s\" migration", description), err
@@ -688,9 +676,9 @@ func migrationSteps(ctx Context, repo ProviderRepo, providerName string, descrip
 		}))
 	if changesMade {
 		steps = append(steps,
-			step.Cmd(exec.CommandContext(ctx, "gofmt", "-s", "-w", "resources.go")).In(repo.providerDir()),
-			step.Cmd(exec.CommandContext(ctx, "git", "add", "resources.go")).In(&repo.root),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", description)).In(&repo.root),
+			step.Cmd("gofmt", "-s", "-w", "resources.go").In(repo.providerDir()),
+			step.Cmd("git", "add", "resources.go").In(&repo.root),
+			step.Cmd("git", "commit", "-m", description).In(&repo.root),
 		)
 	}
 
@@ -701,7 +689,7 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo) (step.Step, error) {
 	providerName := strings.TrimPrefix(repo.name, "pulumi-")
 	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
 	steps := []step.Step{
-		step.F("ensure bridge-metadata.json", func() (string, error) {
+		step.F("ensure bridge-metadata.json", func(context.Context) (string, error) {
 			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 				_, err = os.Create(metadataPath)
 				if err != nil {
@@ -711,7 +699,7 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo) (step.Step, error) {
 			}
 			return "", nil
 		}),
-		step.Cmd(exec.CommandContext(ctx, "git", "add", metadataPath)).In(&repo.root),
+		step.Cmd("git", "add", metadataPath).In(&repo.root),
 	}
 	migrationSteps, err := migrationSteps(ctx, repo, providerName, "Perform auto aliasing migration",
 		AutoAliasingMigration)
@@ -739,7 +727,7 @@ func BridgePulumiVersions(ctx Context, repo ProviderRepo) step.Step {
 	// It needs to match the version used in provider/go.mod, which is *not* necessarily `latest`.
 	var newSdkVersion string
 	steps := []step.Step{}
-	getNewPulumiVersionStep := step.F("Get Pulumi SDK version", func() (string, error) {
+	getNewPulumiVersionStep := step.F("Get Pulumi SDK version", func(context.Context) (string, error) {
 		modFile := filepath.Join(repo.root, "provider", "go.mod")
 		lookupModule := "github.com/pulumi/pulumi/sdk/v3"
 		pulumiMod, found, err := currentGoVersionOf(modFile, lookupModule)
@@ -755,10 +743,8 @@ func BridgePulumiVersions(ctx Context, repo ProviderRepo) step.Step {
 
 	goGet := func(pack string) step.Step {
 		return step.Computed(func() step.Step {
-			return step.Cmd(exec.CommandContext(ctx,
-				"go",
-				"get",
-				"github.com/pulumi/pulumi/"+pack+"/v3@"+newSdkVersion))
+			return step.Cmd("go", "get",
+				"github.com/pulumi/pulumi/"+pack+"/v3@"+newSdkVersion)
 		})
 	}
 

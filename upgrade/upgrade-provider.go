@@ -2,9 +2,9 @@ package upgrade
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -35,7 +35,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
 
-	ok := step.Run(step.Combined("Setting Up Environment",
+	ok := step.Run(ctx, step.Combined("Setting Up Environment",
 		step.Env("GOWORK", "off"),
 		step.Env("PULUMI_MISSING_DOCS_ERROR", func() string {
 			if ctx.AllowMissingDocs {
@@ -55,7 +55,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			AssignTo(&repo.defaultBranch),
 	}
 
-	discoverSteps = append(discoverSteps, step.F("Repo kind", func() (string, error) {
+	discoverSteps = append(discoverSteps, step.F("Repo kind", func(context.Context) (string, error) {
 		goMod, err = GetRepoKind(ctx, repo)
 		if err != nil {
 			return "", err
@@ -65,7 +65,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 	if ctx.UpgradeProviderVersion {
 		discoverSteps = append(discoverSteps,
-			step.F("Planning Provider Update", func() (string, error) {
+			step.F("Planning Provider Update", func(context.Context) (string, error) {
 				upgradeTarget, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName,
 					goMod.UpstreamProviderOrg)
 				if err != nil {
@@ -140,7 +140,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 	if ctx.UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
-			step.F("Planning Bridge Update", func() (string, error) {
+			step.F("Planning Bridge Update", func(context.Context) (string, error) {
 				refs, err := gitRefsOf(ctx,
 					"https://github.com/pulumi/pulumi-terraform-bridge.git", "tags")
 				if err != nil {
@@ -159,7 +159,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				targetBridgeVersion = latest.Original()
 				return fmt.Sprintf("%s -> %s", goMod.Bridge.Version, latest.Original()), nil
 			}),
-			step.F("Planning Plugin SDK Update", func() (string, error) {
+			step.F("Planning Plugin SDK Update", func(context.Context) (string, error) {
 				current, ok, err := originalGoVersionOf(ctx, repo, "provider/go.mod",
 					"github.com/pulumi/terraform-plugin-sdk/v2")
 				if err != nil {
@@ -208,7 +208,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 	if ctx.UpgradePfVersion {
 		discoverSteps = append(discoverSteps,
-			step.F("Planning Plugin Framework Update", func() (string, error) {
+			step.F("Planning Plugin Framework Update", func(context.Context) (string, error) {
 				if goMod.Pf.Version == "" {
 					// PF is not used on this provider, so we disable
 					// the upgrade attempt and move on.
@@ -235,7 +235,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 	if ctx.MajorVersionBump {
 		discoverSteps = append(discoverSteps,
-			step.F("Current Major Version", func() (string, error) {
+			step.F("Current Major Version", func(context.Context) (string, error) {
 				var err error
 				repo.currentVersion, err = latestRelease(ctx, repoOrg+"/"+repoName)
 				if err != nil {
@@ -245,7 +245,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			}))
 	}
 
-	ok = step.Run(step.Combined("Discovering Repository", discoverSteps...))
+	ok = step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
 	if !ok {
 		return ErrHandled
 	}
@@ -281,7 +281,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() && ctx.UpgradeProviderVersion {
-		ok = step.Run(upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod).
+		ok = step.Run(ctx, upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod).
 			AssignTo(&forkedProviderUpstreamCommit))
 		if !ok {
 			return ErrHandled
@@ -329,7 +329,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		}
 		return step.Combined("Update Plugin SDK",
 			setTFPluginSDKReplace(ctx, repo, &tfSDKTargetSHA),
-			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
+			step.Cmd("go", "mod", "tidy").In(repo.providerDir()),
 		)
 	}))
 
@@ -341,22 +341,21 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		// `upstream` in a usable state. Otherwise, we need to call `make
 		// upstream` to ensure that the module is valid (for `go get` and `go mod
 		// tidy`.
-		steps = append(steps, step.Cmd(exec.CommandContext(ctx, "make", "upstream")).In(&repo.root))
+		steps = append(steps, step.Cmd("make", "upstream").In(&repo.root))
 	}
 
 	if ctx.UpgradeBridgeVersion {
-		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion)).
+		steps = append(steps, step.Cmd("go", "get",
+			"github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion).
 			In(repo.providerDir()))
 
-		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "get", "github.com/hashicorp/terraform-plugin-framework")).
+		steps = append(steps, step.Cmd("go", "get",
+			"github.com/hashicorp/terraform-plugin-framework").
 			In(repo.providerDir()))
-		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "get", "github.com/hashicorp/terraform-plugin-mux")).
+		steps = append(steps, step.Cmd("go", "get",
+			"github.com/hashicorp/terraform-plugin-mux").
 			In(repo.providerDir()))
-		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "mod", "tidy")).
+		steps = append(steps, step.Cmd("go", "mod", "tidy").
 			In(repo.providerDir()))
 
 		// Now that we've upgraded the bridge, we want the other places in the repo to use the bridge's
@@ -368,22 +367,18 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 	if ctx.UpgradeSdkVersion {
 		steps = append(steps, step.Combined("Upgrade Pulumi SDK",
-			step.Cmd(exec.CommandContext(ctx,
-				"go", "get", "github.com/pulumi/pulumi/sdk/v3")).
+			step.Cmd("go", "get", "github.com/pulumi/pulumi/sdk/v3").
 				In(repo.providerDir()),
-			step.Cmd(exec.CommandContext(ctx,
-				"go", "get", "github.com/pulumi/pulumi/pkg/v3")).
+			step.Cmd("go", "get", "github.com/pulumi/pulumi/pkg/v3").
 				In(repo.providerDir())),
-			step.Cmd(exec.CommandContext(ctx,
-				"go", "get", "github.com/pulumi/pulumi/sdk/v3")).
+			step.Cmd("go", "get", "github.com/pulumi/pulumi/sdk/v3").
 				In(repo.examplesDir()),
-			step.Cmd(exec.CommandContext(ctx,
-				"go", "get", "github.com/pulumi/pulumi/pkg/v3")).
+			step.Cmd("go", "get", "github.com/pulumi/pulumi/pkg/v3").
 				In(repo.examplesDir()))
 	}
 	if ctx.UpgradePfVersion {
-		steps = append(steps, step.Cmd(exec.CommandContext(ctx,
-			"go", "get", "github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion)).
+		steps = append(steps, step.Cmd("go", "get",
+			"github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion).
 			In(repo.providerDir()))
 	}
 
@@ -415,20 +410,19 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 
 	artifacts := append(steps,
-		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.providerDir()),
-		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.examplesDir()),
-		step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(repo.sdkDir()),
+		step.Cmd("go", "mod", "tidy").In(repo.providerDir()),
+		step.Cmd("go", "mod", "tidy").In(repo.examplesDir()),
+		step.Cmd("go", "mod", "tidy").In(repo.sdkDir()),
 		step.Computed(func() step.Step {
 			if ctx.RemovePlugins {
-				return step.Cmd(exec.CommandContext(ctx,
-					"pulumi", "plugin", "rm", "--all", "--yes"))
+				return step.Cmd("pulumi", "plugin", "rm", "--all", "--yes")
 			}
 			return nil
 		}),
-		step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&repo.root),
-		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+		step.Cmd("make", "tfgen").In(&repo.root),
+		step.Cmd("git", "add", "--all").In(&repo.root),
 		GitCommit(ctx, "make tfgen").In(&repo.root),
-		step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&repo.root),
+		step.Cmd("make", "build_sdks").In(&repo.root),
 		step.Computed(func() step.Step {
 			if !ctx.MajorVersionBump {
 				return nil
@@ -449,15 +443,15 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				return nil
 			}
 			dir := filepath.Join(repo.root, "sdk")
-			return step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).
+			return step.Cmd("go", "mod", "tidy").
 				In(&dir)
 		}),
-		step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&repo.root),
+		step.Cmd("git", "add", "--all").In(&repo.root),
 		GitCommit(ctx, "make build_sdks").In(&repo.root),
 		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade),
 	)
 
-	ok = step.Run(step.Combined("Update Artifacts", artifacts...))
+	ok = step.Run(ctx, step.Combined("Update Artifacts", artifacts...))
 	if !ok {
 		return ErrHandled
 	}
