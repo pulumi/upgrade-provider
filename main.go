@@ -237,6 +237,9 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 	cmd.PersistentFlags().BoolVar(&context.CreateFailureIssue, "create-failure-issue", false,
 		`Create an issue in the target repository if the upgrade attempt fails in CI.`)
 
+	cmd.PersistentFlags().StringVar(&context.JavaVersion, "java-version", "",
+		"The version of pulumi-java-gen to target.")
+
 	return cmd
 }
 

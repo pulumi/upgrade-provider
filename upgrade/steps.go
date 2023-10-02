@@ -158,11 +158,46 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 	).Return(&expectedLocation)
 }
 
+var javaVersion *regexp.Regexp = regexp.MustCompile(`JAVA_GEN_VERSION := (v[0-9]+\.[0-9]+\.[0-9]+)`)
+
 func UpgradeProviderVersion(
 	ctx Context, goMod *GoMod, target *semver.Version,
 	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
 	steps := []step.Step{}
+	if ctx.JavaVersion != "" {
+		var didChange bool
+		steps = append(steps, step.Combined("Update Java Version",
+			step.F("Current Java Version", func(cx context.Context) (string, error) {
+				b, err := baseFileAt(cx, repo, "Makefile")
+				if err != nil {
+					return "", err
+				}
+				found := javaVersion.FindSubmatch(b)
+				if found == nil {
+					return "not found", nil
+				}
+				ctx.oldJavaVersion = string(found[1])
+				return ctx.oldJavaVersion, nil
+			}),
+			UpdateFileWithSignal("Update Makefile", "Makefile", &didChange,
+				func(b []byte) ([]byte, error) {
+					version := javaVersion.FindSubmatchIndex(b)
+					if version == nil {
+						return nil, fmt.Errorf("Java version set: could not find JAVA_GEN_VERSION")
+					}
+					var out bytes.Buffer
+					out.Write(b[:version[2]])
+					out.WriteString(ctx.JavaVersion)
+					out.Write(b[version[3]:])
+					return out.Bytes(), nil
+				}),
+			step.When(&didChange,
+				step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-java-gen"))),
+			step.When(&didChange,
+				step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-language-java"))),
+		))
+	}
 	if goMod.Kind.IsPatched() {
 		// If the provider is patched, we don't use the go module system at all. Instead
 		// we update the module referenced to the new tag.
@@ -639,6 +674,11 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 }
 
 func UpdateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
+	var b bool
+	return UpdateFileWithSignal(desc, path, &b, f)
+}
+
+func UpdateFileWithSignal(desc, path string, didChange *bool, f func([]byte) ([]byte, error)) step.Step {
 	return step.F(desc, func(context.Context) (string, error) {
 		stats, err := os.Stat(path)
 		if err != nil {
@@ -653,8 +693,10 @@ func UpdateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
 			return "", err
 		}
 		if reflect.DeepEqual(newBytes, bytes) {
+			*didChange = false
 			return "no change", nil
 		}
+		*didChange = true
 		return "", os.WriteFile(path, newBytes, stats.Mode().Perm())
 	})
 }
