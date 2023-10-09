@@ -192,6 +192,21 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	p := getPipeline(ctx)
 	done := make(chan struct{})
 	go func() {
+		ctx, envs := popEnvs(ctx)
+		for _, env := range envs {
+			env := env
+			err := env.Enter()
+			if err != nil {
+				p.errExit(err)
+			}
+			defer func() {
+				err := env.Exit()
+				if err != nil && p.failed.err == nil {
+					p.errExit(err)
+				}
+			}()
+		}
+
 		p.callstack = append(p.callstack, name)
 		p.setLabels()
 		ins := make([]reflect.Value, len(inputs)+1)
@@ -224,6 +239,10 @@ func (p *pipeline) handleError(outputs []any) {
 	if err == nil {
 		return
 	}
+	p.errExit(err.(error))
+}
+
+func (p *pipeline) errExit(err error) {
 	p.failed.err = err.(error)
 	close(p.failed.done)
 	runtime.Goexit()

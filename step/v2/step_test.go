@@ -11,7 +11,7 @@ import (
 )
 
 func TestCallTree(t *testing.T) {
-
+	t.Parallel()
 	tests := []struct {
 		stack    []string
 		expected string
@@ -49,6 +49,7 @@ func TestCallTree(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run("", func(t *testing.T) {
+			t.Parallel()
 			p := &pipeline{callstack: tt.stack}
 			assert.Equal(t, strings.TrimPrefix(tt.expected, "\n"), p.callTree())
 		})
@@ -56,6 +57,7 @@ func TestCallTree(t *testing.T) {
 }
 
 func TestPipeline(t *testing.T) {
+	t.Parallel()
 	var result int
 	err := Pipeline("test", func(ctx context.Context) {
 		one := Call01(ctx, "one", func(context.Context) int {
@@ -70,7 +72,9 @@ func TestPipeline(t *testing.T) {
 }
 
 func TestCmd(t *testing.T) {
+	t.Parallel()
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		var txt string
 		err := Pipeline("cmd", func(ctx context.Context) {
 			txt = Cmd(ctx, "echo", "hello, world")
@@ -80,6 +84,7 @@ func TestCmd(t *testing.T) {
 	})
 
 	t.Run("failure", func(t *testing.T) {
+		t.Parallel()
 		err := Pipeline("cmd", func(ctx context.Context) {
 			Cmd(ctx, "does-not-exist-so-this-should-fail")
 		})
@@ -88,6 +93,7 @@ func TestCmd(t *testing.T) {
 }
 
 func TestNestedError(t *testing.T) {
+	t.Parallel()
 	expectedErr := fmt.Errorf("an error")
 	err := Pipeline("test", func(ctx context.Context) {
 		Call00(ctx, "n1", func(ctx context.Context) {
@@ -99,4 +105,16 @@ func TestNestedError(t *testing.T) {
 		})
 	})
 	require.Equal(t, expectedErr, err)
+}
+
+func TestEnv(t *testing.T) {
+	var result string
+	err := Pipeline("test", func(ctx context.Context) {
+		result = Cmd(WithEnv(ctx, &EnvVar{
+			Key:   "ENV",
+			Value: "result",
+		}), "bash", "-c", "echo $ENV")
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "result\n", result)
 }
