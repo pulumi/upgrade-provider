@@ -11,7 +11,6 @@ import (
 
 func main() {
 	if err := step.Pipeline("simple", pipeline); err != nil {
-		fmt.Printf("err: %s\n", err.Error())
 		os.Exit(1)
 	}
 }
