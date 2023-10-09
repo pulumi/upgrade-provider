@@ -106,7 +106,7 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 	if getPipeline(ctx) != nil {
 		panic("Cannot call pipeline when already in a pipeline")
 	}
-	current := &pipeline{
+	p := &pipeline{
 		title: name,
 		spinner: spinner.New([]string{"|", "/", "-", "\\"},
 			time.Millisecond*250,
@@ -117,23 +117,26 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 			done chan struct{}
 		}{done: make(chan struct{})},
 	}
-	current.setLabels()
+	p.setLabels()
 	done := make(chan struct{})
 	go func() {
-		current.spinner.Start()
-		steps(withPipeline(ctx, current))
+		p.spinner.Start()
+		steps(withPipeline(ctx, p))
 		done <- struct{}{}
 	}()
 	select {
 	case <-done:
-	case <-current.failed.done:
+		p.spinner.FinalMSG = fmt.Sprintf("%s--- done ---\n", p.spinner.Prefix)
+	case <-p.failed.done:
+		p.spinner.FinalMSG = fmt.Sprintf("%s--- failed: %s ---\n",
+			p.spinner.Prefix, p.failed.err.Error())
 	}
-	current.spinner.Stop()
-	return current.failed.err
+	p.spinner.Stop()
+	return p.failed.err
 }
 
 func (p *pipeline) setLabels() {
-	prefix := "# " + p.title + "\n"
+	prefix := "--- " + p.title + " --- \n"
 	prefix += p.callTree()
 	opts := []string{"|", "/", "-", "\\"}
 	frame := p.currentFrame()
@@ -178,7 +181,11 @@ func (p *pipeline) callTree() string {
 		}
 		prefix := strings.Repeat(" ", indent)
 		if current == i {
-			prefix = prefix[:indent-3] + "-> "
+			if p.failed.err == nil {
+				prefix = prefix[:indent-3] + "-> "
+			} else {
+				prefix = prefix[:indent-2] + "X "
+			}
 		}
 		tree.WriteString(prefix)
 		tree.WriteString(v)
@@ -220,15 +227,16 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		for i, v := range outs {
 			outputs[i] = v.Interface()
 		}
-		p.callstack = append(p.callstack, "")
-		p.setLabels()
-
 		done <- struct{}{}
 	}()
 	select {
 	case <-done:
+		p.callstack = append(p.callstack, "")
 	case <-p.failed.done:
 	}
+
+	p.setLabels()
+
 	if p.failed.err != nil {
 		runtime.Goexit()
 	}
