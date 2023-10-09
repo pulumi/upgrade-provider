@@ -8,95 +8,128 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
-	"github.com/pulumi/pulumi/pkg/v3/resource/stack"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
-// Since pipelines write to stdout, there can only be one executing at once.
-var current *pipeline
-
 type pipeline struct {
-	ctx       context.Context
 	title     string
 	callstack []string
-	failed    error
-	spinner   *spinner.Spinner
+	failed    struct {
+		err  error
+		done chan struct{}
+	}
+	spinner *spinner.Spinner
 }
 
-func Call00(name string, f func(context.Context) error) {
-	Call00E(name, func(ctx context.Context) error {
+func Call00(ctx context.Context, name string, f func(context.Context)) {
+	Call00E(ctx, name, func(ctx context.Context) error {
 		f(ctx)
 		return nil
 	})
 }
 
-func Call00E(name string, f func(context.Context) error) {
+func Call00E(ctx context.Context, name string, f func(context.Context) error) {
 	inputs := []any{}
-	outputs := make([]any, 0)
-	run(name, f, inputs, outputs)
+	outputs := make([]any, 1)
+	run(ctx, name, f, inputs, outputs)
+	getPipeline(ctx).handleError(outputs)
 }
 
-func Call10[T any](name string, f func(context.Context, T), i1 T) {
-	Call10E(name, func(ctx context.Context, i1 T) error {
+func Call10[T any](ctx context.Context, name string, f func(context.Context, T), i1 T) {
+	Call10E(ctx, name, func(ctx context.Context, i1 T) error {
 		f(ctx, i1)
 		return nil
 	}, i1)
 }
 
-func Call10E[T any](name string, f func(context.Context, T) error, i1 T) {
+func Call10E[T any](ctx context.Context, name string, f func(context.Context, T) error, i1 T) {
 	inputs := []any{i1}
-	outputs := make([]any, 0)
-	run(name, f, inputs, outputs)
+	outputs := make([]any, 1)
+	run(ctx, name, f, inputs, outputs)
+	getPipeline(ctx).handleError(outputs)
 	return
 }
 
-func Call01[R any](name string, f func(context.Context) R) R {
-	return Call01E(name, func(ctx context.Context) (R, error) {
+func Call01[R any](ctx context.Context, name string, f func(context.Context) R) R {
+	return Call01E(ctx, name, func(ctx context.Context) (R, error) {
 		return f(ctx), nil
 	})
 }
 
-func Call01E[R any](name string, f func(context.Context) (R, error)) R {
+func Call01E[R any](ctx context.Context, name string, f func(context.Context) (R, error)) R {
 	inputs := []any{}
-	outputs := make([]any, 1)
-	run(name, f, inputs, outputs)
+	outputs := make([]any, 2)
+	run(ctx, name, f, inputs, outputs)
+	getPipeline(ctx).handleError(outputs)
 	return outputs[0].(R)
 }
 
-func Call11[T, R any](name string, f func(context.Context, T) R, i1 T) R {
-	return Call11E(name, func(ctx context.Context, i1 T) (R, error) {
+func Call11[T, R any](ctx context.Context, name string, f func(context.Context, T) R, i1 T) R {
+	return Call11E(ctx, name, func(ctx context.Context, i1 T) (R, error) {
 		return f(ctx, i1), nil
 	}, i1)
 }
 
-func Call11E[T, R any](name string, f func(context.Context, T) (R, error), i1 T) R {
+func Call11E[T, R any](ctx context.Context, name string, f func(context.Context, T) (R, error), i1 T) R {
 	inputs := []any{i1}
-	outputs := make([]any, 1)
-	run(name, f, inputs, outputs)
+	outputs := make([]any, 2)
+	run(ctx, name, f, inputs, outputs)
+	getPipeline(ctx).handleError(outputs)
 	return outputs[0].(R)
 }
 
-func Pipeline(ctx context.Context, name string, steps func(context.Context)) error {
-	if current != nil {
+type pipelineKey struct{}
+
+func withPipeline(ctx context.Context, p *pipeline) context.Context {
+	return context.WithValue(ctx, pipelineKey{}, p)
+}
+
+func getPipeline(ctx context.Context) *pipeline {
+	v := ctx.Value(pipelineKey{})
+	if v == nil {
+		return nil
+	}
+	return v.(*pipeline)
+}
+
+func Pipeline(name string, steps func(context.Context)) error {
+	return PipelineCtx(context.Background(), name, steps)
+}
+
+func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) error {
+	if getPipeline(ctx) != nil {
 		panic("Cannot call pipeline when already in a pipeline")
 	}
-	current = &pipeline{
-		ctx: ctx, title: name,
+	current := &pipeline{
+		title: name,
 		spinner: spinner.New([]string{"|", "/", "-", "\\"},
 			time.Millisecond*250,
 			spinner.WithHiddenCursor(true),
 		),
+		failed: struct {
+			err  error
+			done chan struct{}
+		}{done: make(chan struct{})},
 	}
 	current.setLabels()
 	done := make(chan struct{})
 	go func() {
-		steps(current.ctx)
+		current.spinner.Start()
+		steps(withPipeline(ctx, current))
 		done <- struct{}{}
 	}()
-	<-done
-	return current.failed
+	select {
+	case <-done:
+	case <-current.failed.done:
+	}
+	current.spinner.Stop()
+	return current.failed.err
 }
 
 func (p *pipeline) setLabels() {
@@ -109,7 +142,7 @@ func (p *pipeline) setLabels() {
 		name = p.callstack[frame]
 	}
 	for i, o := range opts {
-		opts[i] = fmt.Sprintf("%s [%s]", o, p.currentFrame())
+		opts[i] = fmt.Sprintf("%s [%s]", o, name)
 	}
 	p.spinner.UpdateCharSet(opts)
 	p.spinner.Lock()
@@ -134,19 +167,62 @@ func (p *pipeline) currentFrame() int {
 
 func (p *pipeline) callTree() string {
 	current := p.currentFrame()
-	indent := 4
+	indent := 2
 	var tree bytes.Buffer
 	for i, v := range p.callstack {
 		if v == "" {
 			indent -= 2
 			continue
+		} else {
+			indent += 2
 		}
-
+		prefix := strings.Repeat(" ", indent)
+		if current == i {
+			prefix = prefix[:indent-3] + "-> "
+		}
+		tree.WriteString(prefix)
+		tree.WriteString(v)
+		tree.WriteRune('\n')
 	}
 	return tree.String()
 }
 
 // Run a function against arguments and set outputs.
-func run(name string, f any, inputs, outputs []any) {
+func run(ctx context.Context, name string, f any, inputs, outputs []any) {
+	p := getPipeline(ctx)
+	done := make(chan struct{})
+	go func() {
+		p.callstack = append(p.callstack, name)
+		ins := make([]reflect.Value, len(inputs)+1)
+		ins[0] = reflect.ValueOf(ctx)
+		for i, v := range inputs {
+			ins[i+1] = reflect.ValueOf(v)
+		}
+		outs := reflect.ValueOf(f).Call(ins)
+		contract.Assertf(len(outs) == len(outputs),
+			"internal error: This function should be typed to return the correct number of results")
+		for i, v := range outs {
+			outputs[i] = v.Interface()
+		}
+		p.callstack = append(p.callstack, "")
 
+		done <- struct{}{}
+	}()
+	select {
+	case <-done:
+	case <-p.failed.done:
+	}
+	if p.failed.err != nil {
+		runtime.Goexit()
+	}
+}
+
+func (p *pipeline) handleError(outputs []any) {
+	err := outputs[len(outputs)-1]
+	if err == nil {
+		return
+	}
+	p.failed.err = err.(error)
+	close(p.failed.done)
+	runtime.Goexit()
 }
