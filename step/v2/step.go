@@ -20,11 +20,8 @@ import (
 type pipeline struct {
 	title     string
 	callstack []string
-	failed    struct {
-		err  error
-		done chan struct{}
-	}
-	spinner *spinner.Spinner
+	failed    error
+	spinner   *spinner.Spinner
 }
 
 func Call00(ctx context.Context, name string, f func(context.Context)) {
@@ -38,7 +35,6 @@ func Call00E(ctx context.Context, name string, f func(context.Context) error) {
 	inputs := []any{}
 	outputs := make([]any, 1)
 	run(ctx, name, f, inputs, outputs)
-	getPipeline(ctx).handleError(outputs)
 }
 
 func Call10[T any](ctx context.Context, name string, f func(context.Context, T), i1 T) {
@@ -52,7 +48,6 @@ func Call10E[T any](ctx context.Context, name string, f func(context.Context, T)
 	inputs := []any{i1}
 	outputs := make([]any, 1)
 	run(ctx, name, f, inputs, outputs)
-	getPipeline(ctx).handleError(outputs)
 	return
 }
 
@@ -66,7 +61,6 @@ func Call01E[R any](ctx context.Context, name string, f func(context.Context) (R
 	inputs := []any{}
 	outputs := make([]any, 2)
 	run(ctx, name, f, inputs, outputs)
-	getPipeline(ctx).handleError(outputs)
 	return outputs[0].(R)
 }
 
@@ -80,7 +74,6 @@ func Call11E[T, R any](ctx context.Context, name string, f func(context.Context,
 	inputs := []any{i1}
 	outputs := make([]any, 2)
 	run(ctx, name, f, inputs, outputs)
-	getPipeline(ctx).handleError(outputs)
 	return outputs[0].(R)
 }
 
@@ -112,27 +105,24 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 			time.Millisecond*250,
 			spinner.WithHiddenCursor(true),
 		),
-		failed: struct {
-			err  error
-			done chan struct{}
-		}{done: make(chan struct{})},
 	}
 	p.setLabels()
 	done := make(chan struct{})
 	go func() {
+		defer func() { close(done) }()
 		p.spinner.Start()
 		steps(withPipeline(ctx, p))
-		done <- struct{}{}
 	}()
-	select {
-	case <-done:
+	<-done
+	p.setLabels()
+	if p.failed == nil {
 		p.spinner.FinalMSG = fmt.Sprintf("%s--- done ---\n", p.spinner.Prefix)
-	case <-p.failed.done:
+	} else {
 		p.spinner.FinalMSG = fmt.Sprintf("%s--- failed: %s ---\n",
-			p.spinner.Prefix, p.failed.err.Error())
+			p.spinner.Prefix, p.failed.Error())
 	}
 	p.spinner.Stop()
-	return p.failed.err
+	return p.failed
 }
 
 func (p *pipeline) setLabels() {
@@ -179,9 +169,9 @@ func (p *pipeline) callTree() string {
 		} else {
 			indent += 2
 		}
-		prefix := strings.Repeat(" ", indent)
+		prefix := strings.Repeat(" ", indent-2) + "- "
 		if current == i {
-			if p.failed.err == nil {
+			if p.failed == nil {
 				prefix = prefix[:indent-3] + "-> "
 			} else {
 				prefix = prefix[:indent-2] + "X "
@@ -199,6 +189,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	p := getPipeline(ctx)
 	done := make(chan struct{})
 	go func() {
+		defer func() { close(done) }()
 		ctx, envs := popEnvs(ctx)
 		for _, env := range envs {
 			env := env
@@ -208,7 +199,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 			}
 			defer func() {
 				err := env.Exit()
-				if err != nil && p.failed.err == nil {
+				if err != nil && p.failed == nil {
 					p.errExit(err)
 				}
 			}()
@@ -227,17 +218,16 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		for i, v := range outs {
 			outputs[i] = v.Interface()
 		}
-		done <- struct{}{}
-	}()
-	select {
-	case <-done:
-		p.callstack = append(p.callstack, "")
-	case <-p.failed.done:
-	}
+		p.handleError(outputs)
 
+	}()
+	<-done
+	if p.failed == nil {
+		p.callstack = append(p.callstack, "")
+	}
 	p.setLabels()
 
-	if p.failed.err != nil {
+	if p.failed != nil {
 		runtime.Goexit()
 	}
 }
@@ -251,7 +241,6 @@ func (p *pipeline) handleError(outputs []any) {
 }
 
 func (p *pipeline) errExit(err error) {
-	p.failed.err = err.(error)
-	close(p.failed.done)
+	p.failed = err.(error)
 	runtime.Goexit()
 }
