@@ -193,6 +193,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	done := make(chan struct{})
 	go func() {
 		p.callstack = append(p.callstack, name)
+		p.setLabels()
 		ins := make([]reflect.Value, len(inputs)+1)
 		ins[0] = reflect.ValueOf(ctx)
 		for i, v := range inputs {
@@ -205,6 +206,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 			outputs[i] = v.Interface()
 		}
 		p.callstack = append(p.callstack, "")
+		p.setLabels()
 
 		done <- struct{}{}
 	}()
