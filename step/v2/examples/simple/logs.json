@@ -1,0 +1,56 @@
+{
+  "steps": [
+    {
+      "name": "input.txt",
+      "inputs": [
+        "input.txt"
+      ],
+      "outputs": [
+        "foo secret bar\n",
+        null
+      ],
+      "impure": true
+    },
+    {
+      "name": "sleep",
+      "inputs": [
+        3
+      ],
+      "outputs": [
+        null
+      ],
+      "impure": false
+    },
+    {
+      "name": "hide-secret",
+      "inputs": [
+        "foo secret bar\n"
+      ],
+      "outputs": [
+        "foo [SECRET] bar\n",
+        null
+      ],
+      "impure": false
+    },
+    {
+      "name": "sleep",
+      "inputs": [
+        4
+      ],
+      "outputs": [
+        null
+      ],
+      "impure": false
+    },
+    {
+      "name": "write",
+      "inputs": [
+        "foo [SECRET] bar\n"
+      ],
+      "outputs": [
+        null
+      ],
+      "impure": true
+    }
+  ]
+}

@@ -1,11 +1,14 @@
 package step
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 )
 
-type Replay struct{ steps []Step }
+type Replay struct {
+	steps []Step
+}
 
 type Record struct {
 	steps        []*Step
@@ -16,6 +19,7 @@ type Step struct {
 	Name    string          `json:"name"`
 	Inputs  json.RawMessage `json:"inputs"`
 	Outputs json.RawMessage `json:"outputs"`
+	Impure  bool            `json:"impure,omitnil"`
 }
 
 type ReturnImmediatly struct{ out []any }
@@ -60,4 +64,13 @@ func (r *Record) Marshal() []byte {
 		panic(err)
 	}
 	return m
+}
+
+type recordKey struct{}
+
+// Mark the calling context as an impure function.
+func MarkImpure(ctx context.Context) {
+	r := ctx.Value(recordKey{}).(*Record)
+	current := r.partialSteps[len(r.partialSteps)-1]
+	current.Impure = true
 }
