@@ -55,6 +55,7 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 	if file := os.Getenv("STEP_RECORD"); file != "" {
 		record := new(Record)
 		ctx = WithEnv(ctx, record)
+		ctx = context.WithValue(ctx, recordKey{}, record)
 		defer func() {
 			wErr := os.WriteFile(file, record.Marshal(), 0600)
 			if err == nil {
