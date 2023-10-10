@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pulumi/upgrade-provider/step/v2"
 )
@@ -28,9 +29,15 @@ func hide(ctx context.Context, input string) string {
 
 func writeFile(ctx context.Context, content string) error {
 	step.Call10(ctx, "sleep", sleep, 4)
-	return os.WriteFile("output.txt", []byte(content), 0600)
+	err := os.WriteFile("output.txt", []byte(content), 0600)
+	step.SetLabel(ctx, fmt.Sprintf("%d bytes written", len(content)))
+	return err
 }
 
 func sleep(ctx context.Context, seconds int) {
-	step.Cmd(ctx, "sleep", fmt.Sprintf("%d", seconds))
+	for i := seconds; i > 0; i-- {
+		step.SetLabel(ctx, fmt.Sprintf("%d seconds remaining", i))
+		time.Sleep(time.Second * 1)
+	}
+	step.SetLabel(ctx, "done")
 }

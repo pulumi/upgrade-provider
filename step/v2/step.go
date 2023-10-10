@@ -24,60 +24,8 @@ type pipeline struct {
 	callstack []string
 	failed    error
 	spinner   *spinner.Spinner
+	labels    []string
 }
-
-// func Call00(ctx context.Context, name string, f func(context.Context)) {
-// 	Call00E(ctx, name, func(ctx context.Context) error {
-// 		f(ctx)
-// 		return nil
-// 	})
-// }
-
-// func Call00E(ctx context.Context, name string, f func(context.Context) error) {
-// 	inputs := []any{}
-// 	outputs := make([]any, 1)
-// 	run(ctx, name, f, inputs, outputs)
-// }
-
-// func Call10[T any](ctx context.Context, name string, f func(context.Context, T), i1 T) {
-// 	Call10E(ctx, name, func(ctx context.Context, i1 T) error {
-// 		f(ctx, i1)
-// 		return nil
-// 	}, i1)
-// }
-
-// func Call10E[T any](ctx context.Context, name string, f func(context.Context, T) error, i1 T) {
-// 	inputs := []any{i1}
-// 	outputs := make([]any, 1)
-// 	run(ctx, name, f, inputs, outputs)
-// 	return
-// }
-
-// func Call01[R any](ctx context.Context, name string, f func(context.Context) R) R {
-// 	return Call01E(ctx, name, func(ctx context.Context) (R, error) {
-// 		return f(ctx), nil
-// 	})
-// }
-
-// func Call01E[R any](ctx context.Context, name string, f func(context.Context) (R, error)) R {
-// 	inputs := []any{}
-// 	outputs := make([]any, 2)
-// 	run(ctx, name, f, inputs, outputs)
-// 	return outputs[0].(R)
-// }
-
-// func Call11[T, R any](ctx context.Context, name string, f func(context.Context, T) R, i1 T) R {
-// 	return Call11E(ctx, name, func(ctx context.Context, i1 T) (R, error) {
-// 		return f(ctx, i1), nil
-// 	}, i1)
-// }
-
-// func Call11E[T, R any](ctx context.Context, name string, f func(context.Context, T) (R, error), i1 T) R {
-// 	inputs := []any{i1}
-// 	outputs := make([]any, 2)
-// 	run(ctx, name, f, inputs, outputs)
-// 	return outputs[0].(R)
-// }
 
 type pipelineKey struct{}
 
@@ -108,7 +56,7 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 			spinner.WithHiddenCursor(true),
 		),
 	}
-	p.setLabels()
+	p.setDisplay()
 	done := make(chan struct{})
 	go func() {
 		defer func() { close(done) }()
@@ -116,7 +64,7 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 		steps(withPipeline(ctx, p))
 	}()
 	<-done
-	p.setLabels()
+	p.setDisplay()
 	if p.failed == nil {
 		p.spinner.FinalMSG = fmt.Sprintf("%s--- done ---\n", p.spinner.Prefix)
 	} else {
@@ -127,7 +75,25 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 	return p.failed
 }
 
-func (p *pipeline) setLabels() {
+func mustGetPipeline(ctx context.Context, name string) *pipeline {
+	p := getPipeline(ctx)
+	if p == nil {
+		panic(`Must call "` + name + `" on a context from a step function`)
+	}
+	return p
+}
+
+func SetLabel(ctx context.Context, label string) {
+	p := mustGetPipeline(ctx, "SetLabel")
+	current := p.currentFrame()
+	for len(p.labels) <= current {
+		p.labels = append(p.labels, "")
+	}
+	p.labels[current] = label
+	p.setDisplay()
+}
+
+func (p *pipeline) setDisplay() {
 	prefix := "--- " + p.title + " --- \n"
 	prefix += p.callTree()
 	opts := []string{"|", "/", "-", "\\"}
@@ -181,6 +147,10 @@ func (p *pipeline) callTree() string {
 		}
 		tree.WriteString(prefix)
 		tree.WriteString(v)
+		if i < len(p.labels) && p.labels[i] != "" {
+			tree.WriteString(": ")
+			tree.WriteString(p.labels[i])
+		}
 		tree.WriteRune('\n')
 	}
 	return tree.String()
@@ -188,7 +158,7 @@ func (p *pipeline) callTree() string {
 
 // Run a function against arguments and set outputs.
 func run(ctx context.Context, name string, f any, inputs, outputs []any) {
-	p := getPipeline(ctx)
+	p := mustGetPipeline(ctx, "Call("+name+")")
 	done := make(chan struct{})
 	go func() {
 		defer func() { close(done) }()
@@ -208,7 +178,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		}
 
 		p.callstack = append(p.callstack, name)
-		p.setLabels()
+		p.setDisplay()
 		ins := make([]reflect.Value, len(inputs)+1)
 		ins[0] = reflect.ValueOf(ctx)
 		for i, v := range inputs {
@@ -227,7 +197,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	if p.failed == nil {
 		p.callstack = append(p.callstack, "")
 	}
-	p.setLabels()
+	p.setDisplay()
 
 	if p.failed != nil {
 		runtime.Goexit()
