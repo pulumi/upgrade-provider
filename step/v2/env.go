@@ -8,10 +8,18 @@ import (
 
 // A contextual environment that will exist for the scope of the call.
 type Env interface {
-	Enter() error
-	Exit() error
-	Display() string
+	fmt.Stringer
+	Enter(StepInfo) error
+	Exit([]any) error
 }
+
+type StepInfo struct {
+	name   string
+	inputs []any
+}
+
+func (s StepInfo) Name() string  { return s.name }
+func (s StepInfo) Inputs() []any { return s.inputs }
 
 type envKey struct{}
 
@@ -27,29 +35,31 @@ func getEnvs(ctx context.Context) []Env {
 	return nil
 }
 
-func popEnvs(ctx context.Context) (context.Context, []Env) {
-	envs := getEnvs(ctx)
-	return context.WithValue(ctx, envKey{}, nil), envs
-}
-
 type EnvVar struct {
 	Key     string
 	Value   string
 	restore string
+	stack   int
 }
 
-func (e *EnvVar) Enter() error {
-	e.restore = os.Getenv(e.Key)
-	return os.Setenv(e.Key, e.Value)
+func (e *EnvVar) Enter(StepInfo) error {
+	e.stack++
+	if e.stack == 1 {
+		e.restore = os.Getenv(e.Key)
+		return os.Setenv(e.Key, e.Value)
+	}
+	return nil
 }
 
-func (e *EnvVar) Exit() error {
+func (e *EnvVar) Exit([]any) error {
+	e.stack--
+	if e.stack > 0 {
+		return nil
+	}
 	if e.restore == "" {
 		return os.Unsetenv(e.Key)
 	}
 	return os.Setenv(e.Key, e.restore)
 }
 
-func (e *EnvVar) Display() string {
-	return fmt.Sprintf("%s=%s", e.Key, e.Value)
-}
+func (e *EnvVar) String() string { return fmt.Sprintf("%s=%s", e.Key, e.Value) }

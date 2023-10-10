@@ -19,9 +19,9 @@ func TestCallTree(t *testing.T) {
 		{
 			stack: []string{"foo", "bar", "fizz", "", "", "bar2"},
 			expected: `
-    foo
-      bar
-        fizz
+  - foo
+    - bar
+      - fizz
    -> bar2
 `,
 		},
@@ -32,7 +32,7 @@ func TestCallTree(t *testing.T) {
 		{
 			stack: []string{"foo", "", "bar"},
 			expected: `
-    foo
+  - foo
  -> bar
 `,
 		},
@@ -40,8 +40,8 @@ func TestCallTree(t *testing.T) {
 			stack: []string{"foo", "bar", "", "bar2", ""},
 			expected: `
  -> foo
-      bar
-      bar2
+    - bar
+    - bar2
 `,
 		},
 	}

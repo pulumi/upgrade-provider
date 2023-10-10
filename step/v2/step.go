@@ -7,7 +7,9 @@ package step
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -45,10 +47,22 @@ func Pipeline(name string, steps func(context.Context)) error {
 	return PipelineCtx(context.Background(), name, steps)
 }
 
-func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) error {
+func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) (err error) {
 	if getPipeline(ctx) != nil {
 		panic("Cannot call pipeline when already in a pipeline")
 	}
+
+	if file := os.Getenv("STEP_RECORD"); file != "" {
+		record := new(Record)
+		ctx = WithEnv(ctx, record)
+		defer func() {
+			wErr := os.WriteFile(file, record.Marshal(), 0600)
+			if err == nil {
+				err = wErr
+			}
+		}()
+	}
+
 	p := &pipeline{
 		title: name,
 		spinner: spinner.New([]string{"|", "/", "-", "\\"},
@@ -162,15 +176,23 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	done := make(chan struct{})
 	go func() {
 		defer func() { close(done) }()
-		ctx, envs := popEnvs(ctx)
+		envs := getEnvs(ctx)
+		retImmediatly := new(ReturnImmediatly)
 		for _, env := range envs {
 			env := env
-			err := env.Enter()
-			if err != nil {
+			err := env.Enter(StepInfo{
+				name:   name,
+				inputs: inputs,
+			})
+			if errors.As(err, retImmediatly) {
+				if retImmediatly != nil {
+					p.errExit(fmt.Errorf("multiple immediate returns"))
+				}
+			} else if err != nil {
 				p.errExit(err)
 			}
 			defer func() {
-				err := env.Exit()
+				err := env.Exit(outputs)
 				if err != nil && p.failed == nil {
 					p.errExit(err)
 				}
@@ -184,12 +206,20 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		for i, v := range inputs {
 			ins[i+1] = reflect.ValueOf(v)
 		}
-		outs := reflect.ValueOf(f).Call(ins)
-		contract.Assertf(len(outs) == len(outputs),
-			"internal error: This function should be typed to return the correct number of results")
-		for i, v := range outs {
-			outputs[i] = v.Interface()
+		if retImmediatly.out == nil {
+			outs := reflect.ValueOf(f).Call(ins)
+			contract.Assertf(len(outs) == len(outputs),
+				"internal error: This function should be typed to return the correct number of results")
+			for i, v := range outs {
+				outputs[i] = v.Interface()
+			}
+		} else {
+			// This call is mocked, so just set the output
+			for i, v := range retImmediatly.out {
+				outputs[i] = v
+			}
 		}
+
 		p.handleError(outputs)
 
 	}()
