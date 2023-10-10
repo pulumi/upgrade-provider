@@ -17,6 +17,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
+//go:generate go run ./generate/calls.go
+
 type pipeline struct {
 	title     string
 	callstack []string
@@ -24,58 +26,58 @@ type pipeline struct {
 	spinner   *spinner.Spinner
 }
 
-func Call00(ctx context.Context, name string, f func(context.Context)) {
-	Call00E(ctx, name, func(ctx context.Context) error {
-		f(ctx)
-		return nil
-	})
-}
+// func Call00(ctx context.Context, name string, f func(context.Context)) {
+// 	Call00E(ctx, name, func(ctx context.Context) error {
+// 		f(ctx)
+// 		return nil
+// 	})
+// }
 
-func Call00E(ctx context.Context, name string, f func(context.Context) error) {
-	inputs := []any{}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-}
+// func Call00E(ctx context.Context, name string, f func(context.Context) error) {
+// 	inputs := []any{}
+// 	outputs := make([]any, 1)
+// 	run(ctx, name, f, inputs, outputs)
+// }
 
-func Call10[T any](ctx context.Context, name string, f func(context.Context, T), i1 T) {
-	Call10E(ctx, name, func(ctx context.Context, i1 T) error {
-		f(ctx, i1)
-		return nil
-	}, i1)
-}
+// func Call10[T any](ctx context.Context, name string, f func(context.Context, T), i1 T) {
+// 	Call10E(ctx, name, func(ctx context.Context, i1 T) error {
+// 		f(ctx, i1)
+// 		return nil
+// 	}, i1)
+// }
 
-func Call10E[T any](ctx context.Context, name string, f func(context.Context, T) error, i1 T) {
-	inputs := []any{i1}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-	return
-}
+// func Call10E[T any](ctx context.Context, name string, f func(context.Context, T) error, i1 T) {
+// 	inputs := []any{i1}
+// 	outputs := make([]any, 1)
+// 	run(ctx, name, f, inputs, outputs)
+// 	return
+// }
 
-func Call01[R any](ctx context.Context, name string, f func(context.Context) R) R {
-	return Call01E(ctx, name, func(ctx context.Context) (R, error) {
-		return f(ctx), nil
-	})
-}
+// func Call01[R any](ctx context.Context, name string, f func(context.Context) R) R {
+// 	return Call01E(ctx, name, func(ctx context.Context) (R, error) {
+// 		return f(ctx), nil
+// 	})
+// }
 
-func Call01E[R any](ctx context.Context, name string, f func(context.Context) (R, error)) R {
-	inputs := []any{}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(R)
-}
+// func Call01E[R any](ctx context.Context, name string, f func(context.Context) (R, error)) R {
+// 	inputs := []any{}
+// 	outputs := make([]any, 2)
+// 	run(ctx, name, f, inputs, outputs)
+// 	return outputs[0].(R)
+// }
 
-func Call11[T, R any](ctx context.Context, name string, f func(context.Context, T) R, i1 T) R {
-	return Call11E(ctx, name, func(ctx context.Context, i1 T) (R, error) {
-		return f(ctx, i1), nil
-	}, i1)
-}
+// func Call11[T, R any](ctx context.Context, name string, f func(context.Context, T) R, i1 T) R {
+// 	return Call11E(ctx, name, func(ctx context.Context, i1 T) (R, error) {
+// 		return f(ctx, i1), nil
+// 	}, i1)
+// }
 
-func Call11E[T, R any](ctx context.Context, name string, f func(context.Context, T) (R, error), i1 T) R {
-	inputs := []any{i1}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(R)
-}
+// func Call11E[T, R any](ctx context.Context, name string, f func(context.Context, T) (R, error), i1 T) R {
+// 	inputs := []any{i1}
+// 	outputs := make([]any, 2)
+// 	run(ctx, name, f, inputs, outputs)
+// 	return outputs[0].(R)
+// }
 
 type pipelineKey struct{}
 
@@ -241,6 +243,6 @@ func (p *pipeline) handleError(outputs []any) {
 }
 
 func (p *pipeline) errExit(err error) {
-	p.failed = err.(error)
+	p.failed = err
 	runtime.Goexit()
 }
