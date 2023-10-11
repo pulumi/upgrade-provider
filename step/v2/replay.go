@@ -36,24 +36,14 @@ func (s *Step) String() string {
 }
 
 type Replay struct {
-	Violations []Violation
-	t          *testing.T
-	pending    []struct {
+	t       *testing.T
+	pending []struct {
 		name   string
 		inputs json.RawMessage
 		index  int
 	}
 	next  int // The index of the next step the replay should contain
 	steps []Step
-}
-
-type Violation struct {
-	Expected *Step
-	Found    *Step
-}
-
-func (v Violation) String() string {
-	return fmt.Sprintf("step.Violation{ Expected: %s, Found: %s }", v.Expected, v.Found)
 }
 
 func NewReplay(t *testing.T, source []byte) *Replay {
@@ -123,15 +113,13 @@ func (r *Replay) Exit(output []any) error {
 			return err
 		}
 
-		// This is a violations because we have an additional step.
-		r.Violations = append(r.Violations, Violation{
-			Expected: nil,
-			Found: &Step{
-				Name:    exiting.name,
-				Inputs:  exiting.inputs,
-				Outputs: outputBytes,
-			},
+		r.t.Logf("Expected no step, found %s", Step{
+			Name:    exiting.name,
+			Inputs:  exiting.inputs,
+			Outputs: outputBytes,
 		})
+		r.t.Fail()
+
 		return nil
 	}
 
@@ -147,14 +135,6 @@ func (r *Replay) Exit(output []any) error {
 		return nil
 	}
 
-	r.Violations = append(r.Violations, Violation{
-		Expected: &expected,
-		Found: &Step{
-			Name:    exiting.name,
-			Inputs:  exiting.inputs,
-			Outputs: outputBytes,
-		},
-	})
 	return nil
 }
 

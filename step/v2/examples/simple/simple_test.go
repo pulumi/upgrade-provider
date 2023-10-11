@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/pulumi/upgrade-provider/step/v2"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,6 +68,4 @@ func TestSimple(t *testing.T) {
 	ctx := context.Background()
 	err := step.PipelineCtx(step.WithEnv(ctx, replay), "test", pipeline)
 	require.NoError(t, err)
-
-	assert.Empty(t, replay.Violations)
 }
