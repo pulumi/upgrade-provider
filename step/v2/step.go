@@ -207,7 +207,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		for i, v := range inputs {
 			ins[i+1] = reflect.ValueOf(v)
 		}
-		if retImmediatly.out == nil {
+		if retImmediatly.Out == nil {
 			outs := reflect.ValueOf(f).Call(ins)
 			contract.Assertf(len(outs) == len(outputs),
 				"internal error: This function should be typed to return the correct number of results")
@@ -216,13 +216,12 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 			}
 		} else {
 			// This call is mocked, so just set the output
-			for i, v := range retImmediatly.out {
+			for i, v := range retImmediatly.Out {
 				outputs[i] = v
 			}
 		}
 
 		p.handleError(outputs)
-
 	}()
 	<-done
 	if p.failed == nil {
