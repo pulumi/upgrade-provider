@@ -71,7 +71,7 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 			spinner.WithHiddenCursor(true),
 		),
 	}
-	p.setDisplay()
+	p.setDisplay(getEnvs(ctx))
 	done := make(chan struct{})
 	go func() {
 		defer func() { close(done) }()
@@ -79,7 +79,7 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 		steps(withPipeline(ctx, p))
 	}()
 	<-done
-	p.setDisplay()
+	p.setDisplay(getEnvs(ctx))
 	if p.failed == nil {
 		p.spinner.FinalMSG = fmt.Sprintf("%s--- done ---\n", p.spinner.Prefix)
 	} else {
@@ -105,10 +105,10 @@ func SetLabel(ctx context.Context, label string) {
 		p.labels = append(p.labels, "")
 	}
 	p.labels[current] = label
-	p.setDisplay()
+	p.setDisplay(getEnvs(ctx))
 }
 
-func (p *pipeline) setDisplay() {
+func (p *pipeline) setDisplay(envs []Env) {
 	prefix := "--- " + p.title + " --- \n"
 	prefix += p.callTree()
 	opts := []string{"|", "/", "-", "\\"}
@@ -117,8 +117,12 @@ func (p *pipeline) setDisplay() {
 	if frame >= 0 {
 		name = p.callstack[frame]
 	}
+	var envDisplay string
+	for _, v := range envs {
+		envDisplay += "\n" + v.String()
+	}
 	for i, o := range opts {
-		opts[i] = fmt.Sprintf("%s [%s]", o, name)
+		opts[i] = fmt.Sprintf("%s [%s]%s", o, name, envDisplay)
 	}
 	p.spinner.UpdateCharSet(opts)
 	p.spinner.Lock()
@@ -199,7 +203,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		}
 
 		p.callstack = append(p.callstack, name)
-		p.setDisplay()
+		p.setDisplay(envs)
 		ins := make([]reflect.Value, len(inputs)+1)
 		ins[0] = reflect.ValueOf(ctx)
 		for i, v := range inputs {
@@ -225,7 +229,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	if p.failed == nil {
 		p.callstack = append(p.callstack, "")
 	}
-	p.setDisplay()
+	p.setDisplay(getEnvs(ctx))
 
 	if p.failed != nil {
 		runtime.Goexit()
