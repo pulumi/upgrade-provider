@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"runtime"
@@ -71,6 +72,20 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 			spinner.WithHiddenCursor(true),
 		),
 	}
+
+	// If we are initially silent, don't bother to create and start a spinner
+	var silent bool
+	for _, env := range getEnvs(ctx) {
+		_, silent = env.(*Silent)
+		if silent {
+			break
+		}
+	}
+
+	if silent {
+		p.spinner.Writer = io.Discard
+	}
+
 	p.setDisplay(getEnvs(ctx))
 	done := make(chan struct{})
 	go func() {
@@ -183,14 +198,17 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		defer func() { close(done) }()
 		envs := getEnvs(ctx)
 		var retImmediatly ReturnImmediatly
+		silent := false
 		for _, env := range envs {
 			env := env
+			if _, ok := env.(*Silent); ok {
+				silent = true
+			}
 			err := env.Enter(StepInfo{
 				name:   name,
 				inputs: inputs,
 			})
 			if errors.As(err, &retImmediatly) {
-				err = nil
 			} else if err != nil {
 				p.errExit(err)
 			}
@@ -200,6 +218,12 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 					p.errExit(err)
 				}
 			}()
+		}
+
+		// If we have a silent function, disable the spinner
+		if silent {
+			p.spinner.Disable()
+			defer p.spinner.Enable()
 		}
 
 		p.callstack = append(p.callstack, name)
@@ -218,9 +242,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 			}
 		} else {
 			// This call is mocked, so just set the output
-			for i, v := range retImmediatly.Out {
-				outputs[i] = v
-			}
+			copy(outputs, retImmediatly.Out)
 		}
 
 		p.handleError(outputs)
