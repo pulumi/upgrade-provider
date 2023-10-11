@@ -178,17 +178,15 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	go func() {
 		defer func() { close(done) }()
 		envs := getEnvs(ctx)
-		retImmediatly := new(ReturnImmediatly)
+		var retImmediatly ReturnImmediatly
 		for _, env := range envs {
 			env := env
 			err := env.Enter(StepInfo{
 				name:   name,
 				inputs: inputs,
 			})
-			if errors.As(err, retImmediatly) {
-				if retImmediatly != nil {
-					p.errExit(fmt.Errorf("multiple immediate returns"))
-				}
+			if errors.As(err, &retImmediatly) {
+				err = nil
 			} else if err != nil {
 				p.errExit(err)
 			}

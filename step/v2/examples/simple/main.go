@@ -28,8 +28,9 @@ func hide(ctx context.Context, input string) string {
 }
 
 func writeFile(ctx context.Context, content string) error {
-	step.Call10(ctx, "sleep", sleep, 4)
 	step.MarkImpure(ctx)
+
+	step.Call10(ctx, "sleep", sleep, 4)
 	err := os.WriteFile("output.txt", []byte(content), 0600)
 	step.SetLabel(ctx, fmt.Sprintf("%d bytes written", len(content)))
 	return err
