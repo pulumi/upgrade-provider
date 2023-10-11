@@ -101,3 +101,10 @@ func (e *Cwd) Exit([]any) error {
 }
 
 func (e *Cwd) String() string { return fmt.Sprintf("cd %q", e.To) }
+
+// Silence all output from the step
+type Silent struct{}
+
+func (*Silent) Enter(StepInfo) error { return nil }
+func (*Silent) Exit([]any) error     { return nil }
+func (*Silent) String() string       { return "silent" }
