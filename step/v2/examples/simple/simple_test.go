@@ -23,16 +23,6 @@ var runWithFile = []byte(`{
       "impure": true
     },
     {
-      "name": "sleep",
-      "inputs": [
-        3
-      ],
-      "outputs": [
-        null
-      ],
-      "impure": false
-    },
-    {
       "name": "hide-secret",
       "inputs": [
         "foo secret bar\n"
@@ -40,18 +30,16 @@ var runWithFile = []byte(`{
       "outputs": [
         "foo [SECRET] bar\n",
         null
-      ],
-      "impure": false
+      ]
     },
     {
       "name": "sleep",
       "inputs": [
-        4
+        3
       ],
       "outputs": [
         null
-      ],
-      "impure": false
+      ]
     },
     {
       "name": "write",
@@ -62,16 +50,24 @@ var runWithFile = []byte(`{
         null
       ],
       "impure": true
+    },
+    {
+      "name": "sleep",
+      "inputs": [
+        4
+      ],
+      "outputs": [
+        null
+      ]
     }
   ]
 }`)
 
 func TestSimple(t *testing.T) {
-	replay, err := step.NewReplay(runWithFile)
-	require.NoError(t, err)
+	replay := step.NewReplay(t, runWithFile)
 
 	ctx := context.Background()
-	err = step.PipelineCtx(step.WithEnv(ctx, replay), "test", pipeline)
+	err := step.PipelineCtx(step.WithEnv(ctx, replay), "test", pipeline)
 	require.NoError(t, err)
 
 	assert.Empty(t, replay.Violations)

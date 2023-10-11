@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type Step struct {
@@ -16,7 +19,7 @@ type Step struct {
 
 func (s *Step) String() string {
 	if s == nil {
-		return "Step(nil)"
+		return "step.Step(nil)"
 	}
 	type Step struct {
 		Name    string
@@ -34,6 +37,7 @@ func (s *Step) String() string {
 
 type Replay struct {
 	Violations []Violation
+	t          *testing.T
 	pending    []struct {
 		name   string
 		inputs json.RawMessage
@@ -48,27 +52,31 @@ type Violation struct {
 	Found    *Step
 }
 
-func NewReplay(source []byte) (*Replay, error) {
+func (v Violation) String() string {
+	return fmt.Sprintf("step.Violation{ Expected: %s, Found: %s }", v.Expected, v.Found)
+}
+
+func NewReplay(t *testing.T, source []byte) *Replay {
 	var s struct {
 		Steps []Step `json:"steps"`
 	}
 	err := json.Unmarshal(source, &s)
-	if err != nil {
-		return nil, err
-	}
-	return &Replay{steps: s.Steps}, nil
+	require.NoError(t, err)
+	return &Replay{steps: s.Steps, t: t}
 }
 
 func (r *Replay) Enter(info StepInfo) error {
 	current := r.next
+	r.t.Logf("Searching for step: %q (from step %d)", info.Name(), current)
 	for {
 		// We are attempting to find the next step, but there is no next step.
-		if len(r.steps) >= current {
+		if len(r.steps) <= current {
 			current = -1 // -1 indicates not found
 			break
 		}
 		// We have found what looks like the correct step
 		if r.steps[current].Name == info.Name() {
+			r.t.Logf("Found expected next step: %q", info.Name())
 			break
 		}
 		current++
@@ -83,17 +91,20 @@ func (r *Replay) Enter(info StepInfo) error {
 		index  int
 	}{info.Name(), inputBytes, current})
 
-	if current != -1 && r.steps[current].Impure {
-		var out []any
-		err := json.Unmarshal(r.steps[current].Outputs, &out)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal replay outputs: %w", err)
-		}
-		return ReturnImmediatly{Out: out}
-	}
 	if current != -1 {
 		// We have found a step, so move on to the next step
-		r.next++
+		r.next = current + 1
+
+		// If a step is impure, we can't test it, so just have it return what is
+		// expected.
+		if r.steps[current].Impure {
+			var out []any
+			err := json.Unmarshal(r.steps[current].Outputs, &out)
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal replay outputs: %w", err)
+			}
+			return ReturnImmediatly{Out: out}
+		}
 	}
 
 	return nil
@@ -130,8 +141,8 @@ func (r *Replay) Exit(output []any) error {
 	}
 
 	expected := r.steps[exiting.index]
-	if reflect.DeepEqual(exiting.inputs, expected.Inputs) &&
-		reflect.DeepEqual(outputBytes, expected.Outputs) {
+	if assert.JSONEqf(r.t, string(expected.Inputs), string(exiting.inputs), "%s: inputs", exiting.name) &&
+		assert.JSONEqf(r.t, string(expected.Outputs), string(outputBytes), "%s: outputs", exiting.name) {
 		// Inputs and outputs match: no violation
 		return nil
 	}
@@ -170,10 +181,12 @@ func (r *Record) Enter(info StepInfo) error {
 	if err != nil {
 		return fmt.Errorf("cannot record: %w", err)
 	}
-	r.partialSteps = append(r.partialSteps, &Step{
+	s := &Step{
 		Name:   info.Name(),
 		Inputs: result,
-	})
+	}
+	r.partialSteps = append(r.partialSteps, s)
+	r.steps = append(r.steps, s)
 	return nil
 }
 
@@ -187,7 +200,6 @@ func (r *Record) Exit(output []any) error {
 	}
 	topInput.Outputs = json.RawMessage(result)
 
-	r.steps = append(r.steps, topInput)
 	return nil
 }
 
