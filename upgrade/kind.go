@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -78,7 +79,7 @@ func (rk RepoKind) IsPatched() bool {
 	}
 }
 
-func GetRepoKind(ctx Context, repo ProviderRepo) (*GoMod, error) {
+func GetRepoKind(ctx context.Context, repo ProviderRepo) (*GoMod, error) {
 	path := repo.root
 	file := filepath.Join(path, "provider", "go.mod")
 
@@ -104,11 +105,11 @@ func GetRepoKind(ctx Context, repo ProviderRepo) (*GoMod, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !ok && ctx.UpgradeProviderVersion {
+	if ctx := GetContext(ctx); !ok && ctx.UpgradeProviderVersion {
 		setFalse(&ctx.UpgradeProviderVersion)
 	}
 
-	tfProviderRepoName := ctx.UpstreamProviderName
+	tfProviderRepoName := GetContext(ctx).UpstreamProviderName
 
 	getUpstream := func(file *modfile.File) (*modfile.Require, error) {
 		// Find the name of our upstream dependency

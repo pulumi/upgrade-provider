@@ -115,7 +115,7 @@ func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, er
 	return data, nil
 }
 
-func prBody(ctx Context, repo ProviderRepo,
+func prBody(ctx context.Context, repo ProviderRepo,
 	upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
 	targetBridge, tfSDKUpgrade string) string {
 	b := new(strings.Builder)
@@ -124,10 +124,10 @@ func prBody(ctx Context, repo ProviderRepo,
 
 	fmt.Fprintf(b, "\n---\n\n")
 
-	if ctx.MajorVersionBump {
+	if GetContext(ctx).MajorVersionBump {
 		fmt.Fprintf(b, "- Updating major version from %s to %s.\n", repo.currentVersion, repo.currentVersion.IncMajor())
 	}
-	if ctx.oldJavaVersion != ctx.JavaVersion && ctx.JavaVersion != "" {
+	if ctx := GetContext(ctx); ctx.oldJavaVersion != ctx.JavaVersion && ctx.JavaVersion != "" {
 		var from string
 		if prev := ctx.oldJavaVersion; prev != "" {
 			from = fmt.Sprintf("from %s ", prev)
@@ -135,30 +135,30 @@ func prBody(ctx Context, repo ProviderRepo,
 		fmt.Fprintf(b, "- Updating java version %sto %s.\n", from, ctx.JavaVersion)
 	}
 
-	if ctx.UpgradeProviderVersion {
+	if GetContext(ctx).UpgradeProviderVersion {
 		contract.Assertf(upgradeTarget != nil, "upgradeTarget should always be non-nil")
 		var prev string
 		if repo.currentUpstreamVersion != nil {
 			prev = fmt.Sprintf("from %s ", repo.currentUpstreamVersion)
 		}
 		fmt.Fprintf(b, "- Upgrading %s %s to %s.\n",
-			ctx.UpstreamProviderName, prev, upgradeTarget.Version)
+			GetContext(ctx).UpstreamProviderName, prev, upgradeTarget.Version)
 		for _, t := range upgradeTarget.GHIssues {
 			if t.Number > 0 {
 				fmt.Fprintf(b, "\tFixes #%d\n", t.Number)
 			}
 		}
 	}
-	if ctx.UpgradeBridgeVersion {
+	if GetContext(ctx).UpgradeBridgeVersion {
 		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge from %s to %s.\n",
 			goMod.Bridge.Version, targetBridge)
 	}
-	if ctx.UpgradePfVersion {
+	if GetContext(ctx).UpgradePfVersion {
 		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge/pf from %s to %s.\n",
 			goMod.Pf.Version, targetBridge)
 	}
 
-	if ctx.UpgradeSdkVersion {
+	if GetContext(ctx).UpgradeSdkVersion {
 		fmt.Fprintf(b, "- Upgrading pulumi SDK to `latest`.\n")
 	}
 	if parts := strings.Split(tfSDKUpgrade, " -> "); len(parts) == 2 {
@@ -169,7 +169,7 @@ func prBody(ctx Context, repo ProviderRepo,
 	return b.String()
 }
 
-func ensurePulumiRemote(ctx Context, name string) (string, error) {
+func ensurePulumiRemote(ctx context.Context, name string) (string, error) {
 	remotes, err := runGitCommand(ctx, func(b []byte) ([]string, error) {
 		return strings.Split(string(b), "\n"), nil
 	}, "remote")
@@ -198,7 +198,7 @@ func say(msg string) func([]byte) (string, error) {
 //
 // We don't use the current branch, since applying a partial update could change the current branch,
 // leading to a non idempotent result.
-func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
+func setCurrentUpstreamFromPatched(ctx context.Context, repo *ProviderRepo) error {
 	getCheckedInCommit := exec.CommandContext(ctx,
 		"git", "ls-tree", repo.defaultBranch, "upstream", "--object-only")
 	getCheckedInCommit.Dir = repo.root
@@ -258,13 +258,13 @@ func setCurrentUpstreamFromPatched(ctx Context, repo *ProviderRepo) error {
 //
 // We don't use the current branch, since applying a partial update could change the current branch,
 // leading to a non idempotent result.
-func setCurrentUpstreamFromPlain(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
+func setCurrentUpstreamFromPlain(ctx context.Context, repo *ProviderRepo, goMod *GoMod) error {
 	return setUpstreamFromRemoteRepo(ctx, repo, "tags",
 		filepath.Join("provider", "go.mod"), goMod.Upstream.Path,
 		semver.NewVersion)
 }
 
-func setCurrentUpstreamFromForked(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
+func setCurrentUpstreamFromForked(ctx context.Context, repo *ProviderRepo, goMod *GoMod) error {
 	return setUpstreamFromRemoteRepo(ctx, repo, "heads",
 		filepath.Join("provider", "go.mod"), goMod.Fork.New.Path,
 		func(s string) (*semver.Version, error) {
@@ -273,14 +273,14 @@ func setCurrentUpstreamFromForked(ctx Context, repo *ProviderRepo, goMod *GoMod)
 		})
 }
 
-func setCurrentUpstreamFromShimmed(ctx Context, repo *ProviderRepo, goMod *GoMod) error {
+func setCurrentUpstreamFromShimmed(ctx context.Context, repo *ProviderRepo, goMod *GoMod) error {
 	return setUpstreamFromRemoteRepo(ctx, repo, "tags",
 		filepath.Join("provider", "shim", "go.mod"), goMod.Upstream.Path,
 		semver.NewVersion)
 }
 
 func setUpstreamFromRemoteRepo(
-	ctx Context, repo *ProviderRepo, kind, goModPath, upstream string,
+	ctx context.Context, repo *ProviderRepo, kind, goModPath, upstream string,
 	parse func(string) (*semver.Version, error),
 ) error {
 	version, found, err := originalGoVersionOf(ctx, *repo, goModPath, upstream)
@@ -442,10 +442,10 @@ func getGitHubPath(repoPath string) (string, error) {
 // 2) current working directory: returns the path to the cwd if it is a provider directory
 // or subdirectory, i.e. `user/home/pulumi/pulumi-docker/provider` it
 // 3) default: $GOPATH/src/module, i.e. $GOPATH/src/github.com/pulumi/pulumi-datadog
-func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) {
+func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string, error) {
 	// We assume the user passed in a valid path, either absolute or relative.
-	if ctx.repoPath != "" {
-		return ctx.repoPath, nil
+	if path := GetContext(ctx).repoPath; path != "" {
+		return path, nil
 	}
 
 	// Strip version
@@ -470,28 +470,28 @@ func getRepoExpectedLocation(ctx Context, cwd, repoPath string) (string, error) 
 		cwd = filepath.Dir(cwd)
 	}
 
-	return filepath.Join(ctx.GoPath, "src", expectedLocation), nil
+	return filepath.Join(GetContext(ctx).GoPath, "src", expectedLocation), nil
 }
 
 // Fetch the expected upgrade target from github. Return a list of open upgrade issues,
 // sorted by semantic version. The list may be empty.
 //
 // The second argument represents a message to describe the result. It may be empty.
-func GetExpectedTarget(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
+func GetExpectedTarget(ctx context.Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
 	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
-	if ctx.InferVersion {
+	if GetContext(ctx).InferVersion {
 		return getExpectedTargetFromIssues(ctx, name)
 	}
-	if ctx.TargetVersion != nil {
-		return &UpstreamUpgradeTarget{Version: ctx.TargetVersion}, nil
+	if GetContext(ctx).TargetVersion != nil {
+		return &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}, nil
 
 	}
 	return getExpectedTargetLatest(ctx, name, upstreamOrg)
 }
 
-func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
+func getExpectedTargetLatest(ctx context.Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
 	latest := exec.CommandContext(ctx, "gh", "release", "list",
-		"--repo="+upstreamOrg+"/"+ctx.UpstreamProviderName,
+		"--repo="+upstreamOrg+"/"+GetContext(ctx).UpstreamProviderName,
 		"--limit=1",
 		"--exclude-drafts",
 		"--exclude-pre-releases")
@@ -504,7 +504,7 @@ func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUp
 
 	tok := strings.Fields(bytes.String())
 	contract.Assertf(len(tok) > 0, fmt.Sprintf("no releases found in %s/%s",
-		upstreamOrg, ctx.UpstreamProviderName))
+		upstreamOrg, GetContext(ctx).UpstreamProviderName))
 	v, err := semver.NewVersion(tok[0])
 	if err != nil {
 		return nil, err
@@ -512,7 +512,7 @@ func getExpectedTargetLatest(ctx Context, name, upstreamOrg string) (*UpstreamUp
 	return &UpstreamUpgradeTarget{Version: v}, nil
 }
 
-func getExpectedTargetFromIssues(ctx Context, name string) (*UpstreamUpgradeTarget, error) {
+func getExpectedTargetFromIssues(ctx context.Context, name string) (*UpstreamUpgradeTarget, error) {
 	target := &UpstreamUpgradeTarget{}
 	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
 		"--state=open",
@@ -561,7 +561,7 @@ func getExpectedTargetFromIssues(ctx Context, name string) (*UpstreamUpgradeTarg
 		return versions[j].Version.LessThan(versions[i].Version)
 	})
 
-	if ctx.TargetVersion != nil {
+	if ctx := GetContext(ctx); ctx.TargetVersion != nil {
 		var foundTarget bool
 		for i, v := range versions {
 			if v.Version.Equal(ctx.TargetVersion) {

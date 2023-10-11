@@ -17,14 +17,14 @@ import (
 	"github.com/pulumi/upgrade-provider/step"
 )
 
-type CodeMigration = func(ctx Context, repo ProviderRepo) (step.Step, error)
+type CodeMigration = func(ctx context.Context, repo ProviderRepo) (step.Step, error)
 
 var CodeMigrations = map[string]CodeMigration{
 	"autoalias":     AddAutoAliasing,
 	"assertnoerror": ReplaceAssertNoError,
 }
 
-func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
+func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 	var err error
 	repo := ProviderRepo{
 		name: repoName,
@@ -38,7 +38,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	ok := step.Run(ctx, step.Combined("Setting Up Environment",
 		step.Env("GOWORK", "off"),
 		step.Env("PULUMI_MISSING_DOCS_ERROR", func() string {
-			if ctx.AllowMissingDocs {
+			if GetContext(ctx).AllowMissingDocs {
 				return "false"
 			}
 			return "true"
@@ -63,7 +63,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		return string(goMod.Kind), nil
 	}))
 
-	if ctx.UpgradeProviderVersion {
+	if GetContext(ctx).UpgradeProviderVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Provider Update", func(context.Context) (string, error) {
 				upgradeTarget, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName,
@@ -78,8 +78,8 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				// If we don't have any upgrades to target, assume that we don't need to upgrade.
 				if upgradeTarget.Version == nil {
 					// Otherwise, we don't bother to try to upgrade the provider.
-					ctx.UpgradeProviderVersion = false
-					ctx.MajorVersionBump = false
+					GetContext(ctx).UpgradeProviderVersion = false
+					GetContext(ctx).MajorVersionBump = false
 					return "Up to date", nil
 				}
 
@@ -113,13 +113,13 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 							" no upgrade: %s (current) > %s (target)",
 							repo.currentUpstreamVersion,
 							upgradeTarget.Version)
-						ctx.UpgradeProviderVersion = false
-						ctx.MajorVersionBump = false
+						GetContext(ctx).UpgradeProviderVersion = false
+						GetContext(ctx).MajorVersionBump = false
 
 					// Target version is equal to the current version
 					case 0:
-						ctx.UpgradeProviderVersion = false
-						ctx.MajorVersionBump = false
+						GetContext(ctx).UpgradeProviderVersion = false
+						GetContext(ctx).MajorVersionBump = false
 						result = "Up to date"
 
 					// Target version is greater then the current version, so upgrade
@@ -138,7 +138,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			}))
 	}
 
-	if ctx.UpgradeBridgeVersion {
+	if GetContext(ctx).UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Bridge Update", func(context.Context) (string, error) {
 				refs, err := gitRefsOf(ctx,
@@ -152,7 +152,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 				// If our target upgrade version is the same as our
 				// current version, we skip the update.
 				if latest.Original() == goMod.Bridge.Version {
-					ctx.UpgradeBridgeVersion = false
+					GetContext(ctx).UpgradeBridgeVersion = false
 					return fmt.Sprintf("Up to date at %s", latest.Original()), nil
 				}
 
@@ -206,13 +206,13 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			}).AssignTo(&tfSDKUpgrade),
 		)
 	}
-	if ctx.UpgradePfVersion {
+	if GetContext(ctx).UpgradePfVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Plugin Framework Update", func(context.Context) (string, error) {
 				if goMod.Pf.Version == "" {
 					// PF is not used on this provider, so we disable
 					// the upgrade attempt and move on.
-					ctx.UpgradePfVersion = false
+					GetContext(ctx).UpgradePfVersion = false
 					return "Unused", nil
 				}
 				refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
@@ -224,7 +224,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 				// If our target upgrade version is the same as our current version, we skip the update.
 				if targetVersion.Original() == goMod.Pf.Version {
-					ctx.UpgradePfVersion = false
+					GetContext(ctx).UpgradePfVersion = false
 					return fmt.Sprintf("Up to date at %s", targetVersion.String()), nil
 				}
 
@@ -233,7 +233,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			}))
 	}
 
-	if ctx.MajorVersionBump {
+	if GetContext(ctx).MajorVersionBump {
 		discoverSteps = append(discoverSteps,
 			step.F("Current Major Version", func(context.Context) (string, error) {
 				var err error
@@ -250,12 +250,12 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		return ErrHandled
 	}
 
-	if ctx.UpgradeProviderVersion {
+	if GetContext(ctx).UpgradeProviderVersion {
 		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTarget.Version.Major()
-		if ctx.MajorVersionBump && !shouldMajorVersionBump {
+		if GetContext(ctx).MajorVersionBump && !shouldMajorVersionBump {
 			return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
 				repo.currentUpstreamVersion.Major())
-		} else if !ctx.MajorVersionBump && shouldMajorVersionBump {
+		} else if !GetContext(ctx).MajorVersionBump && shouldMajorVersionBump {
 			return fmt.Errorf("This is a major version update (v%d -> v%d), but --major was not passed",
 				repo.currentUpstreamVersion.Major(), upgradeTarget.Version.Major())
 		}
@@ -263,24 +263,24 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
-	if !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
+	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
 		!ctx.UpgradeCodeMigration && !ctx.UpgradeSdkVersion && !ctx.UpgradePfVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
 
-	if ctx.UpgradeCodeMigration && len(ctx.MigrationOpts) == 0 {
+	if GetContext(ctx).UpgradeCodeMigration && len(GetContext(ctx).MigrationOpts) == 0 {
 		keys := make([]string, 0, len(CodeMigrations))
 		for k := range CodeMigrations {
 			keys = append(keys, k)
 		}
-		ctx.MigrationOpts = keys
-	} else if !ctx.UpgradeCodeMigration && len(ctx.MigrationOpts) > 0 {
+		GetContext(ctx).MigrationOpts = keys
+	} else if !GetContext(ctx).UpgradeCodeMigration && len(GetContext(ctx).MigrationOpts) > 0 {
 		fmt.Println(colorize.Warn("--migration-opts passed but --kind does not indicate a code migration"))
 	}
 
 	var forkedProviderUpstreamCommit string
-	if goMod.Kind.IsForked() && ctx.UpgradeProviderVersion {
+	if goMod.Kind.IsForked() && GetContext(ctx).UpgradeProviderVersion {
 		ok = step.Run(ctx, upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod).
 			AssignTo(&forkedProviderUpstreamCommit))
 		if !ok {
@@ -289,7 +289,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 	}
 
 	var targetSHA string
-	if ctx.UpgradeProviderVersion {
+	if ctx := GetContext(ctx); ctx.UpgradeProviderVersion {
 		repo.workingBranch = fmt.Sprintf("upgrade-%s-to-v%s",
 			ctx.UpstreamProviderName, upgradeTarget.Version)
 	} else if ctx.UpgradeBridgeVersion {
@@ -310,7 +310,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		EnsureBranchCheckedOut(ctx, repo.workingBranch).In(&repo.root),
 	}
 
-	if ctx.MajorVersionBump {
+	if GetContext(ctx).MajorVersionBump {
 		steps = append(steps, MajorVersionBump(ctx, goMod, upgradeTarget, repo))
 
 		defer func() {
@@ -333,7 +333,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		)
 	}))
 
-	if ctx.UpgradeProviderVersion {
+	if GetContext(ctx).UpgradeProviderVersion {
 		steps = append(steps, UpgradeProviderVersion(ctx, goMod, upgradeTarget.Version, repo,
 			targetSHA, forkedProviderUpstreamCommit))
 	} else if goMod.Kind.IsPatched() {
@@ -344,7 +344,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		steps = append(steps, step.Cmd("make", "upstream").In(&repo.root))
 	}
 
-	if ctx.UpgradeBridgeVersion {
+	if GetContext(ctx).UpgradeBridgeVersion {
 		steps = append(steps, step.Cmd("go", "get",
 			"github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion).
 			In(repo.providerDir()))
@@ -365,7 +365,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		steps = append(steps, upgradePulumiEverywhereStep)
 
 	}
-	if ctx.UpgradeSdkVersion {
+	if GetContext(ctx).UpgradeSdkVersion {
 		steps = append(steps, step.Combined("Upgrade Pulumi SDK",
 			step.Cmd("go", "get", "github.com/pulumi/pulumi/sdk/v3").
 				In(repo.providerDir()),
@@ -376,18 +376,19 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			step.Cmd("go", "get", "github.com/pulumi/pulumi/pkg/v3").
 				In(repo.examplesDir()))
 	}
-	if ctx.UpgradePfVersion {
+	if GetContext(ctx).UpgradePfVersion {
 		steps = append(steps, step.Cmd("go", "get",
 			"github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion).
 			In(repo.providerDir()))
 	}
 
-	if ctx.UpgradeCodeMigration {
+	if GetContext(ctx).UpgradeCodeMigration {
 		applied := make(map[string]struct{})
-		sort.Slice(ctx.MigrationOpts, func(i, j int) bool {
-			return ctx.MigrationOpts[i] < ctx.MigrationOpts[j]
+		sort.Slice(GetContext(ctx).MigrationOpts, func(i, j int) bool {
+			m := GetContext(ctx).MigrationOpts
+			return m[i] < m[j]
 		})
-		for _, opt := range ctx.MigrationOpts {
+		for _, opt := range GetContext(ctx).MigrationOpts {
 			if _, ok := applied[opt]; ok {
 				fmt.Println(colorize.Warn("Duplicate code migration " + colorize.Bold(opt)))
 				continue
@@ -414,7 +415,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		step.Cmd("go", "mod", "tidy").In(repo.examplesDir()),
 		step.Cmd("go", "mod", "tidy").In(repo.sdkDir()),
 		step.Computed(func() step.Step {
-			if ctx.RemovePlugins {
+			if GetContext(ctx).RemovePlugins {
 				return step.Cmd("pulumi", "plugin", "rm", "--all", "--yes")
 			}
 			return nil
@@ -424,7 +425,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 		GitCommit(ctx, "make tfgen").In(&repo.root),
 		step.Cmd("make", "build_sdks").In(&repo.root),
 		step.Computed(func() step.Step {
-			if !ctx.MajorVersionBump {
+			if !GetContext(ctx).MajorVersionBump {
 				return nil
 			}
 
@@ -439,7 +440,7 @@ func UpgradeProvider(ctx Context, repoOrg, repoName string) error {
 			}).In(&repo.root)
 		}),
 		step.Computed(func() step.Step {
-			if !ctx.MajorVersionBump {
+			if !GetContext(ctx).MajorVersionBump {
 				return nil
 			}
 			dir := filepath.Join(repo.root, "sdk")

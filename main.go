@@ -42,10 +42,8 @@ func cmd() *cobra.Command {
 	var repoOrg string
 	var repoPath string
 
-	context := upgrade.Context{
-		Context: context.Background(),
-		GoPath:  gopath,
-	}
+	ctx := context.Background()
+	context := upgrade.Context{GoPath: gopath}
 
 	exitOnError := func(err error) {
 		if err == nil {
@@ -163,7 +161,7 @@ func cmd() *cobra.Command {
 		},
 		Run: func(_ *cobra.Command, args []string) {
 			exitOnError(failedPreRun)
-			err := upgrade.UpgradeProvider(context, repoOrg, repoName)
+			err := upgrade.UpgradeProvider(context.Wrap(ctx), repoOrg, repoName)
 			if err != nil && context.CreateFailureIssue {
 				// $GITHUB_ACTION is a default env var within github
 				// actions, but is unlikely to be defined elsewhere.
@@ -171,7 +169,7 @@ func cmd() *cobra.Command {
 				// We do this to test that we are being run inside a GH
 				// action.
 				if _, ci := os.LookupEnv("GITHUB_ACTION"); ci {
-					msg, err := createFailureIssue(context, repoOrg, repoName)
+					msg, err := createFailureIssue(ctx, repoOrg, repoName)
 					if err != nil {
 						fmt.Println(msg)
 					}
@@ -305,7 +303,7 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 }
 
 // Create an issue in the provider repo with a message describing the upgrade failure
-func createFailureIssue(ctx upgrade.Context, repoOrg string, repoName string) (string, error) {
+func createFailureIssue(ctx context.Context, repoOrg string, repoName string) (string, error) {
 	now := time.Now()
 	hr, min, _ := now.Clock()
 	yr, mth, day := now.Date()

@@ -10,9 +10,15 @@ import (
 	"golang.org/x/mod/module"
 )
 
-type Context struct {
-	context.Context
+type contextKeyType struct{}
 
+var contextKey contextKeyType
+
+func GetContext(ctx context.Context) *Context {
+	return ctx.Value(contextKey).(*Context)
+}
+
+type Context struct {
 	// The user's GOPATH env var
 	GoPath string
 	// An optional path to clone the provider repo to
@@ -49,6 +55,10 @@ type Context struct {
 	PrReviewers        string
 	PrAssign           string
 	CreateFailureIssue bool
+}
+
+func (c *Context) Wrap(ctx context.Context) context.Context {
+	return context.WithValue(ctx, contextKey, c)
 }
 
 func (c *Context) SetRepoPath(p string) {
