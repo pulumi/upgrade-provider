@@ -10,7 +10,7 @@ import (
 // Name a value so it is viable to the user.
 func NamedValue[T any](ctx context.Context, name string, value T) T {
 	return Call01(ctx, name, func(context.Context) T {
-		SetLabel(ctx, fmt.Sprintf("%s", value))
+		SetLabel(ctx, fmt.Sprintf("%v", value))
 		return value
 	})
 }

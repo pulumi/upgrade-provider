@@ -113,7 +113,7 @@ func (r *Replay) Exit(output []any) error {
 			return err
 		}
 
-		r.t.Logf("Expected no step, found %s", Step{
+		r.t.Logf("Expected no step, found %s", &Step{
 			Name:    exiting.name,
 			Inputs:  exiting.inputs,
 			Outputs: outputBytes,
