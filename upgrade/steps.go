@@ -42,7 +42,7 @@ func GitCommit(ctx context.Context, msg string) step.Step {
 // Upgrade the upstream fork of a pulumi provider.
 //
 // The SHA of the new upstream branch is returned.
-func upgradeUpstreamFork(ctx Context, name string, target *semver.Version, goMod *GoMod) step.Step {
+func upgradeUpstreamFork(ctx context.Context, name string, target *semver.Version, goMod *GoMod) step.Step {
 	var forkedProviderUpstreamCommit string
 	var upstreamPath string
 	var previousUpstreamVersion *semver.Version
@@ -110,7 +110,7 @@ func upgradeUpstreamFork(ctx Context, name string, target *semver.Version, goMod
 	).Return(&forkedProviderUpstreamCommit)
 }
 
-func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
+func ensureUpstreamRepo(ctx context.Context, repoPath string) step.Step {
 	var expectedLocation string
 	var repoExists bool
 	return step.Combined("Ensure '"+repoPath+"'",
@@ -158,14 +158,14 @@ func ensureUpstreamRepo(ctx Context, repoPath string) step.Step {
 	).Return(&expectedLocation)
 }
 
-var javaVersion *regexp.Regexp = regexp.MustCompile(`JAVA_GEN_VERSION := (v[0-9]+\.[0-9]+\.[0-9]+)`)
+var javaVersionRegexp *regexp.Regexp = regexp.MustCompile(`JAVA_GEN_VERSION := (v[0-9]+\.[0-9]+\.[0-9]+)`)
 
 func UpgradeProviderVersion(
-	ctx Context, goMod *GoMod, target *semver.Version,
+	ctx context.Context, goMod *GoMod, target *semver.Version,
 	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
 	steps := []step.Step{}
-	if ctx.JavaVersion != "" {
+	if javaVersion := GetContext(ctx).JavaVersion; javaVersion != "" {
 		var didChange bool
 		steps = append(steps, step.Combined("Update Java Version",
 			step.F("Current Java Version", func(cx context.Context) (string, error) {
@@ -173,22 +173,23 @@ func UpgradeProviderVersion(
 				if err != nil {
 					return "", err
 				}
-				found := javaVersion.FindSubmatch(b)
+				found := javaVersionRegexp.FindSubmatch(b)
 				if found == nil {
 					return "not found", nil
 				}
-				ctx.oldJavaVersion = string(found[1])
-				return ctx.oldJavaVersion, nil
+				oldJavaVersion := string(found[1])
+				GetContext(ctx).oldJavaVersion = oldJavaVersion
+				return oldJavaVersion, nil
 			}),
 			UpdateFileWithSignal("Update Makefile", "Makefile", &didChange,
 				func(b []byte) ([]byte, error) {
-					version := javaVersion.FindSubmatchIndex(b)
+					version := javaVersionRegexp.FindSubmatchIndex(b)
 					if version == nil {
 						return nil, fmt.Errorf("Java version set: could not find JAVA_GEN_VERSION")
 					}
 					var out bytes.Buffer
 					out.Write(b[:version[2]])
-					out.WriteString(ctx.JavaVersion)
+					out.WriteString(javaVersion)
 					out.Write(b[version[3]:])
 					return out.Bytes(), nil
 				}),
@@ -304,14 +305,14 @@ func UpgradeProviderVersion(
 }
 
 func InformGitHub(
-	ctx Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
+	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade string,
 ) step.Step {
 	pushBranch := step.Cmd("git", "push", "--set-upstream",
 		"origin", repo.workingBranch).In(&repo.root)
 
 	var prTitle string
-	if ctx.UpgradeProviderVersion {
+	if ctx := GetContext(ctx); ctx.UpgradeProviderVersion {
 		prTitle = fmt.Sprintf("Upgrade %s to v%s",
 			ctx.UpstreamProviderName, target.Version)
 	} else if ctx.UpgradeBridgeVersion {
@@ -327,10 +328,10 @@ func InformGitHub(
 	}
 
 	createPR := step.Cmd("gh", "pr", "create",
-		"--assignee", ctx.PrAssign,
+		"--assignee", GetContext(ctx).PrAssign,
 		"--base", repo.defaultBranch,
 		"--head", repo.workingBranch,
-		"--reviewer", ctx.PrReviewers,
+		"--reviewer", GetContext(ctx).PrReviewers,
 		"--title", prTitle,
 		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade),
 	).In(&repo.root)
@@ -340,7 +341,7 @@ func InformGitHub(
 		step.Computed(func() step.Step {
 			// If we are only upgrading the bridge, we wont have a list of
 			// issues.
-			if !ctx.UpgradeProviderVersion {
+			if !GetContext(ctx).UpgradeProviderVersion {
 				return nil
 			}
 
@@ -350,7 +351,7 @@ func InformGitHub(
 			for i, t := range target.GHIssues {
 				issues[i] = step.Cmd(
 					"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-					"--add-assignee", ctx.PrAssign).In(&repo.root)
+					"--add-assignee", GetContext(ctx).PrAssign).In(&repo.root)
 			}
 			return step.Combined("Assign Issues", issues...)
 		}),
@@ -395,7 +396,7 @@ func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA *st
 	}).In(repo.providerDir())
 }
 
-func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
+func EnsureBranchCheckedOut(ctx context.Context, branchName string) step.Step {
 	var branches string
 	var alreadyExists bool
 	var alreadyCurrent bool
@@ -432,11 +433,11 @@ func EnsureBranchCheckedOut(ctx Context, branchName string) step.Step {
 	)
 }
 
-func OrgProviderRepos(ctx Context, org, repo string) step.Step {
+func OrgProviderRepos(ctx context.Context, org, repo string) step.Step {
 	return ensureUpstreamRepo(ctx, path.Join("github.com", org, repo))
 }
 
-func PullDefaultBranch(ctx Context, remote string) step.Step {
+func PullDefaultBranch(ctx context.Context, remote string) step.Step {
 	var lsRemoteHeads string
 	var defaultBranch string
 	return step.Combined("pull default branch",
@@ -472,7 +473,7 @@ func PullDefaultBranch(ctx Context, remote string) step.Step {
 	).Return(&defaultBranch)
 }
 
-func MajorVersionBump(ctx Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo) step.Step {
+func MajorVersionBump(ctx context.Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo) step.Step {
 	if repo.currentVersion.Major() == 0 {
 		// None of these steps are necessary or appropriate when moving from
 		// version 0.x to 1.0 because Go modules only require a version suffix for
@@ -701,7 +702,7 @@ func UpdateFileWithSignal(desc, path string, didChange *bool, f func([]byte) ([]
 	})
 }
 
-func migrationSteps(ctx Context, repo ProviderRepo, providerName string, description string,
+func migrationSteps(ctx context.Context, repo ProviderRepo, providerName string, description string,
 	migrationFunc func(resourcesFilePath, providerName string) (bool, error)) ([]step.Step, error) {
 	steps := []step.Step{}
 	providerName = strings.TrimPrefix(providerName, "pulumi-")
@@ -727,7 +728,7 @@ func migrationSteps(ctx Context, repo ProviderRepo, providerName string, descrip
 	return steps, nil
 }
 
-func AddAutoAliasing(ctx Context, repo ProviderRepo) (step.Step, error) {
+func AddAutoAliasing(ctx context.Context, repo ProviderRepo) (step.Step, error) {
 	providerName := strings.TrimPrefix(repo.name, "pulumi-")
 	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
 	steps := []step.Step{
@@ -752,7 +753,7 @@ func AddAutoAliasing(ctx Context, repo ProviderRepo) (step.Step, error) {
 	return step.Combined("Add AutoAliasing", steps...), nil
 }
 
-func ReplaceAssertNoError(ctx Context, repo ProviderRepo) (step.Step, error) {
+func ReplaceAssertNoError(ctx context.Context, repo ProviderRepo) (step.Step, error) {
 	steps, err := migrationSteps(ctx, repo, repo.name, "Remove deprecated contract.Assert",
 		AssertNoErrorMigration)
 	if err != nil {
@@ -764,7 +765,7 @@ func ReplaceAssertNoError(ctx Context, repo ProviderRepo) (step.Step, error) {
 // UpgradePulumiVersions reads the current Pulumi SDK version from go.mod and applies it to:
 // sdk/go.mod
 // examples/go.mod - we also infer the `pkg` version here and add it.
-func BridgePulumiVersions(ctx Context, repo ProviderRepo) step.Step {
+func BridgePulumiVersions(ctx context.Context, repo ProviderRepo) step.Step {
 	// When we've updated the bridge version, we need to update the corresponding pulumi version in sdk/go.mod.
 	// It needs to match the version used in provider/go.mod, which is *not* necessarily `latest`.
 	var newSdkVersion string

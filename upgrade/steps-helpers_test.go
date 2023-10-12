@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestGetRepoExpectedLocation(t *testing.T) {
-	ctx := Context{
+	ctx := &Context{
 		GoPath: "/Users/myuser/go",
 	}
 
@@ -32,7 +33,7 @@ func TestGetRepoExpectedLocation(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(fmt.Sprintf("(%s,%s,%s)", tt.cwd, tt.repoPath, tt.expected), func(t *testing.T) {
-			expected, err := getRepoExpectedLocation(ctx, tt.cwd, tt.repoPath)
+			expected, err := getRepoExpectedLocation(ctx.Wrap(context.Background()), tt.cwd, tt.repoPath)
 			expected = trimSeparators(expected)
 			assert.Nil(t, err)
 			assert.Equal(t, trimSeparators(tt.expected), expected)
