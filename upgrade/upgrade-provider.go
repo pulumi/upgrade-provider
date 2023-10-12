@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
+	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
 type CodeMigration = func(ctx context.Context, repo ProviderRepo) (step.Step, error)
@@ -35,22 +37,19 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
 
-	ok := step.Run(ctx, step.Combined("Setting Up Environment",
-		step.Env("GOWORK", "off"),
-		step.Env("PULUMI_MISSING_DOCS_ERROR", func() string {
-			if GetContext(ctx).AllowMissingDocs {
-				return "false"
-			}
-			return "true"
-		}()),
-		step.Env("PULUMI_CONVERT_EXAMPLES_CACHE_DIR", ""),
-	))
-	if !ok {
-		return ErrHandled
+	missingDocs := "true"
+	if GetContext(ctx).AllowMissingDocs {
+		missingDocs = "false"
 	}
 
+	ctx = stepv2.WithEnv(ctx,
+		&stepv2.EnvVar{Key: "GOWORK", Value: "off"},
+		&stepv2.EnvVar{Key: "PULUMI_MISSING_DOCS_ERROR", Value: missingDocs},
+		&stepv2.EnvVar{Key: "PULUMI_CONVERT_EXAMPLES_CACHE_DIR", Value: ""},
+		&stepv2.Silent{},
+	)
+
 	discoverSteps := []step.Step{
-		OrgProviderRepos(ctx, repoOrg, repoName).AssignTo(&repo.root),
 		PullDefaultBranch(ctx, "origin").In(&repo.root).
 			AssignTo(&repo.defaultBranch),
 	}
@@ -245,9 +244,18 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 			}))
 	}
 
-	ok = step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
-	if !ok {
-		return ErrHandled
+	if pErr := stepv2.PipelineCtx(ctx, "Discovering Repository", func(ctx context.Context) {
+		repoPath := path.Join("github.com", repoOrg, repoName)
+		repo.root = stepv2.Call11E(ctx, fmt.Sprintf("Ensure '%s'", repoPath), ensureUpstreamRepoV2, repoPath)
+		ok := step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
+		if !ok {
+			err = ErrHandled
+		}
+	}); pErr != nil {
+		return pErr
+	}
+	if err != nil {
+		return err
 	}
 
 	if GetContext(ctx).UpgradeProviderVersion {
@@ -281,10 +289,17 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() && GetContext(ctx).UpgradeProviderVersion {
-		ok = step.Run(ctx, upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod).
-			AssignTo(&forkedProviderUpstreamCommit))
-		if !ok {
-			return ErrHandled
+		if pErr := stepv2.PipelineCtx(ctx, "Upgrade Upstream Fork", func(ctx context.Context) {
+			ok := step.Run(ctx, upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod).
+				AssignTo(&forkedProviderUpstreamCommit))
+			if !ok {
+				err = ErrHandled
+			}
+		}); pErr != nil {
+			return pErr
+		}
+		if err != nil {
+			return err
 		}
 	}
 
@@ -452,10 +467,15 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade),
 	)
 
-	ok = step.Run(ctx, step.Combined("Update Artifacts", artifacts...))
-	if !ok {
-		return ErrHandled
+	pErr := stepv2.PipelineCtx(ctx, "Update Artifacts", func(ctx context.Context) {
+		ok := step.Run(ctx, step.Combined("Update Artifacts", artifacts...))
+		if !ok {
+			err = ErrHandled
+		}
+	})
+	if pErr != nil {
+		return pErr
 	}
 
-	return nil
+	return err
 }

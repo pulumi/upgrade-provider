@@ -20,6 +20,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/pulumi/upgrade-provider/step"
+	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
 // A "git commit" step that is resilient to no changes in the directory.
@@ -156,6 +157,48 @@ func ensureUpstreamRepo(ctx context.Context, repoPath string) step.Step {
 			return "done", exec.CommandContext(ctx, "git", "status", "--short").Run()
 		}).In(&expectedLocation),
 	).Return(&expectedLocation)
+}
+
+func ensureUpstreamRepoV2(ctx context.Context, repoPath string) (string, error) {
+	expectedLocation := stepv2.Call11E(ctx, "Expected Location",
+		func(ctx context.Context, repoPath string) (string, error) {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return "", fmt.Errorf("could not resolve cwd: %w", err)
+			}
+			expectedLocation, err := getRepoExpectedLocation(ctx, cwd, repoPath)
+			if err != nil {
+				return "", err
+			}
+			return expectedLocation, nil
+		}, repoPath)
+
+	repoExists := stepv2.Call11E(ctx, "Already exists?", func(ctx context.Context, path string) (bool, error) {
+		if info, err := os.Stat(path); err == nil {
+			if !info.IsDir() {
+				return false, fmt.Errorf("'%s' not a directory", path)
+			}
+			return true, nil
+		}
+		return false, nil
+	}, expectedLocation)
+
+	if repoExists {
+		stepv2.SetLabel(ctx, "Skipping download - repo already exists")
+	} else {
+		targetDir := stepv2.NamedValue(ctx, "Repo Dir", filepath.Dir(expectedLocation))
+		err := os.MkdirAll(targetDir, 0700)
+		if err != nil && !os.IsExist(err) {
+			return "", err
+		}
+		stepv2.Cmd(ctx, "git", "clone", fmt.Sprintf("https://%s.git", repoPath), expectedLocation)
+	}
+
+	stepv2.Call00(ctx, "Validating repo", func(ctx context.Context) {
+		stepv2.Cmd(ctx, "git", "status", "--short")
+	})
+
+	return expectedLocation, nil
 }
 
 var javaVersionRegexp *regexp.Regexp = regexp.MustCompile(`JAVA_GEN_VERSION := (v[0-9]+\.[0-9]+\.[0-9]+)`)
