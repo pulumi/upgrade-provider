@@ -28,8 +28,10 @@ type Context struct {
 	InferVersion  bool
 
 	UpgradeBridgeVersion bool
-	UpgradeSdkVersion    bool
-	UpgradePfVersion     bool
+	TargetBridgeRef      Ref
+
+	UpgradeSdkVersion bool
+	UpgradePfVersion  bool
 
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool

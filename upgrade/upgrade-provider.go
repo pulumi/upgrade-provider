@@ -13,6 +13,7 @@ import (
 	"golang.org/x/mod/module"
 	goSemver "golang.org/x/mod/semver"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 )
@@ -30,7 +31,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 		name: repoName,
 		org:  repoOrg,
 	}
-	var targetBridgeVersion, targetPfVersion, tfSDKUpgrade string
+	var targetBridgeVersion Ref
+	var targetPfVersion, tfSDKUpgrade string
 	var tfSDKTargetSHA string
 	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
@@ -141,23 +143,36 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 	if GetContext(ctx).UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Bridge Update", func(context.Context) (string, error) {
-				refs, err := gitRefsOf(ctx,
-					"https://github.com/pulumi/pulumi-terraform-bridge.git", "tags")
-				if err != nil {
-					return "", err
+				switch v := ctx.TargetBridgeRef.(type) {
+				case nil:
+					return "", fmt.Errorf("--target-bridge-version is required here")
+				case *HashReference:
+					targetBridgeVersion = v
+				case *Version:
+					// If our target upgrade version is the same as our
+					// current version, we skip the update.
+					if v.String() == goMod.Bridge.Version {
+						ctx.UpgradeBridgeVersion = false
+						return fmt.Sprintf("Up to date at %s", v.String()), nil
+					}
+
+					targetBridgeVersion = v
+				case *Latest:
+					refs, err := gitRefsOf(ctx,
+						"https://github.com/pulumi/pulumi-terraform-bridge.git", "tags")
+					if err != nil {
+						return "", err
+					}
+					latest := latestSemverTag("", refs)
+					// If our target upgrade version is the same as our
+					// current version, we skip the update.
+					if latest.Original() == goMod.Bridge.Version {
+						GetContext(ctx).UpgradeBridgeVersion = false
+						return fmt.Sprintf("Up to date at %s", latest.Original()), nil
+					}
+					targetBridgeVersion = &Version{semver.MustParse(latest.Original())}
 				}
-
-				latest := latestSemverTag("", refs)
-
-				// If our target upgrade version is the same as our
-				// current version, we skip the update.
-				if latest.Original() == goMod.Bridge.Version {
-					GetContext(ctx).UpgradeBridgeVersion = false
-					return fmt.Sprintf("Up to date at %s", latest.Original()), nil
-				}
-
-				targetBridgeVersion = latest.Original()
-				return fmt.Sprintf("%s -> %s", goMod.Bridge.Version, latest.Original()), nil
+				return fmt.Sprintf("%s -> %v", goMod.Bridge.Version, targetBridgeVersion), nil
 			}),
 			step.F("Planning Plugin SDK Update", func(context.Context) (string, error) {
 				current, ok, err := originalGoVersionOf(ctx, repo, "provider/go.mod",
@@ -293,7 +308,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 		repo.workingBranch = fmt.Sprintf("upgrade-%s-to-v%s",
 			ctx.UpstreamProviderName, upgradeTarget.Version)
 	} else if ctx.UpgradeBridgeVersion {
-		contract.Assertf(targetBridgeVersion != "",
+		contract.Assertf(targetBridgeVersion != nil,
 			"We are upgrading the bridge, so we must have a target version")
 		repo.workingBranch = fmt.Sprintf("upgrade-pulumi-terraform-bridge-to-%s",
 			targetBridgeVersion)
@@ -346,7 +361,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 
 	if GetContext(ctx).UpgradeBridgeVersion {
 		steps = append(steps, step.Cmd("go", "get",
-			"github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion).
+			"github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion.String()).
 			In(repo.providerDir()))
 
 		steps = append(steps, step.Cmd("go", "get",

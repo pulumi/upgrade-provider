@@ -32,6 +32,8 @@ const (
 
 func cmd() *cobra.Command {
 	var targetVersion string
+	var targetBridgeRef string
+
 	gopath, ok := os.LookupEnv("GOPATH")
 	if !ok {
 		gopath = build.Default.GOPATH
@@ -97,6 +99,14 @@ func cmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("--target-version=%s: %w",
 						targetVersion, err)
+				}
+			}
+
+			if targetBridgeRef != "" {
+				context.TargetBridgeRef, err = upgrade.ParseRef(targetBridgeRef)
+				if err != nil {
+					return fmt.Errorf("--target-bridge-version=%s: %w",
+						targetBridgeRef, err)
 				}
 			}
 
@@ -237,6 +247,9 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 
 	cmd.PersistentFlags().StringVar(&context.JavaVersion, "java-version", "",
 		"The version of pulumi-java-gen to target.")
+
+	cmd.PersistentFlags().StringVar(&targetBridgeRef, "target-bridge-version", "latest",
+		`The desired bridge version to upgrade to. Git hash references permitted. Defaults to "latest".`)
 
 	return cmd
 }
