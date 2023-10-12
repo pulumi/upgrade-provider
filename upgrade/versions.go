@@ -7,8 +7,8 @@ import (
 )
 
 type Ref interface {
+	fmt.Stringer
 	refish()
-	String() string
 }
 
 type Version struct {
