@@ -18,7 +18,7 @@ type Version struct {
 func (*Version) refish() {}
 
 func (x *Version) String() string {
-	return x.SemVer.String()
+	return x.SemVer.Original()
 }
 
 type HashReference struct {
