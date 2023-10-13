@@ -117,10 +117,15 @@ func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, er
 
 func prBody(ctx context.Context, repo ProviderRepo,
 	upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
-	targetBridge Ref, tfSDKUpgrade string) string {
+	targetBridge Ref, tfSDKUpgrade string, osArgs []string) string {
 	b := new(strings.Builder)
-	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n",
-		strings.Join(os.Args[1:], " "))
+
+	argsSpliced := strings.ReplaceAll(
+		strings.Join(osArgs[1:], " "),
+		fmt.Sprintf(" --pr-description %s", GetContext(ctx).PRDescription),
+		"")
+
+	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n", argsSpliced)
 
 	fmt.Fprintf(b, "\n---\n\n")
 

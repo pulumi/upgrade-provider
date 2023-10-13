@@ -333,7 +333,7 @@ func InformGitHub(
 		"--head", repo.workingBranch,
 		"--reviewer", GetContext(ctx).PrReviewers,
 		"--title", prTitle,
-		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade),
+		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, os.Args),
 	).In(&repo.root)
 	return step.Combined("GitHub",
 		pushBranch,
