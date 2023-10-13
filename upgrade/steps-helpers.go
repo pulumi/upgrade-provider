@@ -166,6 +166,10 @@ func prBody(ctx context.Context, repo ProviderRepo,
 			parts[0], parts[1])
 	}
 
+	if d := GetContext(ctx).PRDescription; d != "" {
+		fmt.Fprintf(b, "\n\n%s\n\n", d)
+	}
+
 	return b.String()
 }
 

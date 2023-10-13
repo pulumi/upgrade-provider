@@ -251,6 +251,9 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 	cmd.PersistentFlags().StringVar(&targetBridgeRef, "target-bridge-version", "latest",
 		`The desired bridge version to upgrade to. Git hash references permitted.`)
 
+	cmd.PersistentFlags().StringVar(&context.PRDescription, "pr-description", "",
+		`Extra text to insert in the generated pull request description.`)
+
 	return cmd
 }
 

@@ -57,6 +57,8 @@ type Context struct {
 	PrReviewers        string
 	PrAssign           string
 	CreateFailureIssue bool
+
+	PRDescription string
 }
 
 func (c *Context) Wrap(ctx context.Context) context.Context {
