@@ -117,7 +117,7 @@ func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, er
 
 func prBody(ctx context.Context, repo ProviderRepo,
 	upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
-	targetBridge, tfSDKUpgrade string) string {
+	targetBridge Ref, tfSDKUpgrade string) string {
 	b := new(strings.Builder)
 	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n",
 		strings.Join(os.Args[1:], " "))
@@ -154,7 +154,7 @@ func prBody(ctx context.Context, repo ProviderRepo,
 			goMod.Bridge.Version, targetBridge)
 	}
 	if GetContext(ctx).UpgradePfVersion {
-		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge/pf from %s to %s.\n",
+		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge/pf from %s to %v.\n",
 			goMod.Pf.Version, targetBridge)
 	}
 

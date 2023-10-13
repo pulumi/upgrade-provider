@@ -306,7 +306,7 @@ func UpgradeProviderVersion(
 
 func InformGitHub(
 	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
-	goMod *GoMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade string,
+	goMod *GoMod, targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
 ) step.Step {
 	pushBranch := step.Cmd("git", "push", "--set-upstream",
 		"origin", repo.workingBranch).In(&repo.root)
@@ -316,11 +316,11 @@ func InformGitHub(
 		prTitle = fmt.Sprintf("Upgrade %s to v%s",
 			ctx.UpstreamProviderName, target.Version)
 	} else if ctx.UpgradeBridgeVersion {
-		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion
+		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion.String()
 	} else if ctx.UpgradeCodeMigration {
 		prTitle = fmt.Sprintf("Code migration: %s", strings.Join(ctx.MigrationOpts, ", "))
 	} else if ctx.UpgradePfVersion {
-		prTitle = "Upgrade pulumi-terraform-bridge/pf to " + targetPfVersion
+		prTitle = "Upgrade pulumi-terraform-bridge/pf to " + targetPfVersion.String()
 	} else if ctx.UpgradeSdkVersion {
 		prTitle = "Upgrade Pulumi SDK dependency"
 	} else {
