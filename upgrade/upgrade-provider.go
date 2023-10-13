@@ -31,8 +31,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 		name: repoName,
 		org:  repoOrg,
 	}
-	var targetBridgeVersion Ref
-	var targetPfVersion, tfSDKUpgrade string
+	var targetBridgeVersion, targetPfVersion Ref
+	var tfSDKUpgrade string
 	var tfSDKTargetSHA string
 	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
@@ -230,21 +230,29 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 					GetContext(ctx).UpgradePfVersion = false
 					return "Unused", nil
 				}
-				refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
-					"tags")
-				if err != nil {
-					return "", err
-				}
-				targetVersion := latestSemverTag("pf/", refs)
+				switch ctx.TargetBridgeRef.(type) {
+				case *HashReference:
+					// if --target-bridge-version has specified a hash
+					// reference, use that reference for pf code as well
+					targetPfVersion = ctx.TargetBridgeRef
+				default:
+					// in all other cases, compute the latest pf tag
+					refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
+						"tags")
+					if err != nil {
+						return "", err
+					}
+					targetVersion := latestSemverTag("pf/", refs)
 
-				// If our target upgrade version is the same as our current version, we skip the update.
-				if targetVersion.Original() == goMod.Pf.Version {
-					GetContext(ctx).UpgradePfVersion = false
-					return fmt.Sprintf("Up to date at %s", targetVersion.String()), nil
-				}
+					// If our target upgrade version is the same as our current version, we skip the update.
+					if targetVersion.Original() == goMod.Pf.Version {
+						GetContext(ctx).UpgradePfVersion = false
+						return fmt.Sprintf("Up to date at %s", targetVersion.String()), nil
+					}
 
-				targetPfVersion = "v" + targetVersion.String()
-				return fmt.Sprintf("%s -> %s", goMod.Pf.Version, targetVersion.String()), nil
+					targetPfVersion = &Version{targetVersion}
+				}
+				return fmt.Sprintf("%s -> %s", goMod.Pf.Version, targetPfVersion), nil
 			}))
 	}
 
@@ -393,7 +401,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 	}
 	if GetContext(ctx).UpgradePfVersion {
 		steps = append(steps, step.Cmd("go", "get",
-			"github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion).
+			"github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion.String()).
 			In(repo.providerDir()))
 	}
 
