@@ -9,11 +9,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/module"
 	goSemver "golang.org/x/mod/semver"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 )
@@ -143,7 +143,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 	if GetContext(ctx).UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Bridge Update", func(context.Context) (string, error) {
-				switch v := ctx.TargetBridgeRef.(type) {
+				switch v := GetContext(ctx).TargetBridgeRef.(type) {
 				case nil:
 					return "", fmt.Errorf("--target-bridge-version is required here")
 				case *HashReference:
@@ -152,7 +152,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 					// If our target upgrade version is the same as our
 					// current version, we skip the update.
 					if v.String() == goMod.Bridge.Version {
-						ctx.UpgradeBridgeVersion = false
+						GetContext(ctx).UpgradeBridgeVersion = false
 						return fmt.Sprintf("Up to date at %s", v.String()), nil
 					}
 
@@ -230,11 +230,11 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 					GetContext(ctx).UpgradePfVersion = false
 					return "Unused", nil
 				}
-				switch ctx.TargetBridgeRef.(type) {
+				switch GetContext(ctx).TargetBridgeRef.(type) {
 				case *HashReference:
 					// if --target-bridge-version has specified a hash
 					// reference, use that reference for pf code as well
-					targetPfVersion = ctx.TargetBridgeRef
+					targetPfVersion = GetContext(ctx).TargetBridgeRef
 				default:
 					// in all other cases, compute the latest pf tag
 					refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
