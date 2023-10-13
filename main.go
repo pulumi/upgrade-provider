@@ -249,7 +249,7 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 		"The version of pulumi-java-gen to target.")
 
 	cmd.PersistentFlags().StringVar(&targetBridgeRef, "target-bridge-version", "latest",
-		`The desired bridge version to upgrade to. Git hash references permitted. Defaults to "latest".`)
+		`The desired bridge version to upgrade to. Git hash references permitted.`)
 
 	return cmd
 }
