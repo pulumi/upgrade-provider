@@ -117,10 +117,15 @@ func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, er
 
 func prBody(ctx context.Context, repo ProviderRepo,
 	upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
-	targetBridge Ref, tfSDKUpgrade string) string {
+	targetBridge Ref, tfSDKUpgrade string, osArgs []string) string {
 	b := new(strings.Builder)
-	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n",
-		strings.Join(os.Args[1:], " "))
+
+	argsSpliced := strings.ReplaceAll(
+		strings.Join(osArgs[1:], " "),
+		fmt.Sprintf(" --pr-description %s", GetContext(ctx).PRDescription),
+		"")
+
+	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n", argsSpliced)
 
 	fmt.Fprintf(b, "\n---\n\n")
 
@@ -164,6 +169,10 @@ func prBody(ctx context.Context, repo ProviderRepo,
 	if parts := strings.Split(tfSDKUpgrade, " -> "); len(parts) == 2 {
 		fmt.Fprintf(b, "- Upgrading pulumi/terraform-plugin-sdk from %s to %s.\n",
 			parts[0], parts[1])
+	}
+
+	if d := GetContext(ctx).PRDescription; d != "" {
+		fmt.Fprintf(b, "\n\n%s\n\n", d)
 	}
 
 	return b.String()
