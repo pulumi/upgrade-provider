@@ -18,8 +18,8 @@ type Env interface {
 }
 
 type StepInfo struct {
-	name   string
-	inputs []any
+	name, pipeline string
+	inputs         []any
 }
 
 // The name of the step being executed.
@@ -27,6 +27,9 @@ func (s StepInfo) Name() string { return s.name }
 
 // The inputs to the step being executed.
 func (s StepInfo) Inputs() []any { return s.inputs }
+
+// The name of the pipeline being executed.
+func (s StepInfo) Pipeline() string { return s.pipeline }
 
 type envKey struct{}
 

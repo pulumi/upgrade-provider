@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -11,7 +12,18 @@ import (
 )
 
 func main() {
-	if err := step.Pipeline("simple", pipeline); err != nil {
+	ctx := context.Background()
+	if file := os.Getenv("STEP_RECORD"); file != "" {
+		var closer io.Closer
+		ctx, closer = step.WithRecord(ctx, file)
+		defer func() {
+			if err := closer.Close(); err != nil {
+				panic(err)
+			}
+		}()
+	}
+
+	if err := step.PipelineCtx(ctx, "simple", pipeline); err != nil {
 		os.Exit(1)
 	}
 }

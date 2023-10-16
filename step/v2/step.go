@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -51,18 +50,6 @@ func Pipeline(name string, steps func(context.Context)) error {
 func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) (err error) {
 	if getPipeline(ctx) != nil {
 		panic("Cannot call pipeline when already in a pipeline")
-	}
-
-	if file := os.Getenv("STEP_RECORD"); file != "" {
-		record := new(Record)
-		ctx = WithEnv(ctx, record)
-		ctx = context.WithValue(ctx, recordKey{}, record)
-		defer func() {
-			wErr := os.WriteFile(file, record.Marshal(), 0600)
-			if err == nil {
-				err = wErr
-			}
-		}()
 	}
 
 	p := &pipeline{
@@ -205,8 +192,9 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 				silent = true
 			}
 			err := env.Enter(StepInfo{
-				name:   name,
-				inputs: inputs,
+				name:     name,
+				inputs:   inputs,
+				pipeline: p.title,
 			})
 			if errors.As(err, &retImmediatly) {
 			} else if err != nil {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,20 +44,46 @@ type Replay struct {
 		inputs json.RawMessage
 		index  int
 	}
+
+	pipeline int // The index of the current pipline
+	r        *replayV1
+
 	next  int // The index of the next step the replay should contain
 	steps []Step
 }
 
 func NewReplay(t *testing.T, source []byte) *Replay {
-	var s struct {
-		Steps []Step `json:"steps"`
-	}
+	var s replayV1
 	err := json.Unmarshal(source, &s)
 	require.NoError(t, err)
-	return &Replay{steps: s.Steps, t: t}
+	return &Replay{t: t, r: &s}
+}
+
+func (r *Replay) setPipeline(name string) {
+	if name == "" {
+		return
+	}
+	for i := r.pipeline; i < len(r.r.Pipelines); i++ {
+		p := r.r.Pipelines[i]
+		if p.Name == name {
+			// We need to set up Replay for this pipline.
+			if r.pipeline != i || (i == 0 && r.steps == nil) {
+				r.steps = make([]Step, len(p.Steps))
+				for i, v := range p.Steps {
+					r.steps[i] = *v
+					r.next = 0
+					r.pipeline = i
+				}
+			}
+			return
+		}
+	}
+
+	r.t.Logf("Failed to find pipline %q", name)
 }
 
 func (r *Replay) Enter(info StepInfo) error {
+	r.setPipeline(info.Pipeline())
 	current := r.next
 	r.t.Logf("Searching for step: %q (from step %d)", info.Name(), current)
 	for {
@@ -147,16 +175,63 @@ func (r *Replay) String() string { return "replaying" }
 // replacing.
 type ReturnImmediatly struct{ Out []any }
 
-type Record struct {
+type FinishRecord func() error
+
+// WithRecord embeds a recorder in the context. The recorder will write a re-playable
+// context to filePath.
+//
+// Example usage:
+//
+//	if file := os.Getenv("STEP_RECORD"); file != "" {
+//		var closer io.Closer
+//		ctx, closer = WithRecord(ctx, file)
+//		defer func() {
+//			if err := closer(); err != nil {
+//				panic(err)
+//			}
+//		}
+//	}
+//
+func WithRecord(ctx context.Context, filePath string) (context.Context, io.Closer) {
+	record := &record{filePath: filePath}
+	ctx = WithEnv(ctx, record)
+	ctx = context.WithValue(ctx, recordKey{}, record)
+	return ctx, record
+}
+
+type record struct {
+	filePath  string
+	pipelines []*replayPipeline
+}
+
+type replayPipeline struct {
+	name         string
 	steps        []*Step
 	partialSteps []*Step
 }
+
+func (r *record) Close() error { return os.WriteFile(r.filePath, r.Marshal(), 0600) }
 
 func (r ReturnImmediatly) Error() string {
 	return "a signal error for an immediate return"
 }
 
-func (r *Record) Enter(info StepInfo) error {
+func (r *record) pipeline(name string) *replayPipeline {
+	latest := func() *replayPipeline { return r.pipelines[len(r.pipelines)-1] }
+	if name == "" {
+		return latest()
+	}
+	if len(r.pipelines) == 0 || latest().name != name {
+		p := &replayPipeline{
+			name: name,
+		}
+		r.pipelines = append(r.pipelines, p)
+		return p
+	}
+	return latest()
+}
+
+func (r *record) Enter(info StepInfo) error {
 	result, err := json.Marshal(info.Inputs())
 	if err != nil {
 		return fmt.Errorf("cannot record: %w", err)
@@ -165,14 +240,16 @@ func (r *Record) Enter(info StepInfo) error {
 		Name:   info.Name(),
 		Inputs: result,
 	}
-	r.partialSteps = append(r.partialSteps, s)
-	r.steps = append(r.steps, s)
+	p := r.pipeline(info.Pipeline())
+	p.partialSteps = append(p.partialSteps, s)
+	p.steps = append(p.steps, s)
 	return nil
 }
 
-func (r *Record) Exit(output []any) error {
-	topInput := r.partialSteps[len(r.partialSteps)-1]
-	r.partialSteps = r.partialSteps[:len(r.partialSteps)-1]
+func (r *record) Exit(output []any) error {
+	p := r.pipeline("")
+	topInput := p.partialSteps[len(p.partialSteps)-1]
+	p.partialSteps = p.partialSteps[:len(p.partialSteps)-1]
 
 	result, err := json.Marshal(output)
 	if err != nil {
@@ -183,12 +260,25 @@ func (r *Record) Exit(output []any) error {
 	return nil
 }
 
-func (r *Record) String() string { return "Recording" }
+func (r *record) String() string { return "Recording" }
 
-func (r *Record) Marshal() []byte {
-	m, err := json.MarshalIndent(struct {
-		Steps []*Step `json:"steps"`
-	}{Steps: r.steps}, "", "  ")
+type replayV1 struct {
+	Pipelines []recordV1 `json:"pipelines"`
+}
+
+type recordV1 struct {
+	Name  string  `json:"name"`
+	Steps []*Step `json:"steps"`
+}
+
+func (r *record) Marshal() []byte {
+	pipelines := make([]recordV1, len(r.pipelines))
+
+	for i, p := range r.pipelines {
+		pipelines[i] = recordV1{p.name, p.steps}
+	}
+
+	m, err := json.MarshalIndent(replayV1{pipelines}, "", "  ")
 	if err != nil {
 		panic(err)
 	}
@@ -199,11 +289,12 @@ type recordKey struct{}
 
 // Mark the calling context as an impure function.
 func MarkImpure(ctx context.Context) {
-	r, ok := ctx.Value(recordKey{}).(*Record)
+	r, ok := ctx.Value(recordKey{}).(*record)
 	if !ok {
 		// If we are not run in a record context, we do nothing here.
 		return
 	}
-	current := r.partialSteps[len(r.partialSteps)-1]
+	p := r.pipeline("")
+	current := p.partialSteps[len(p.partialSteps)-1]
 	current.Impure = true
 }
