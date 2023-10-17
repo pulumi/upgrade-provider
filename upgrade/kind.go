@@ -108,7 +108,7 @@ func GetRepoKind(ctx context.Context, repo ProviderRepo) (*GoMod, error) {
 		// If we successfully opened provider/go.mod but didn't find any reference
 		// to "github.com/pulumi/pulumi-terraform-bridge/pf", we assume that the
 		// provider doesn't use /pf and it doesn't make sense to upgrade.
-		setFalse(&GetContext(ctx).UpgradePfVersion)
+		GetContext(ctx).UpgradePfVersion = false
 	}
 
 	tfProviderRepoName := GetContext(ctx).UpstreamProviderName
@@ -213,8 +213,4 @@ func GetRepoKind(ctx context.Context, repo ProviderRepo) (*GoMod, error) {
 	}
 
 	return &out, nil
-}
-
-func setFalse(b *bool) {
-	*b = false
 }
