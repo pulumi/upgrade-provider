@@ -219,7 +219,11 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		ins := make([]reflect.Value, len(inputs)+1)
 		ins[0] = reflect.ValueOf(ctx)
 		for i, v := range inputs {
-			ins[i+1] = reflect.ValueOf(v)
+			if v == nil {
+				ins[i+1] = reflect.Zero(reflect.TypeOf(f).In(i + 1))
+			} else {
+				ins[i+1] = reflect.ValueOf(v)
+			}
 		}
 		if retImmediatly.Out == nil {
 			outs := reflect.ValueOf(f).Call(ins)
