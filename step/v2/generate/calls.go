@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	maxInputs  = 7
-	maxOutputs = 7
+	maxInputs  = 8
+	maxOutputs = 8
 )
 
 func main() {
