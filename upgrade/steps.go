@@ -20,23 +20,19 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/pulumi/upgrade-provider/step"
+	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
 // A "git commit" step that is resilient to no changes in the directory.
-// ß
+//
 // This is required to accommodate failure and retry in the `git` push steps.
-func GitCommit(ctx context.Context, msg string) step.Step {
-	return step.Computed(func() step.Step {
-		check, err := exec.CommandContext(ctx, "git", "status", "--porcelain=1").CombinedOutput()
-		description := fmt.Sprintf(`git commit -m "%s"`, msg)
-		if err != nil {
-			return step.Error("git commit", err)
-		}
-		if len(check) > 0 {
-			return step.Cmd("git", "commit", "-m", msg)
-		}
-		return step.Value(description, "nothing to commit")
-	})
+func gitCommit(ctx context.Context, msg string) {
+	status := stepv2.Cmd(ctx, "git", "status", "--porcelain=1")
+	if len(status) > 0 {
+		stepv2.Cmd(ctx, "git", "commit", "-m", msg)
+	} else {
+		stepv2.SetLabel(ctx, msg+": nothing to commit")
+	}
 }
 
 // Upgrade the upstream fork of a pulumi provider.
@@ -307,9 +303,11 @@ func UpgradeProviderVersion(
 func InformGitHub(
 	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
-) step.Step {
-	pushBranch := step.Cmd("git", "push", "--set-upstream",
-		"origin", repo.workingBranch).In(&repo.root)
+	osArgs []string,
+) error {
+	ctx = stepv2.WithEnv(ctx, &stepv2.Cwd{To: repo.root})
+
+	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch)
 
 	var prTitle string
 	if ctx := GetContext(ctx); ctx.UpgradeProviderVersion {
@@ -324,38 +322,32 @@ func InformGitHub(
 	} else if ctx.UpgradeSdkVersion {
 		prTitle = "Upgrade Pulumi SDK dependency"
 	} else {
-		panic("Unknown action")
+		return fmt.Errorf("Unknown action")
 	}
 
-	createPR := step.Cmd("gh", "pr", "create",
+	stepv2.Cmd(ctx, "gh", "pr", "create",
 		"--assignee", GetContext(ctx).PrAssign,
 		"--base", repo.defaultBranch,
 		"--head", repo.workingBranch,
 		"--reviewer", GetContext(ctx).PrReviewers,
 		"--title", prTitle,
-		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, os.Args),
-	).In(&repo.root)
-	return step.Combined("GitHub",
-		pushBranch,
-		createPR,
-		step.Computed(func() step.Step {
-			// If we are only upgrading the bridge, we wont have a list of
-			// issues.
-			if !GetContext(ctx).UpgradeProviderVersion {
-				return nil
-			}
+		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs))
 
-			// This PR will close issues, so we assign the issues same assignee as
-			// the PR itself.
-			issues := make([]step.Step, len(target.GHIssues))
-			for i, t := range target.GHIssues {
-				issues[i] = step.Cmd(
-					"gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-					"--add-assignee", GetContext(ctx).PrAssign).In(&repo.root)
-			}
-			return step.Combined("Assign Issues", issues...)
-		}),
-	)
+	// If we are only upgrading the bridge, we wont have a list of issues.
+	if !GetContext(ctx).UpgradeProviderVersion {
+		return nil
+	}
+
+	stepv2.Call00(ctx, "Assign Issues", func(ctx context.Context) {
+		// This PR will close issues, so we assign the issues same assignee as the
+		// PR itself.
+		for _, t := range target.GHIssues {
+			stepv2.Cmd(ctx, "gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
+				"--add-assignee", GetContext(ctx).PrAssign)
+		}
+	})
+
+	return nil
 }
 
 // Most if not all of our TF SDK based providers use a "replace" based version of
@@ -699,6 +691,20 @@ func UpdateFileWithSignal(desc, path string, didChange *bool, f func([]byte) ([]
 		}
 		*didChange = true
 		return "", os.WriteFile(path, newBytes, stats.Mode().Perm())
+	})
+}
+
+func UpdateFileV2(ctx context.Context, path string, update func(context.Context, string) string) bool {
+	return stepv2.Call01(ctx, "Update "+path, func(ctx context.Context) bool {
+		content := stepv2.ReadFile(ctx, path)
+		updated := stepv2.Call11(ctx, "update", update, content)
+		if content == updated {
+			stepv2.SetLabel(ctx, "No change")
+			return false
+		}
+
+		stepv2.WriteFile(ctx, path, updated)
+		return true
 	})
 }
 
