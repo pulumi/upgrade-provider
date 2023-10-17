@@ -191,7 +191,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 			if _, ok := env.(*Silent); ok {
 				silent = true
 			}
-			err := env.Enter(StepInfo{
+			err := env.Enter(ctx, StepInfo{
 				name:     name,
 				inputs:   inputs,
 				pipeline: p.title,
@@ -201,7 +201,7 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 				p.errExit(err)
 			}
 			defer func() {
-				err := env.Exit(outputs)
+				err := env.Exit(ctx, outputs)
 				if err != nil && p.failed == nil {
 					p.errExit(err)
 				}

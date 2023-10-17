@@ -12,9 +12,9 @@ import (
 type Env interface {
 	fmt.Stringer
 	// Enter is called when a new Call occurs within the scope of the Env.
-	Enter(StepInfo) error
+	Enter(context.Context, StepInfo) error
 	// Exit is called after a Call has exited within the scope of the context.
-	Exit([]any) error
+	Exit(context.Context, []any) error
 }
 
 type StepInfo struct {
@@ -54,7 +54,7 @@ type EnvVar struct {
 	depth   int
 }
 
-func (e *EnvVar) Enter(StepInfo) error {
+func (e *EnvVar) Enter(context.Context, StepInfo) error {
 	e.depth++
 	if e.depth == 1 {
 		e.restore = os.Getenv(e.Key)
@@ -63,7 +63,7 @@ func (e *EnvVar) Enter(StepInfo) error {
 	return nil
 }
 
-func (e *EnvVar) Exit([]any) error {
+func (e *EnvVar) Exit(context.Context, []any) error {
 	e.depth--
 	if e.depth > 0 {
 		return nil
@@ -82,9 +82,9 @@ type Cwd struct {
 	depth       int
 }
 
-func (e *Cwd) Enter(StepInfo) error {
+func (e *Cwd) Enter(ctx context.Context, _ StepInfo) error {
 	e.depth++
-	if e.depth != 1 {
+	if e.depth != 1 || IsReplay(ctx) {
 		return nil
 	}
 	cwd, err := os.Getwd()
@@ -95,9 +95,9 @@ func (e *Cwd) Enter(StepInfo) error {
 	return os.Chdir(e.To)
 }
 
-func (e *Cwd) Exit([]any) error {
+func (e *Cwd) Exit(ctx context.Context, _ []any) error {
 	defer func() { e.depth-- }()
-	if e.depth == 1 {
+	if e.depth == 1 && !IsReplay(ctx) {
 		return os.Chdir(e.restore)
 	}
 	return nil
@@ -108,6 +108,6 @@ func (e *Cwd) String() string { return fmt.Sprintf("cd %q", e.To) }
 // Silence all output from the step
 type Silent struct{}
 
-func (*Silent) Enter(StepInfo) error { return nil }
-func (*Silent) Exit([]any) error     { return nil }
-func (*Silent) String() string       { return "silent" }
+func (*Silent) Enter(context.Context, StepInfo) error { return nil }
+func (*Silent) Exit(context.Context, []any) error     { return nil }
+func (*Silent) String() string                        { return "silent" }

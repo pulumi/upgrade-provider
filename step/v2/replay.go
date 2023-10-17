@@ -63,6 +63,7 @@ func (r *Replay) setPipeline(name string) {
 	if name == "" {
 		return
 	}
+	r.t.Logf("Searching for pipeline %q", name)
 	for i := r.pipeline; i < len(r.r.Pipelines); i++ {
 		p := r.r.Pipelines[i]
 		if p.Name == name {
@@ -75,30 +76,40 @@ func (r *Replay) setPipeline(name string) {
 					r.pipeline = i
 				}
 			}
+			r.t.Logf("Found pipeline %q", name)
 			return
 		}
+		r.t.Logf("Skipping pipeline %q", name)
 	}
 
 	r.t.Logf("Failed to find pipline %q", name)
 }
 
-func (r *Replay) Enter(info StepInfo) error {
-	r.setPipeline(info.Pipeline())
+func (r *Replay) findNextStep(name string) int {
 	current := r.next
-	r.t.Logf("Searching for step: %q (from step %d)", info.Name(), current)
 	for {
 		// We are attempting to find the next step, but there is no next step.
 		if len(r.steps) <= current {
-			current = -1 // -1 indicates not found
-			break
+			return -1
 		}
 		// We have found what looks like the correct step
-		if r.steps[current].Name == info.Name() {
-			r.t.Logf("Found expected next step: %q", info.Name())
-			break
+		if r.steps[current].Name == name {
+			r.t.Logf("Found expected next step: %q", name)
+			return current
 		}
 		current++
+
+		// The replay has a recorded step that didn't show up. This indicates an
+		// error.
+		r.t.Logf("Required step %q skipped.", r.steps[current].Name)
+		r.t.Fail()
 	}
+}
+
+func (r *Replay) Enter(_ context.Context, info StepInfo) error {
+	r.setPipeline(info.Pipeline())
+	r.t.Logf("Searching for step: %q (from step %d)", info.Name(), r.next)
+	current := r.findNextStep(info.Name())
 	inputBytes, err := json.Marshal(info.Inputs())
 	if err != nil {
 		return err
@@ -128,7 +139,7 @@ func (r *Replay) Enter(info StepInfo) error {
 	return nil
 }
 
-func (r *Replay) Exit(output []any) error {
+func (r *Replay) Exit(_ context.Context, output []any) error {
 	if len(r.pending) == 0 {
 		return fmt.Errorf("internal: exit without entry")
 	}
@@ -231,7 +242,7 @@ func (r *record) pipeline(name string) *replayPipeline {
 	return latest()
 }
 
-func (r *record) Enter(info StepInfo) error {
+func (r *record) Enter(_ context.Context, info StepInfo) error {
 	result, err := json.Marshal(info.Inputs())
 	if err != nil {
 		return fmt.Errorf("cannot record: %w", err)
@@ -246,7 +257,7 @@ func (r *record) Enter(info StepInfo) error {
 	return nil
 }
 
-func (r *record) Exit(output []any) error {
+func (r *record) Exit(_ context.Context, output []any) error {
 	p := r.pipeline("")
 	topInput := p.partialSteps[len(p.partialSteps)-1]
 	p.partialSteps = p.partialSteps[:len(p.partialSteps)-1]
@@ -289,6 +300,9 @@ type recordKey struct{}
 
 // Mark the calling context as an impure function.
 func MarkImpure(ctx context.Context) {
+	if IsReplay(ctx) {
+		HaltOnError(ctx, fmt.Errorf("Calling impure function in replay"))
+	}
 	r, ok := ctx.Value(recordKey{}).(*record)
 	if !ok {
 		// If we are not run in a record context, we do nothing here.
@@ -297,4 +311,13 @@ func MarkImpure(ctx context.Context) {
 	p := r.pipeline("")
 	current := p.partialSteps[len(p.partialSteps)-1]
 	current.Impure = true
+}
+
+func IsReplay(ctx context.Context) bool {
+	for _, v := range getEnvs(ctx) {
+		if _, ok := v.(*Replay); ok {
+			return true
+		}
+	}
+	return false
 }
