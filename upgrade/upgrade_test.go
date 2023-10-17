@@ -56,7 +56,7 @@ func TestInformGithub(t *testing.T) {
                     {
                         "name": "git",
                         "inputs": [
-                            "/opt/homebrew/bin/git push --set-upstream origin upgrade-terraform-provider-wavefront-to-v5.0.5"
+                            "git",  ["push", "--set-upstream", "origin", "upgrade-terraform-provider-wavefront-to-v5.0.5"]
                         ],
                         "outputs": [
                             "branch 'upgrade-terraform-provider-wavefront-to-v5.0.5' set up to track 'origin/upgrade-terraform-provider-wavefront-to-v5.0.5'.\n",
@@ -67,7 +67,7 @@ func TestInformGithub(t *testing.T) {
                     {
                         "name": "gh",
     "inputs": [
-      "/opt/homebrew/bin/gh pr create --assignee @me --base master --head upgrade-terraform-provider-wavefront-to-v5.0.5 --reviewer pulumi/Providers,lukehoban --title Upgrade terraform-provider-wavefront to v5.0.5 --body This PR was generated via `+"`$ upgrade-provider pulumi/pulumi-wavefront`"+`.\n\n---\n\n- Upgrading terraform-provider-wavefront from 5.0.3  to 5.0.5.\n\tFixes #232\n"
+      "gh",  ["pr", "create", "--assignee", "@me", "--base", "master", "--head", "upgrade-terraform-provider-wavefront-to-v5.0.5", "--reviewer", "pulumi/Providers,lukehoban", "--title", "Upgrade terraform-provider-wavefront to v5.0.5", "--body", "This PR was generated via `+"`$ upgrade-provider pulumi/pulumi-wavefront`"+`.\n\n---\n\n- Upgrading terraform-provider-wavefront from 5.0.3  to 5.0.5.\n\tFixes #232\n"]
     ],
     "outputs": [
       "https://github.com/pulumi/pulumi-wavefront/pull/239\n",
@@ -85,7 +85,7 @@ func TestInformGithub(t *testing.T) {
   {
     "name": "gh",
     "inputs": [
-      "/opt/homebrew/bin/gh issue edit 232 --add-assignee @me"
+      "gh", ["issue", "edit", "232", "--add-assignee", "@me"]
     ],
     "outputs": [
       "https://github.com/pulumi/pulumi-wavefront/issues/232\n",
