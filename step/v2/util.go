@@ -54,3 +54,19 @@ func HaltOnError(ctx context.Context, err error) {
 		return err
 	})(ctx)
 }
+
+// Run `f` in `dir`.
+//
+// If the dir does not exist, then the current pipeline will fail.
+func WithCwd(ctx context.Context, dir string, f func(context.Context)) {
+	c := &Cwd{To: dir}
+	err := c.Enter(ctx, StepInfo{})
+	HaltOnError(ctx, err)
+
+	defer func() {
+		err := c.Exit(ctx, nil)
+		HaltOnError(ctx, err)
+	}()
+
+	f(WithEnv(ctx, c))
+}

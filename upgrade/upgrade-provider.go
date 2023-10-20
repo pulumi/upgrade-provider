@@ -456,22 +456,30 @@ func tfgenAndBuildSDKs(
 	targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
 ) func(ctx context.Context) {
 	return func(ctx context.Context) {
-		env := func(path string) context.Context { return stepv2.WithEnv(ctx, &stepv2.Cwd{To: path}) }
-		root := env(repo.root)
-		stepv2.Cmd(env(*repo.providerDir()), "go", "mod", "tidy")
-		stepv2.Cmd(env(*repo.examplesDir()), "go", "mod", "tidy")
-		stepv2.Cmd(env(*repo.sdkDir()), "go", "mod", "tidy")
+		ctx = stepv2.WithEnv(ctx, &stepv2.Cwd{To: repo.root})
+
+		stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
+			stepv2.Cmd(ctx, "go", "mod", "tidy")
+		})
+
+		stepv2.WithCwd(ctx, *repo.examplesDir(), func(ctx context.Context) {
+			stepv2.Cmd(ctx, "go", "mod", "tidy")
+		})
+
+		stepv2.WithCwd(ctx, *repo.sdkDir(), func(ctx context.Context) {
+			stepv2.Cmd(ctx, "go", "mod", "tidy")
+		})
 
 		if GetContext(ctx).RemovePlugins {
 			stepv2.Cmd(ctx, "pulumi", "plugin", "rm", "--all", "--yes")
 		}
 
-		stepv2.Cmd(root, "make", "tfgen")
+		stepv2.Cmd(ctx, "make", "tfgen")
 
-		stepv2.Cmd(root, "git", "add", "--all")
+		stepv2.Cmd(ctx, "git", "add", "--all")
 		gitCommit(ctx, "make tfgen")
 
-		stepv2.Cmd(root, "make", "build_sdks")
+		stepv2.Cmd(ctx, "make", "build_sdks")
 
 		// Update sdk/go.mod's module after rebuilding the go SDK
 		if GetContext(ctx).MajorVersionBump {
@@ -484,12 +492,14 @@ func tfgenAndBuildSDKs(
 				new := base + fmt.Sprintf("/v%d", repo.currentVersion.Major()+1)
 				return strings.ReplaceAll(s, old, new)
 			}
-			UpdateFileV2(root, "sdk/go.mod", update)
 
-			stepv2.Cmd(env(*repo.sdkDir()), "go", "mod", "tidy")
+			stepv2.WithCwd(ctx, *repo.sdkDir(), func(ctx context.Context) {
+				UpdateFileV2(ctx, "go.mod", update)
+				stepv2.Cmd(ctx, "go", "mod", "tidy")
+			})
 		}
 
-		stepv2.Cmd(root, "git", "add", "--all")
+		stepv2.Cmd(ctx, "git", "add", "--all")
 
 		gitCommit(ctx, "make build_sdks")
 
