@@ -5,28 +5,25 @@
 package step
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
 	"runtime"
-	"strings"
-	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 //go:generate go run ./generate/calls.go
 
 type pipeline struct {
-	title     string
-	callstack []string
-	failed    error
-	spinner   *spinner.Spinner
-	labels    []string
+	title  string
+	failed error
+
+	// The display that the pipeline should use.
+	//
+	// display may be nil. Call p.getDisplay() for a non-nil display.
+	display Display
 }
 
 type pipelineKey struct{}
@@ -43,21 +40,45 @@ func getPipeline(ctx context.Context) *pipeline {
 	return v.(*pipeline)
 }
 
-func Pipeline(name string, steps func(context.Context)) error {
-	return PipelineCtx(context.Background(), name, steps)
+func (p *pipeline) getDisplay() Display {
+	if p == nil || p.display == nil {
+		return nullDisplay
+	}
+	return p.display
 }
 
-func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) (err error) {
+// A pipeline option.
+type Option func(opts *options)
+
+type options struct {
+	display Display
+}
+
+// Launch a pipeline called `name`.
+//
+// The pipeline will call `steps` with the context necessary to call annotated functions.
+func Pipeline(name string, steps func(context.Context), opts ...Option) error {
+	return PipelineCtx(context.Background(), name, steps, opts...)
+}
+
+// Launch a pipeline called `name`.
+//
+// The pipeline will call `steps` with the context necessary to call annotated functions.
+//
+// That context will inherit from `ctx`.
+func PipelineCtx(ctx context.Context, name string, steps func(context.Context), opts ...Option) error {
 	if getPipeline(ctx) != nil {
-		panic("Cannot call pipeline when already in a pipeline")
+		panic("Cannot call `PipelineCtx` when already in a pipeline")
+	}
+
+	var options options
+	for _, o := range opts {
+		o(&options)
 	}
 
 	p := &pipeline{
-		title: name,
-		spinner: spinner.New([]string{"|", "/", "-", "\\"},
-			time.Millisecond*250,
-			spinner.WithHiddenCursor(true),
-		),
+		title:   name,
+		display: options.display,
 	}
 
 	// If we are initially silent, don't bother to create and start a spinner
@@ -65,122 +86,64 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context)) 
 	for _, env := range getEnvs(ctx) {
 		_, silent = env.(*Silent)
 		if silent {
+			p.display = nullDisplay
 			break
 		}
 	}
 
-	if silent {
-		p.spinner.Writer = io.Discard
+	if err := p.getDisplay().Start(ctx, name); err != nil {
+		return fmt.Errorf("failed to start display: %w", err)
 	}
-
-	p.setDisplay(getEnvs(ctx))
+	if err := p.getDisplay().Refresh(ctx, getEnvs(ctx)); err != nil {
+		return fmt.Errorf("failed initial redisplay: %w", err)
+	}
 	done := make(chan struct{})
 	go func() {
 		defer func() { close(done) }()
-		p.spinner.Start()
 		steps(withPipeline(ctx, p))
 	}()
 	<-done
-	p.setDisplay(getEnvs(ctx))
-	if p.failed == nil {
-		p.spinner.FinalMSG = fmt.Sprintf("%s--- done ---\n", p.spinner.Prefix)
-	} else {
-		p.spinner.FinalMSG = fmt.Sprintf("%s--- failed: %s ---\n",
-			p.spinner.Prefix, p.failed.Error())
-	}
-	p.spinner.Stop()
-	return p.failed
+
+	return errors.Join(
+		p.getDisplay().Refresh(ctx, getEnvs(ctx)),
+		p.getDisplay().Finish(ctx, p.failed == nil),
+		p.failed)
 }
 
 func mustGetPipeline(ctx context.Context, name string) *pipeline {
 	p := getPipeline(ctx)
 	if p == nil {
-		panic(`Must call "` + name + `" on a context from a step function`)
+		panic(`Must call "` + name + `" on a context Derived from a Pipeline.`)
 	}
 	return p
 }
 
 func SetLabel(ctx context.Context, label string) {
-	p := mustGetPipeline(ctx, "SetLabel")
-	current := p.currentFrame()
-	for len(p.labels) <= current {
-		p.labels = append(p.labels, "")
+	p := getPipeline(ctx)
+	if p == nil {
+		return
 	}
-	p.labels[current] = label
-	p.setDisplay(getEnvs(ctx))
-}
+	err := p.getDisplay().SetLabel(ctx, label)
+	p.handleError([]any{err})
 
-func (p *pipeline) setDisplay(envs []Env) {
-	prefix := "--- " + p.title + " --- \n"
-	prefix += p.callTree()
-	opts := []string{"|", "/", "-", "\\"}
-	frame := p.currentFrame()
-	name := "main"
-	if frame >= 0 {
-		name = p.callstack[frame]
-	}
-	var envDisplay string
-	for _, v := range envs {
-		envDisplay += "\n" + v.String()
-	}
-	for i, o := range opts {
-		opts[i] = fmt.Sprintf("%s [%s]%s", o, name, envDisplay)
-	}
-	p.spinner.UpdateCharSet(opts)
-	p.spinner.Lock()
-	p.spinner.Prefix = prefix
-	p.spinner.Unlock()
-}
-
-func (p *pipeline) currentFrame() int {
-	stack := []int{}
-	for i, v := range p.callstack {
-		if v != "" {
-			stack = append(stack, i)
-		} else {
-			stack = stack[:len(stack)-1]
-		}
-	}
-	if len(stack) == 0 {
-		return -1
-	}
-	return stack[len(stack)-1]
-}
-
-func (p *pipeline) callTree() string {
-	current := p.currentFrame()
-	indent := 2
-	var tree bytes.Buffer
-	for i, v := range p.callstack {
-		if v == "" {
-			indent -= 2
-			continue
-		} else {
-			indent += 2
-		}
-		prefix := strings.Repeat(" ", indent-2) + "- "
-		if current == i {
-			if p.failed == nil {
-				prefix = prefix[:indent-3] + "-> "
-			} else {
-				prefix = prefix[:indent-2] + "X "
-			}
-		}
-		tree.WriteString(prefix)
-		tree.WriteString(v)
-		if i < len(p.labels) && p.labels[i] != "" {
-			tree.WriteString(": ")
-			tree.WriteString(p.labels[i])
-		}
-		tree.WriteRune('\n')
-	}
-	return tree.String()
+	err = p.getDisplay().Refresh(ctx, getEnvs(ctx))
+	p.handleError([]any{err})
 }
 
 // Run a function against arguments and set outputs.
 func run(ctx context.Context, name string, f any, inputs, outputs []any) {
-	p := mustGetPipeline(ctx, "Call("+name+")")
+	p := mustGetPipeline(ctx, name)
 	done := make(chan struct{})
+
+	handleErr := func(err error) {
+		if err == nil {
+			return
+		}
+		if p.failed == nil {
+			p.errExit(err)
+		}
+	}
+
 	go func() {
 		defer func() { close(done) }()
 		envs := getEnvs(ctx)
@@ -200,22 +163,17 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 			} else if err != nil {
 				p.errExit(err)
 			}
-			defer func() {
-				err := env.Exit(ctx, outputs)
-				if err != nil && p.failed == nil {
-					p.errExit(err)
-				}
-			}()
+			defer func() { handleErr(env.Exit(ctx, outputs)) }()
 		}
 
 		// If we have a silent function, disable the spinner
 		if silent {
-			p.spinner.Disable()
-			defer p.spinner.Enable()
+			handleErr(p.getDisplay().Pause(ctx))
+			defer func() { handleErr(p.getDisplay().Resume(ctx)) }()
 		}
 
-		p.callstack = append(p.callstack, name)
-		p.setDisplay(envs)
+		handleErr(p.getDisplay().EnterStep(ctx, name))
+		handleErr(p.getDisplay().Refresh(ctx, getEnvs(ctx)))
 		ins := make([]reflect.Value, len(inputs)+1)
 		ins[0] = reflect.ValueOf(ctx)
 		for i, v := range inputs {
@@ -240,10 +198,8 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		p.handleError(outputs)
 	}()
 	<-done
-	if p.failed == nil {
-		p.callstack = append(p.callstack, "")
-	}
-	p.setDisplay(getEnvs(ctx))
+	handleErr(p.getDisplay().ExitStep(ctx, p.failed == nil))
+	handleErr(p.getDisplay().Refresh(ctx, getEnvs(ctx)))
 
 	if p.failed != nil {
 		runtime.Goexit()
