@@ -26,14 +26,14 @@ import (
 // A "git commit" step that is resilient to no changes in the directory.
 //
 // This is required to accommodate failure and retry in the `git` push steps.
-func gitCommit(ctx context.Context, msg string) {
+var gitCommit = stepv2.Func10("git commit", func(ctx context.Context, msg string) {
 	status := stepv2.Cmd(ctx, "git", "status", "--porcelain=1")
 	if len(status) > 0 {
 		stepv2.Cmd(ctx, "git", "commit", "-m", msg)
 	} else {
 		stepv2.SetLabel(ctx, msg+": nothing to commit")
 	}
-}
+})
 
 // Upgrade the upstream fork of a pulumi provider.
 //
@@ -300,7 +300,7 @@ func UpgradeProviderVersion(
 	return step.Combined("Update TF Provider", steps...)
 }
 
-func InformGitHub(
+var InformGitHub = stepv2.Func70E("Inform Github", func(
 	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
 	osArgs []string,
@@ -338,17 +338,17 @@ func InformGitHub(
 		return nil
 	}
 
-	stepv2.Call00(ctx, "Assign Issues", func(ctx context.Context) {
+	stepv2.Func00("Assign Issues", func(ctx context.Context) {
 		// This PR will close issues, so we assign the issues same assignee as the
 		// PR itself.
 		for _, t := range target.GHIssues {
 			stepv2.Cmd(ctx, "gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
 				"--add-assignee", GetContext(ctx).PrAssign)
 		}
-	})
+	})(ctx)
 
 	return nil
-}
+})
 
 // Most if not all of our TF SDK based providers use a "replace" based version of
 // github.com/hashicorp/terraform-plugin-sdk/v2. To avoid compile errors, we want
@@ -695,9 +695,9 @@ func UpdateFileWithSignal(desc, path string, didChange *bool, f func([]byte) ([]
 }
 
 func UpdateFileV2(ctx context.Context, path string, update func(context.Context, string) string) bool {
-	return stepv2.Call01(ctx, "Update "+path, func(ctx context.Context) bool {
+	return stepv2.Func01("Update "+path, func(ctx context.Context) bool {
 		content := stepv2.ReadFile(ctx, path)
-		updated := stepv2.Call11(ctx, "update", update, content)
+		updated := stepv2.Func11("update", update)(ctx, content)
 		if content == updated {
 			stepv2.SetLabel(ctx, "No change")
 			return false
@@ -705,7 +705,7 @@ func UpdateFileV2(ctx context.Context, path string, update func(context.Context,
 
 		stepv2.WriteFile(ctx, path, updated)
 		return true
-	})
+	})(ctx)
 }
 
 func migrationSteps(ctx context.Context, repo ProviderRepo, providerName string, description string,
