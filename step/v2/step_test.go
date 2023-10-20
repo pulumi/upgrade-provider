@@ -60,12 +60,12 @@ func TestPipeline(t *testing.T) {
 	t.Parallel()
 	var result int
 	err := Pipeline("test", func(ctx context.Context) {
-		one := Call01(ctx, "one", func(context.Context) int {
+		one := Func01("one", func(context.Context) int {
 			return 1
-		})
-		result = Call11(ctx, "+2", func(_ context.Context, one int) int {
+		})(ctx)
+		result = Func11("+2", func(_ context.Context, one int) int {
 			return one + 2
-		}, one)
+		})(ctx, one)
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 3, result)
@@ -96,13 +96,13 @@ func TestNestedError(t *testing.T) {
 	t.Parallel()
 	expectedErr := fmt.Errorf("an error")
 	err := Pipeline("test", func(ctx context.Context) {
-		Call00(ctx, "n1", func(ctx context.Context) {
-			Call00(ctx, "n2", func(ctx context.Context) {
-				Call00E(ctx, "n3", func(ctx context.Context) error {
+		Func00("n1", func(ctx context.Context) {
+			Func00("n2", func(ctx context.Context) {
+				Func00E("n3", func(ctx context.Context) error {
 					return expectedErr
-				})
-			})
-		})
+				})(ctx)
+			})(ctx)
+		})(ctx)
 	})
 	require.Equal(t, expectedErr, err)
 }

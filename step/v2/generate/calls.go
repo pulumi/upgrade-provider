@@ -47,6 +47,12 @@ func exitOnError(err error) {
 }
 
 func call(w io.Writer, in, out int) error {
+	fprintf := func(format string, a ...any) {
+		_, err := fmt.Fprintf(w, format, a...)
+		if err != nil {
+			panic(err)
+		}
+	}
 	t := types{in, out}
 	genericTypes := t.fullTypeList()
 
@@ -71,33 +77,9 @@ func call(w io.Writer, in, out int) error {
 	}
 	var outputTypesWithErr string
 	if out == 0 {
-		outputTypesWithErr = "error"
+		outputTypesWithErr = " error"
 	} else {
-		outputTypesWithErr = "(" + strings.Join(outputTypeArr, ", ") + ", error)"
-	}
-
-	var retCall, retF, retErrorValue, retNoOutputs string
-	if out > 0 {
-		retCall = "return "
-		retF = strings.Join(outputsArr, ", ") + " := "
-		retErrorValue = "\n\t\treturn " + strings.Join(outputsArr, ", ") + ", nil"
-	} else {
-		retNoOutputs = "\n\t\treturn nil"
-	}
-
-	_, err := fmt.Fprintf(w, `func Call%d%d%s(ctx context.Context, name string, f func(context.Context%s)%s%s)%s {
-	%sCall%d%dE(ctx, name, func(ctx context.Context%s) %s {
-		%sf(ctx%s)%s%s
-	}%s)
-}
-
-`, in, out, genericTypes, inputTypes, outputTypes, namedInputs, outputTypes,
-		retCall, in, out, namedInputs, outputTypesWithErr,
-		retF, inputArgs, retErrorValue, retNoOutputs,
-		inputArgs,
-	)
-	if err != nil {
-		return err
+		outputTypesWithErr = " (" + strings.Join(outputTypeArr, ", ") + ", error)"
 	}
 
 	retValuesArr := make([]string, out)
@@ -109,22 +91,60 @@ func call(w io.Writer, in, out int) error {
 		retValues = " " + retValues
 	}
 
-	_, err = fmt.Fprintf(w, `func Call%d%dE%s(ctx context.Context, name string, f func(context.Context%s)%s%s) %s {
-	inputs := []any{%s}
-	outputs := make([]any, %d)
-	run(ctx, name, f, inputs, outputs)
-	return%s
-}
+	signature := func(name, output string) {
+		fprintf(`func %s%s(name string, f func(context.Context%s)%s) func(context.Context%s)%s {`,
+			name, genericTypes, inputTypes, output, inputTypes, outputTypes)
+	}
 
-`, in, out, genericTypes, inputTypes, outputTypesWithErr, namedInputs, outputTypes,
+	var thump string
+	if out > 0 {
+		thump = fmt.Sprintf("%s := f(ctx%s)\n\t\treturn %[1]s, nil",
+			strings.Join(outputsArr, ", "), inputArgs)
+	} else {
+		thump = fmt.Sprintf("f(ctx%s)\n\t\treturn nil", inputArgs)
+	}
+
+	// Write out the signature for the Func__ variant
+	signature(t.funcName(false), outputTypes)
+	fprintf(`
+	return %s(name, func(ctx context.Context%s)%s {
+		%s
+	})`,
+		t.funcName(true), namedInputs, outputTypesWithErr,
+		thump,
+	)
+	fprintf("\n}\n\n")
+
+	// Write out the signature for the Func__E variant
+	signature(t.funcName(true), outputTypesWithErr)
+
+	// Write the returned inner function
+	fprintf(`
+	return func(ctx context.Context%s)%s {
+		inputs := []any{%s}
+		outputs := make([]any, %d)
+		run(ctx, name, f, inputs, outputs)
+		return%s
+	}`, namedInputs, outputTypes,
 		strings.Join(inputsArr, ", "),
-		out+1, // +1 for the returned error value
-		retValues)
+		out+1,
+		retValues,
+	)
 
-	return err
+	// Close the function
+	fprintf("\n}\n\n")
+	return nil
 }
 
 type types struct{ in, out int }
+
+func (a types) funcName(err bool) string {
+	s := fmt.Sprintf("Func%d%d", a.in, a.out)
+	if err {
+		s += "E"
+	}
+	return s
+}
 
 func (a types) argListFmt(in string) []string {
 	elems := make([]string, 0, a.in)

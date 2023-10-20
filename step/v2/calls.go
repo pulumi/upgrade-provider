@@ -11,899 +11,1027 @@ package step
 
 import "context"
 
-func Call00(ctx context.Context, name string, f func(context.Context)) {
-	Call00E(ctx, name, func(ctx context.Context) error {
+func Func00(name string, f func(context.Context)) func(context.Context) {
+	return Func00E(name, func(ctx context.Context) error {
 		f(ctx)
 		return nil
 	})
 }
 
-func Call00E(ctx context.Context, name string, f func(context.Context)error)  {
-	inputs := []any{}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-	return
+func Func00E(name string, f func(context.Context) error) func(context.Context) {
+	return func(ctx context.Context) {
+		inputs := []any{}
+		outputs := make([]any, 1)
+		run(ctx, name, f, inputs, outputs)
+		return
+	}
 }
 
-func Call01[O1 any](ctx context.Context, name string, f func(context.Context) O1) O1 {
-	return Call01E(ctx, name, func(ctx context.Context) (O1, error) {
+func Func01[O1 any](name string, f func(context.Context) O1) func(context.Context) O1 {
+	return Func01E(name, func(ctx context.Context) (O1, error) {
 		o1 := f(ctx)
 		return o1, nil
 	})
 }
 
-func Call01E[O1 any](ctx context.Context, name string, f func(context.Context)(O1, error))  O1 {
-	inputs := []any{}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1)
+func Func01E[O1 any](name string, f func(context.Context) (O1, error)) func(context.Context) O1 {
+	return func(ctx context.Context) O1 {
+		inputs := []any{}
+		outputs := make([]any, 2)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1)
+	}
 }
 
-func Call02[O1 any, O2 any](ctx context.Context, name string, f func(context.Context) (O1, O2)) (O1, O2) {
-	return Call02E(ctx, name, func(ctx context.Context) (O1, O2, error) {
+func Func02[O1 any, O2 any](name string, f func(context.Context) (O1, O2)) func(context.Context) (O1, O2) {
+	return Func02E(name, func(ctx context.Context) (O1, O2, error) {
 		o1, o2 := f(ctx)
 		return o1, o2, nil
 	})
 }
 
-func Call02E[O1 any, O2 any](ctx context.Context, name string, f func(context.Context)(O1, O2, error))  (O1, O2) {
-	inputs := []any{}
-	outputs := make([]any, 3)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2)
+func Func02E[O1 any, O2 any](name string, f func(context.Context) (O1, O2, error)) func(context.Context) (O1, O2) {
+	return func(ctx context.Context) (O1, O2) {
+		inputs := []any{}
+		outputs := make([]any, 3)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2)
+	}
 }
 
-func Call03[O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context) (O1, O2, O3)) (O1, O2, O3) {
-	return Call03E(ctx, name, func(ctx context.Context) (O1, O2, O3, error) {
+func Func03[O1 any, O2 any, O3 any](name string, f func(context.Context) (O1, O2, O3)) func(context.Context) (O1, O2, O3) {
+	return Func03E(name, func(ctx context.Context) (O1, O2, O3, error) {
 		o1, o2, o3 := f(ctx)
 		return o1, o2, o3, nil
 	})
 }
 
-func Call03E[O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context)(O1, O2, O3, error))  (O1, O2, O3) {
-	inputs := []any{}
-	outputs := make([]any, 4)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+func Func03E[O1 any, O2 any, O3 any](name string, f func(context.Context) (O1, O2, O3, error)) func(context.Context) (O1, O2, O3) {
+	return func(ctx context.Context) (O1, O2, O3) {
+		inputs := []any{}
+		outputs := make([]any, 4)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+	}
 }
 
-func Call04[O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context) (O1, O2, O3, O4)) (O1, O2, O3, O4) {
-	return Call04E(ctx, name, func(ctx context.Context) (O1, O2, O3, O4, error) {
+func Func04[O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context) (O1, O2, O3, O4)) func(context.Context) (O1, O2, O3, O4) {
+	return Func04E(name, func(ctx context.Context) (O1, O2, O3, O4, error) {
 		o1, o2, o3, o4 := f(ctx)
 		return o1, o2, o3, o4, nil
 	})
 }
 
-func Call04E[O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context)(O1, O2, O3, O4, error))  (O1, O2, O3, O4) {
-	inputs := []any{}
-	outputs := make([]any, 5)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+func Func04E[O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context) (O1, O2, O3, O4, error)) func(context.Context) (O1, O2, O3, O4) {
+	return func(ctx context.Context) (O1, O2, O3, O4) {
+		inputs := []any{}
+		outputs := make([]any, 5)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+	}
 }
 
-func Call05[O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context) (O1, O2, O3, O4, O5)) (O1, O2, O3, O4, O5) {
-	return Call05E(ctx, name, func(ctx context.Context) (O1, O2, O3, O4, O5, error) {
+func Func05[O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context) (O1, O2, O3, O4, O5)) func(context.Context) (O1, O2, O3, O4, O5) {
+	return Func05E(name, func(ctx context.Context) (O1, O2, O3, O4, O5, error) {
 		o1, o2, o3, o4, o5 := f(ctx)
 		return o1, o2, o3, o4, o5, nil
 	})
 }
 
-func Call05E[O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context)(O1, O2, O3, O4, O5, error))  (O1, O2, O3, O4, O5) {
-	inputs := []any{}
-	outputs := make([]any, 6)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+func Func05E[O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context) (O1, O2, O3, O4, O5, error)) func(context.Context) (O1, O2, O3, O4, O5) {
+	return func(ctx context.Context) (O1, O2, O3, O4, O5) {
+		inputs := []any{}
+		outputs := make([]any, 6)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+	}
 }
 
-func Call06[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context) (O1, O2, O3, O4, O5, O6)) (O1, O2, O3, O4, O5, O6) {
-	return Call06E(ctx, name, func(ctx context.Context) (O1, O2, O3, O4, O5, O6, error) {
+func Func06[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context) (O1, O2, O3, O4, O5, O6)) func(context.Context) (O1, O2, O3, O4, O5, O6) {
+	return Func06E(name, func(ctx context.Context) (O1, O2, O3, O4, O5, O6, error) {
 		o1, o2, o3, o4, o5, o6 := f(ctx)
 		return o1, o2, o3, o4, o5, o6, nil
 	})
 }
 
-func Call06E[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context)(O1, O2, O3, O4, O5, O6, error))  (O1, O2, O3, O4, O5, O6) {
-	inputs := []any{}
-	outputs := make([]any, 7)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+func Func06E[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context) (O1, O2, O3, O4, O5, O6, error)) func(context.Context) (O1, O2, O3, O4, O5, O6) {
+	return func(ctx context.Context) (O1, O2, O3, O4, O5, O6) {
+		inputs := []any{}
+		outputs := make([]any, 7)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+	}
 }
 
-func Call07[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context) (O1, O2, O3, O4, O5, O6, O7)) (O1, O2, O3, O4, O5, O6, O7) {
-	return Call07E(ctx, name, func(ctx context.Context) (O1, O2, O3, O4, O5, O6, O7, error) {
+func Func07[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context) (O1, O2, O3, O4, O5, O6, O7)) func(context.Context) (O1, O2, O3, O4, O5, O6, O7) {
+	return Func07E(name, func(ctx context.Context) (O1, O2, O3, O4, O5, O6, O7, error) {
 		o1, o2, o3, o4, o5, o6, o7 := f(ctx)
 		return o1, o2, o3, o4, o5, o6, o7, nil
 	})
 }
 
-func Call07E[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context)(O1, O2, O3, O4, O5, O6, O7, error))  (O1, O2, O3, O4, O5, O6, O7) {
-	inputs := []any{}
-	outputs := make([]any, 8)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+func Func07E[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context) (O1, O2, O3, O4, O5, O6, O7, error)) func(context.Context) (O1, O2, O3, O4, O5, O6, O7) {
+	return func(ctx context.Context) (O1, O2, O3, O4, O5, O6, O7) {
+		inputs := []any{}
+		outputs := make([]any, 8)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+	}
 }
 
-func Call10[I1 any](ctx context.Context, name string, f func(context.Context, I1), i1 I1) {
-	Call10E(ctx, name, func(ctx context.Context, i1 I1) error {
+func Func10[I1 any](name string, f func(context.Context, I1)) func(context.Context, I1) {
+	return Func10E(name, func(ctx context.Context, i1 I1) error {
 		f(ctx, i1)
 		return nil
-	}, i1)
+	})
 }
 
-func Call10E[I1 any](ctx context.Context, name string, f func(context.Context, I1)error, i1 I1)  {
-	inputs := []any{i1}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-	return
+func Func10E[I1 any](name string, f func(context.Context, I1) error) func(context.Context, I1) {
+	return func(ctx context.Context, i1 I1) {
+		inputs := []any{i1}
+		outputs := make([]any, 1)
+		run(ctx, name, f, inputs, outputs)
+		return
+	}
 }
 
-func Call11[I1 any, O1 any](ctx context.Context, name string, f func(context.Context, I1) O1, i1 I1) O1 {
-	return Call11E(ctx, name, func(ctx context.Context, i1 I1) (O1, error) {
+func Func11[I1 any, O1 any](name string, f func(context.Context, I1) O1) func(context.Context, I1) O1 {
+	return Func11E(name, func(ctx context.Context, i1 I1) (O1, error) {
 		o1 := f(ctx, i1)
 		return o1, nil
-	}, i1)
+	})
 }
 
-func Call11E[I1 any, O1 any](ctx context.Context, name string, f func(context.Context, I1)(O1, error), i1 I1)  O1 {
-	inputs := []any{i1}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1)
+func Func11E[I1 any, O1 any](name string, f func(context.Context, I1) (O1, error)) func(context.Context, I1) O1 {
+	return func(ctx context.Context, i1 I1) O1 {
+		inputs := []any{i1}
+		outputs := make([]any, 2)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1)
+	}
 }
 
-func Call12[I1 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1) (O1, O2), i1 I1) (O1, O2) {
-	return Call12E(ctx, name, func(ctx context.Context, i1 I1) (O1, O2, error) {
+func Func12[I1 any, O1 any, O2 any](name string, f func(context.Context, I1) (O1, O2)) func(context.Context, I1) (O1, O2) {
+	return Func12E(name, func(ctx context.Context, i1 I1) (O1, O2, error) {
 		o1, o2 := f(ctx, i1)
 		return o1, o2, nil
-	}, i1)
+	})
 }
 
-func Call12E[I1 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1)(O1, O2, error), i1 I1)  (O1, O2) {
-	inputs := []any{i1}
-	outputs := make([]any, 3)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2)
+func Func12E[I1 any, O1 any, O2 any](name string, f func(context.Context, I1) (O1, O2, error)) func(context.Context, I1) (O1, O2) {
+	return func(ctx context.Context, i1 I1) (O1, O2) {
+		inputs := []any{i1}
+		outputs := make([]any, 3)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2)
+	}
 }
 
-func Call13[I1 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1) (O1, O2, O3), i1 I1) (O1, O2, O3) {
-	return Call13E(ctx, name, func(ctx context.Context, i1 I1) (O1, O2, O3, error) {
+func Func13[I1 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1) (O1, O2, O3)) func(context.Context, I1) (O1, O2, O3) {
+	return Func13E(name, func(ctx context.Context, i1 I1) (O1, O2, O3, error) {
 		o1, o2, o3 := f(ctx, i1)
 		return o1, o2, o3, nil
-	}, i1)
+	})
 }
 
-func Call13E[I1 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1)(O1, O2, O3, error), i1 I1)  (O1, O2, O3) {
-	inputs := []any{i1}
-	outputs := make([]any, 4)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+func Func13E[I1 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1) (O1, O2, O3, error)) func(context.Context, I1) (O1, O2, O3) {
+	return func(ctx context.Context, i1 I1) (O1, O2, O3) {
+		inputs := []any{i1}
+		outputs := make([]any, 4)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+	}
 }
 
-func Call14[I1 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1) (O1, O2, O3, O4), i1 I1) (O1, O2, O3, O4) {
-	return Call14E(ctx, name, func(ctx context.Context, i1 I1) (O1, O2, O3, O4, error) {
+func Func14[I1 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1) (O1, O2, O3, O4)) func(context.Context, I1) (O1, O2, O3, O4) {
+	return Func14E(name, func(ctx context.Context, i1 I1) (O1, O2, O3, O4, error) {
 		o1, o2, o3, o4 := f(ctx, i1)
 		return o1, o2, o3, o4, nil
-	}, i1)
+	})
 }
 
-func Call14E[I1 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1)(O1, O2, O3, O4, error), i1 I1)  (O1, O2, O3, O4) {
-	inputs := []any{i1}
-	outputs := make([]any, 5)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+func Func14E[I1 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1) (O1, O2, O3, O4, error)) func(context.Context, I1) (O1, O2, O3, O4) {
+	return func(ctx context.Context, i1 I1) (O1, O2, O3, O4) {
+		inputs := []any{i1}
+		outputs := make([]any, 5)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+	}
 }
 
-func Call15[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1) (O1, O2, O3, O4, O5), i1 I1) (O1, O2, O3, O4, O5) {
-	return Call15E(ctx, name, func(ctx context.Context, i1 I1) (O1, O2, O3, O4, O5, error) {
+func Func15[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1) (O1, O2, O3, O4, O5)) func(context.Context, I1) (O1, O2, O3, O4, O5) {
+	return Func15E(name, func(ctx context.Context, i1 I1) (O1, O2, O3, O4, O5, error) {
 		o1, o2, o3, o4, o5 := f(ctx, i1)
 		return o1, o2, o3, o4, o5, nil
-	}, i1)
+	})
 }
 
-func Call15E[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1)(O1, O2, O3, O4, O5, error), i1 I1)  (O1, O2, O3, O4, O5) {
-	inputs := []any{i1}
-	outputs := make([]any, 6)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+func Func15E[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1) (O1, O2, O3, O4, O5, error)) func(context.Context, I1) (O1, O2, O3, O4, O5) {
+	return func(ctx context.Context, i1 I1) (O1, O2, O3, O4, O5) {
+		inputs := []any{i1}
+		outputs := make([]any, 6)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+	}
 }
 
-func Call16[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1) (O1, O2, O3, O4, O5, O6), i1 I1) (O1, O2, O3, O4, O5, O6) {
-	return Call16E(ctx, name, func(ctx context.Context, i1 I1) (O1, O2, O3, O4, O5, O6, error) {
+func Func16[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1) (O1, O2, O3, O4, O5, O6)) func(context.Context, I1) (O1, O2, O3, O4, O5, O6) {
+	return Func16E(name, func(ctx context.Context, i1 I1) (O1, O2, O3, O4, O5, O6, error) {
 		o1, o2, o3, o4, o5, o6 := f(ctx, i1)
 		return o1, o2, o3, o4, o5, o6, nil
-	}, i1)
+	})
 }
 
-func Call16E[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1)(O1, O2, O3, O4, O5, O6, error), i1 I1)  (O1, O2, O3, O4, O5, O6) {
-	inputs := []any{i1}
-	outputs := make([]any, 7)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+func Func16E[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1) (O1, O2, O3, O4, O5, O6, error)) func(context.Context, I1) (O1, O2, O3, O4, O5, O6) {
+	return func(ctx context.Context, i1 I1) (O1, O2, O3, O4, O5, O6) {
+		inputs := []any{i1}
+		outputs := make([]any, 7)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+	}
 }
 
-func Call17[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1) (O1, O2, O3, O4, O5, O6, O7), i1 I1) (O1, O2, O3, O4, O5, O6, O7) {
-	return Call17E(ctx, name, func(ctx context.Context, i1 I1) (O1, O2, O3, O4, O5, O6, O7, error) {
+func Func17[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1) (O1, O2, O3, O4, O5, O6, O7)) func(context.Context, I1) (O1, O2, O3, O4, O5, O6, O7) {
+	return Func17E(name, func(ctx context.Context, i1 I1) (O1, O2, O3, O4, O5, O6, O7, error) {
 		o1, o2, o3, o4, o5, o6, o7 := f(ctx, i1)
 		return o1, o2, o3, o4, o5, o6, o7, nil
-	}, i1)
+	})
 }
 
-func Call17E[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1)(O1, O2, O3, O4, O5, O6, O7, error), i1 I1)  (O1, O2, O3, O4, O5, O6, O7) {
-	inputs := []any{i1}
-	outputs := make([]any, 8)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+func Func17E[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1) (O1, O2, O3, O4, O5, O6, O7, error)) func(context.Context, I1) (O1, O2, O3, O4, O5, O6, O7) {
+	return func(ctx context.Context, i1 I1) (O1, O2, O3, O4, O5, O6, O7) {
+		inputs := []any{i1}
+		outputs := make([]any, 8)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+	}
 }
 
-func Call20[I1 any, I2 any](ctx context.Context, name string, f func(context.Context, I1, I2), i1 I1, i2 I2) {
-	Call20E(ctx, name, func(ctx context.Context, i1 I1, i2 I2) error {
+func Func20[I1 any, I2 any](name string, f func(context.Context, I1, I2)) func(context.Context, I1, I2) {
+	return Func20E(name, func(ctx context.Context, i1 I1, i2 I2) error {
 		f(ctx, i1, i2)
 		return nil
-	}, i1, i2)
+	})
 }
 
-func Call20E[I1 any, I2 any](ctx context.Context, name string, f func(context.Context, I1, I2)error, i1 I1, i2 I2)  {
-	inputs := []any{i1, i2}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-	return
+func Func20E[I1 any, I2 any](name string, f func(context.Context, I1, I2) error) func(context.Context, I1, I2) {
+	return func(ctx context.Context, i1 I1, i2 I2) {
+		inputs := []any{i1, i2}
+		outputs := make([]any, 1)
+		run(ctx, name, f, inputs, outputs)
+		return
+	}
 }
 
-func Call21[I1 any, I2 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2) O1, i1 I1, i2 I2) O1 {
-	return Call21E(ctx, name, func(ctx context.Context, i1 I1, i2 I2) (O1, error) {
+func Func21[I1 any, I2 any, O1 any](name string, f func(context.Context, I1, I2) O1) func(context.Context, I1, I2) O1 {
+	return Func21E(name, func(ctx context.Context, i1 I1, i2 I2) (O1, error) {
 		o1 := f(ctx, i1, i2)
 		return o1, nil
-	}, i1, i2)
+	})
 }
 
-func Call21E[I1 any, I2 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2)(O1, error), i1 I1, i2 I2)  O1 {
-	inputs := []any{i1, i2}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1)
+func Func21E[I1 any, I2 any, O1 any](name string, f func(context.Context, I1, I2) (O1, error)) func(context.Context, I1, I2) O1 {
+	return func(ctx context.Context, i1 I1, i2 I2) O1 {
+		inputs := []any{i1, i2}
+		outputs := make([]any, 2)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1)
+	}
 }
 
-func Call22[I1 any, I2 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2) (O1, O2), i1 I1, i2 I2) (O1, O2) {
-	return Call22E(ctx, name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, error) {
+func Func22[I1 any, I2 any, O1 any, O2 any](name string, f func(context.Context, I1, I2) (O1, O2)) func(context.Context, I1, I2) (O1, O2) {
+	return Func22E(name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, error) {
 		o1, o2 := f(ctx, i1, i2)
 		return o1, o2, nil
-	}, i1, i2)
+	})
 }
 
-func Call22E[I1 any, I2 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2)(O1, O2, error), i1 I1, i2 I2)  (O1, O2) {
-	inputs := []any{i1, i2}
-	outputs := make([]any, 3)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2)
+func Func22E[I1 any, I2 any, O1 any, O2 any](name string, f func(context.Context, I1, I2) (O1, O2, error)) func(context.Context, I1, I2) (O1, O2) {
+	return func(ctx context.Context, i1 I1, i2 I2) (O1, O2) {
+		inputs := []any{i1, i2}
+		outputs := make([]any, 3)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2)
+	}
 }
 
-func Call23[I1 any, I2 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2) (O1, O2, O3), i1 I1, i2 I2) (O1, O2, O3) {
-	return Call23E(ctx, name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, error) {
+func Func23[I1 any, I2 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2) (O1, O2, O3)) func(context.Context, I1, I2) (O1, O2, O3) {
+	return Func23E(name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, error) {
 		o1, o2, o3 := f(ctx, i1, i2)
 		return o1, o2, o3, nil
-	}, i1, i2)
+	})
 }
 
-func Call23E[I1 any, I2 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2)(O1, O2, O3, error), i1 I1, i2 I2)  (O1, O2, O3) {
-	inputs := []any{i1, i2}
-	outputs := make([]any, 4)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+func Func23E[I1 any, I2 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2) (O1, O2, O3, error)) func(context.Context, I1, I2) (O1, O2, O3) {
+	return func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3) {
+		inputs := []any{i1, i2}
+		outputs := make([]any, 4)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+	}
 }
 
-func Call24[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2) (O1, O2, O3, O4), i1 I1, i2 I2) (O1, O2, O3, O4) {
-	return Call24E(ctx, name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, error) {
+func Func24[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2) (O1, O2, O3, O4)) func(context.Context, I1, I2) (O1, O2, O3, O4) {
+	return Func24E(name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, error) {
 		o1, o2, o3, o4 := f(ctx, i1, i2)
 		return o1, o2, o3, o4, nil
-	}, i1, i2)
+	})
 }
 
-func Call24E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2)(O1, O2, O3, O4, error), i1 I1, i2 I2)  (O1, O2, O3, O4) {
-	inputs := []any{i1, i2}
-	outputs := make([]any, 5)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+func Func24E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, error)) func(context.Context, I1, I2) (O1, O2, O3, O4) {
+	return func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4) {
+		inputs := []any{i1, i2}
+		outputs := make([]any, 5)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+	}
 }
 
-func Call25[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, O5), i1 I1, i2 I2) (O1, O2, O3, O4, O5) {
-	return Call25E(ctx, name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, O5, error) {
+func Func25[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, O5)) func(context.Context, I1, I2) (O1, O2, O3, O4, O5) {
+	return Func25E(name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, O5, error) {
 		o1, o2, o3, o4, o5 := f(ctx, i1, i2)
 		return o1, o2, o3, o4, o5, nil
-	}, i1, i2)
+	})
 }
 
-func Call25E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2)(O1, O2, O3, O4, O5, error), i1 I1, i2 I2)  (O1, O2, O3, O4, O5) {
-	inputs := []any{i1, i2}
-	outputs := make([]any, 6)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+func Func25E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, O5, error)) func(context.Context, I1, I2) (O1, O2, O3, O4, O5) {
+	return func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, O5) {
+		inputs := []any{i1, i2}
+		outputs := make([]any, 6)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+	}
 }
 
-func Call26[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6), i1 I1, i2 I2) (O1, O2, O3, O4, O5, O6) {
-	return Call26E(ctx, name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, O5, O6, error) {
+func Func26[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6)) func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6) {
+	return Func26E(name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, O5, O6, error) {
 		o1, o2, o3, o4, o5, o6 := f(ctx, i1, i2)
 		return o1, o2, o3, o4, o5, o6, nil
-	}, i1, i2)
+	})
 }
 
-func Call26E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2)(O1, O2, O3, O4, O5, O6, error), i1 I1, i2 I2)  (O1, O2, O3, O4, O5, O6) {
-	inputs := []any{i1, i2}
-	outputs := make([]any, 7)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+func Func26E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6, error)) func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6) {
+	return func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, O5, O6) {
+		inputs := []any{i1, i2}
+		outputs := make([]any, 7)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+	}
 }
 
-func Call27[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6, O7), i1 I1, i2 I2) (O1, O2, O3, O4, O5, O6, O7) {
-	return Call27E(ctx, name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, O5, O6, O7, error) {
+func Func27[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6, O7)) func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6, O7) {
+	return Func27E(name, func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, O5, O6, O7, error) {
 		o1, o2, o3, o4, o5, o6, o7 := f(ctx, i1, i2)
 		return o1, o2, o3, o4, o5, o6, o7, nil
-	}, i1, i2)
+	})
 }
 
-func Call27E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2)(O1, O2, O3, O4, O5, O6, O7, error), i1 I1, i2 I2)  (O1, O2, O3, O4, O5, O6, O7) {
-	inputs := []any{i1, i2}
-	outputs := make([]any, 8)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+func Func27E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6, O7, error)) func(context.Context, I1, I2) (O1, O2, O3, O4, O5, O6, O7) {
+	return func(ctx context.Context, i1 I1, i2 I2) (O1, O2, O3, O4, O5, O6, O7) {
+		inputs := []any{i1, i2}
+		outputs := make([]any, 8)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+	}
 }
 
-func Call30[I1 any, I2 any, I3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3), i1 I1, i2 I2, i3 I3) {
-	Call30E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) error {
+func Func30[I1 any, I2 any, I3 any](name string, f func(context.Context, I1, I2, I3)) func(context.Context, I1, I2, I3) {
+	return Func30E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) error {
 		f(ctx, i1, i2, i3)
 		return nil
-	}, i1, i2, i3)
+	})
 }
 
-func Call30E[I1 any, I2 any, I3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3)error, i1 I1, i2 I2, i3 I3)  {
-	inputs := []any{i1, i2, i3}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-	return
+func Func30E[I1 any, I2 any, I3 any](name string, f func(context.Context, I1, I2, I3) error) func(context.Context, I1, I2, I3) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3) {
+		inputs := []any{i1, i2, i3}
+		outputs := make([]any, 1)
+		run(ctx, name, f, inputs, outputs)
+		return
+	}
 }
 
-func Call31[I1 any, I2 any, I3 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3) O1, i1 I1, i2 I2, i3 I3) O1 {
-	return Call31E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, error) {
+func Func31[I1 any, I2 any, I3 any, O1 any](name string, f func(context.Context, I1, I2, I3) O1) func(context.Context, I1, I2, I3) O1 {
+	return Func31E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, error) {
 		o1 := f(ctx, i1, i2, i3)
 		return o1, nil
-	}, i1, i2, i3)
+	})
 }
 
-func Call31E[I1 any, I2 any, I3 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3)(O1, error), i1 I1, i2 I2, i3 I3)  O1 {
-	inputs := []any{i1, i2, i3}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1)
+func Func31E[I1 any, I2 any, I3 any, O1 any](name string, f func(context.Context, I1, I2, I3) (O1, error)) func(context.Context, I1, I2, I3) O1 {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3) O1 {
+		inputs := []any{i1, i2, i3}
+		outputs := make([]any, 2)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1)
+	}
 }
 
-func Call32[I1 any, I2 any, I3 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3) (O1, O2), i1 I1, i2 I2, i3 I3) (O1, O2) {
-	return Call32E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, error) {
+func Func32[I1 any, I2 any, I3 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3) (O1, O2)) func(context.Context, I1, I2, I3) (O1, O2) {
+	return Func32E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, error) {
 		o1, o2 := f(ctx, i1, i2, i3)
 		return o1, o2, nil
-	}, i1, i2, i3)
+	})
 }
 
-func Call32E[I1 any, I2 any, I3 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3)(O1, O2, error), i1 I1, i2 I2, i3 I3)  (O1, O2) {
-	inputs := []any{i1, i2, i3}
-	outputs := make([]any, 3)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2)
+func Func32E[I1 any, I2 any, I3 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, error)) func(context.Context, I1, I2, I3) (O1, O2) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2) {
+		inputs := []any{i1, i2, i3}
+		outputs := make([]any, 3)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2)
+	}
 }
 
-func Call33[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3) (O1, O2, O3), i1 I1, i2 I2, i3 I3) (O1, O2, O3) {
-	return Call33E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, error) {
+func Func33[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3)) func(context.Context, I1, I2, I3) (O1, O2, O3) {
+	return Func33E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, error) {
 		o1, o2, o3 := f(ctx, i1, i2, i3)
 		return o1, o2, o3, nil
-	}, i1, i2, i3)
+	})
 }
 
-func Call33E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3)(O1, O2, O3, error), i1 I1, i2 I2, i3 I3)  (O1, O2, O3) {
-	inputs := []any{i1, i2, i3}
-	outputs := make([]any, 4)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+func Func33E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, error)) func(context.Context, I1, I2, I3) (O1, O2, O3) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3) {
+		inputs := []any{i1, i2, i3}
+		outputs := make([]any, 4)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+	}
 }
 
-func Call34[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4), i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4) {
-	return Call34E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, error) {
+func Func34[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4)) func(context.Context, I1, I2, I3) (O1, O2, O3, O4) {
+	return Func34E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, error) {
 		o1, o2, o3, o4 := f(ctx, i1, i2, i3)
 		return o1, o2, o3, o4, nil
-	}, i1, i2, i3)
+	})
 }
 
-func Call34E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3)(O1, O2, O3, O4, error), i1 I1, i2 I2, i3 I3)  (O1, O2, O3, O4) {
-	inputs := []any{i1, i2, i3}
-	outputs := make([]any, 5)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+func Func34E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, error)) func(context.Context, I1, I2, I3) (O1, O2, O3, O4) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4) {
+		inputs := []any{i1, i2, i3}
+		outputs := make([]any, 5)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+	}
 }
 
-func Call35[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5), i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5) {
-	return Call35E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, error) {
+func Func35[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5)) func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5) {
+	return Func35E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, error) {
 		o1, o2, o3, o4, o5 := f(ctx, i1, i2, i3)
 		return o1, o2, o3, o4, o5, nil
-	}, i1, i2, i3)
+	})
 }
 
-func Call35E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3)(O1, O2, O3, O4, O5, error), i1 I1, i2 I2, i3 I3)  (O1, O2, O3, O4, O5) {
-	inputs := []any{i1, i2, i3}
-	outputs := make([]any, 6)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+func Func35E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, error)) func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5) {
+		inputs := []any{i1, i2, i3}
+		outputs := make([]any, 6)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+	}
 }
 
-func Call36[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6), i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, O6) {
-	return Call36E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, O6, error) {
+func Func36[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6)) func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6) {
+	return Func36E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, O6, error) {
 		o1, o2, o3, o4, o5, o6 := f(ctx, i1, i2, i3)
 		return o1, o2, o3, o4, o5, o6, nil
-	}, i1, i2, i3)
+	})
 }
 
-func Call36E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3)(O1, O2, O3, O4, O5, O6, error), i1 I1, i2 I2, i3 I3)  (O1, O2, O3, O4, O5, O6) {
-	inputs := []any{i1, i2, i3}
-	outputs := make([]any, 7)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+func Func36E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6, error)) func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, O6) {
+		inputs := []any{i1, i2, i3}
+		outputs := make([]any, 7)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+	}
 }
 
-func Call37[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6, O7), i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, O6, O7) {
-	return Call37E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, O6, O7, error) {
+func Func37[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6, O7)) func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6, O7) {
+	return Func37E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, O6, O7, error) {
 		o1, o2, o3, o4, o5, o6, o7 := f(ctx, i1, i2, i3)
 		return o1, o2, o3, o4, o5, o6, o7, nil
-	}, i1, i2, i3)
+	})
 }
 
-func Call37E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3)(O1, O2, O3, O4, O5, O6, O7, error), i1 I1, i2 I2, i3 I3)  (O1, O2, O3, O4, O5, O6, O7) {
-	inputs := []any{i1, i2, i3}
-	outputs := make([]any, 8)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+func Func37E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6, O7, error)) func(context.Context, I1, I2, I3) (O1, O2, O3, O4, O5, O6, O7) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3) (O1, O2, O3, O4, O5, O6, O7) {
+		inputs := []any{i1, i2, i3}
+		outputs := make([]any, 8)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+	}
 }
 
-func Call40[I1 any, I2 any, I3 any, I4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4), i1 I1, i2 I2, i3 I3, i4 I4) {
-	Call40E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) error {
+func Func40[I1 any, I2 any, I3 any, I4 any](name string, f func(context.Context, I1, I2, I3, I4)) func(context.Context, I1, I2, I3, I4) {
+	return Func40E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) error {
 		f(ctx, i1, i2, i3, i4)
 		return nil
-	}, i1, i2, i3, i4)
+	})
 }
 
-func Call40E[I1 any, I2 any, I3 any, I4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4)error, i1 I1, i2 I2, i3 I3, i4 I4)  {
-	inputs := []any{i1, i2, i3, i4}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-	return
+func Func40E[I1 any, I2 any, I3 any, I4 any](name string, f func(context.Context, I1, I2, I3, I4) error) func(context.Context, I1, I2, I3, I4) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) {
+		inputs := []any{i1, i2, i3, i4}
+		outputs := make([]any, 1)
+		run(ctx, name, f, inputs, outputs)
+		return
+	}
 }
 
-func Call41[I1 any, I2 any, I3 any, I4 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4) O1, i1 I1, i2 I2, i3 I3, i4 I4) O1 {
-	return Call41E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, error) {
+func Func41[I1 any, I2 any, I3 any, I4 any, O1 any](name string, f func(context.Context, I1, I2, I3, I4) O1) func(context.Context, I1, I2, I3, I4) O1 {
+	return Func41E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, error) {
 		o1 := f(ctx, i1, i2, i3, i4)
 		return o1, nil
-	}, i1, i2, i3, i4)
+	})
 }
 
-func Call41E[I1 any, I2 any, I3 any, I4 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4)(O1, error), i1 I1, i2 I2, i3 I3, i4 I4)  O1 {
-	inputs := []any{i1, i2, i3, i4}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1)
+func Func41E[I1 any, I2 any, I3 any, I4 any, O1 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, error)) func(context.Context, I1, I2, I3, I4) O1 {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) O1 {
+		inputs := []any{i1, i2, i3, i4}
+		outputs := make([]any, 2)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1)
+	}
 }
 
-func Call42[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4) (O1, O2), i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2) {
-	return Call42E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, error) {
+func Func42[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2)) func(context.Context, I1, I2, I3, I4) (O1, O2) {
+	return Func42E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, error) {
 		o1, o2 := f(ctx, i1, i2, i3, i4)
 		return o1, o2, nil
-	}, i1, i2, i3, i4)
+	})
 }
 
-func Call42E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4)(O1, O2, error), i1 I1, i2 I2, i3 I3, i4 I4)  (O1, O2) {
-	inputs := []any{i1, i2, i3, i4}
-	outputs := make([]any, 3)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2)
+func Func42E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, error)) func(context.Context, I1, I2, I3, I4) (O1, O2) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2) {
+		inputs := []any{i1, i2, i3, i4}
+		outputs := make([]any, 3)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2)
+	}
 }
 
-func Call43[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3), i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3) {
-	return Call43E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, error) {
+func Func43[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3) {
+	return Func43E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, error) {
 		o1, o2, o3 := f(ctx, i1, i2, i3, i4)
 		return o1, o2, o3, nil
-	}, i1, i2, i3, i4)
+	})
 }
 
-func Call43E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4)(O1, O2, O3, error), i1 I1, i2 I2, i3 I3, i4 I4)  (O1, O2, O3) {
-	inputs := []any{i1, i2, i3, i4}
-	outputs := make([]any, 4)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+func Func43E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, error)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3) {
+		inputs := []any{i1, i2, i3, i4}
+		outputs := make([]any, 4)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+	}
 }
 
-func Call44[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4), i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4) {
-	return Call44E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, error) {
+func Func44[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4) {
+	return Func44E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, error) {
 		o1, o2, o3, o4 := f(ctx, i1, i2, i3, i4)
 		return o1, o2, o3, o4, nil
-	}, i1, i2, i3, i4)
+	})
 }
 
-func Call44E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4)(O1, O2, O3, O4, error), i1 I1, i2 I2, i3 I3, i4 I4)  (O1, O2, O3, O4) {
-	inputs := []any{i1, i2, i3, i4}
-	outputs := make([]any, 5)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+func Func44E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, error)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4) {
+		inputs := []any{i1, i2, i3, i4}
+		outputs := make([]any, 5)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+	}
 }
 
-func Call45[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5), i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5) {
-	return Call45E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, error) {
+func Func45[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5) {
+	return Func45E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, error) {
 		o1, o2, o3, o4, o5 := f(ctx, i1, i2, i3, i4)
 		return o1, o2, o3, o4, o5, nil
-	}, i1, i2, i3, i4)
+	})
 }
 
-func Call45E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4)(O1, O2, O3, O4, O5, error), i1 I1, i2 I2, i3 I3, i4 I4)  (O1, O2, O3, O4, O5) {
-	inputs := []any{i1, i2, i3, i4}
-	outputs := make([]any, 6)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+func Func45E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, error)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5) {
+		inputs := []any{i1, i2, i3, i4}
+		outputs := make([]any, 6)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+	}
 }
 
-func Call46[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6), i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, O6) {
-	return Call46E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, O6, error) {
+func Func46[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6) {
+	return Func46E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, O6, error) {
 		o1, o2, o3, o4, o5, o6 := f(ctx, i1, i2, i3, i4)
 		return o1, o2, o3, o4, o5, o6, nil
-	}, i1, i2, i3, i4)
+	})
 }
 
-func Call46E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4)(O1, O2, O3, O4, O5, O6, error), i1 I1, i2 I2, i3 I3, i4 I4)  (O1, O2, O3, O4, O5, O6) {
-	inputs := []any{i1, i2, i3, i4}
-	outputs := make([]any, 7)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+func Func46E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6, error)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, O6) {
+		inputs := []any{i1, i2, i3, i4}
+		outputs := make([]any, 7)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+	}
 }
 
-func Call47[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6, O7), i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, O6, O7) {
-	return Call47E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, O6, O7, error) {
+func Func47[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6, O7)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6, O7) {
+	return Func47E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, O6, O7, error) {
 		o1, o2, o3, o4, o5, o6, o7 := f(ctx, i1, i2, i3, i4)
 		return o1, o2, o3, o4, o5, o6, o7, nil
-	}, i1, i2, i3, i4)
+	})
 }
 
-func Call47E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4)(O1, O2, O3, O4, O5, O6, O7, error), i1 I1, i2 I2, i3 I3, i4 I4)  (O1, O2, O3, O4, O5, O6, O7) {
-	inputs := []any{i1, i2, i3, i4}
-	outputs := make([]any, 8)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+func Func47E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6, O7, error)) func(context.Context, I1, I2, I3, I4) (O1, O2, O3, O4, O5, O6, O7) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4) (O1, O2, O3, O4, O5, O6, O7) {
+		inputs := []any{i1, i2, i3, i4}
+		outputs := make([]any, 8)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+	}
 }
 
-func Call50[I1 any, I2 any, I3 any, I4 any, I5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) {
-	Call50E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) error {
+func Func50[I1 any, I2 any, I3 any, I4 any, I5 any](name string, f func(context.Context, I1, I2, I3, I4, I5)) func(context.Context, I1, I2, I3, I4, I5) {
+	return Func50E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) error {
 		f(ctx, i1, i2, i3, i4, i5)
 		return nil
-	}, i1, i2, i3, i4, i5)
+	})
 }
 
-func Call50E[I1 any, I2 any, I3 any, I4 any, I5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5)error, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5)  {
-	inputs := []any{i1, i2, i3, i4, i5}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-	return
+func Func50E[I1 any, I2 any, I3 any, I4 any, I5 any](name string, f func(context.Context, I1, I2, I3, I4, I5) error) func(context.Context, I1, I2, I3, I4, I5) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) {
+		inputs := []any{i1, i2, i3, i4, i5}
+		outputs := make([]any, 1)
+		run(ctx, name, f, inputs, outputs)
+		return
+	}
 }
 
-func Call51[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5) O1, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) O1 {
-	return Call51E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, error) {
+func Func51[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any](name string, f func(context.Context, I1, I2, I3, I4, I5) O1) func(context.Context, I1, I2, I3, I4, I5) O1 {
+	return Func51E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, error) {
 		o1 := f(ctx, i1, i2, i3, i4, i5)
 		return o1, nil
-	}, i1, i2, i3, i4, i5)
+	})
 }
 
-func Call51E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5)(O1, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5)  O1 {
-	inputs := []any{i1, i2, i3, i4, i5}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1)
+func Func51E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, error)) func(context.Context, I1, I2, I3, I4, I5) O1 {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) O1 {
+		inputs := []any{i1, i2, i3, i4, i5}
+		outputs := make([]any, 2)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1)
+	}
 }
 
-func Call52[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2) {
-	return Call52E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, error) {
+func Func52[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2) {
+	return Func52E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, error) {
 		o1, o2 := f(ctx, i1, i2, i3, i4, i5)
 		return o1, o2, nil
-	}, i1, i2, i3, i4, i5)
+	})
 }
 
-func Call52E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5)(O1, O2, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5)  (O1, O2) {
-	inputs := []any{i1, i2, i3, i4, i5}
-	outputs := make([]any, 3)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2)
+func Func52E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, error)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2) {
+		inputs := []any{i1, i2, i3, i4, i5}
+		outputs := make([]any, 3)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2)
+	}
 }
 
-func Call53[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3) {
-	return Call53E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, error) {
+func Func53[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3) {
+	return Func53E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, error) {
 		o1, o2, o3 := f(ctx, i1, i2, i3, i4, i5)
 		return o1, o2, o3, nil
-	}, i1, i2, i3, i4, i5)
+	})
 }
 
-func Call53E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5)(O1, O2, O3, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5)  (O1, O2, O3) {
-	inputs := []any{i1, i2, i3, i4, i5}
-	outputs := make([]any, 4)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+func Func53E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, error)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3) {
+		inputs := []any{i1, i2, i3, i4, i5}
+		outputs := make([]any, 4)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+	}
 }
 
-func Call54[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4) {
-	return Call54E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, error) {
+func Func54[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4) {
+	return Func54E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, error) {
 		o1, o2, o3, o4 := f(ctx, i1, i2, i3, i4, i5)
 		return o1, o2, o3, o4, nil
-	}, i1, i2, i3, i4, i5)
+	})
 }
 
-func Call54E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5)(O1, O2, O3, O4, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5)  (O1, O2, O3, O4) {
-	inputs := []any{i1, i2, i3, i4, i5}
-	outputs := make([]any, 5)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+func Func54E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, error)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4) {
+		inputs := []any{i1, i2, i3, i4, i5}
+		outputs := make([]any, 5)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+	}
 }
 
-func Call55[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5) {
-	return Call55E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, error) {
+func Func55[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5) {
+	return Func55E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, error) {
 		o1, o2, o3, o4, o5 := f(ctx, i1, i2, i3, i4, i5)
 		return o1, o2, o3, o4, o5, nil
-	}, i1, i2, i3, i4, i5)
+	})
 }
 
-func Call55E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5)(O1, O2, O3, O4, O5, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5)  (O1, O2, O3, O4, O5) {
-	inputs := []any{i1, i2, i3, i4, i5}
-	outputs := make([]any, 6)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+func Func55E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, error)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5) {
+		inputs := []any{i1, i2, i3, i4, i5}
+		outputs := make([]any, 6)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+	}
 }
 
-func Call56[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, O6) {
-	return Call56E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, O6, error) {
+func Func56[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6) {
+	return Func56E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, O6, error) {
 		o1, o2, o3, o4, o5, o6 := f(ctx, i1, i2, i3, i4, i5)
 		return o1, o2, o3, o4, o5, o6, nil
-	}, i1, i2, i3, i4, i5)
+	})
 }
 
-func Call56E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5)(O1, O2, O3, O4, O5, O6, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5)  (O1, O2, O3, O4, O5, O6) {
-	inputs := []any{i1, i2, i3, i4, i5}
-	outputs := make([]any, 7)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+func Func56E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6, error)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, O6) {
+		inputs := []any{i1, i2, i3, i4, i5}
+		outputs := make([]any, 7)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+	}
 }
 
-func Call57[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6, O7), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, O6, O7) {
-	return Call57E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, O6, O7, error) {
+func Func57[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6, O7)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6, O7) {
+	return Func57E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, O6, O7, error) {
 		o1, o2, o3, o4, o5, o6, o7 := f(ctx, i1, i2, i3, i4, i5)
 		return o1, o2, o3, o4, o5, o6, o7, nil
-	}, i1, i2, i3, i4, i5)
+	})
 }
 
-func Call57E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5)(O1, O2, O3, O4, O5, O6, O7, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5)  (O1, O2, O3, O4, O5, O6, O7) {
-	inputs := []any{i1, i2, i3, i4, i5}
-	outputs := make([]any, 8)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+func Func57E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6, O7, error)) func(context.Context, I1, I2, I3, I4, I5) (O1, O2, O3, O4, O5, O6, O7) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5) (O1, O2, O3, O4, O5, O6, O7) {
+		inputs := []any{i1, i2, i3, i4, i5}
+		outputs := make([]any, 8)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+	}
 }
 
-func Call60[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) {
-	Call60E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) error {
+func Func60[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6)) func(context.Context, I1, I2, I3, I4, I5, I6) {
+	return Func60E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) error {
 		f(ctx, i1, i2, i3, i4, i5, i6)
 		return nil
-	}, i1, i2, i3, i4, i5, i6)
+	})
 }
 
-func Call60E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6)error, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6)  {
-	inputs := []any{i1, i2, i3, i4, i5, i6}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-	return
+func Func60E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) error) func(context.Context, I1, I2, I3, I4, I5, I6) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) {
+		inputs := []any{i1, i2, i3, i4, i5, i6}
+		outputs := make([]any, 1)
+		run(ctx, name, f, inputs, outputs)
+		return
+	}
 }
 
-func Call61[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6) O1, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) O1 {
-	return Call61E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, error) {
+func Func61[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) O1) func(context.Context, I1, I2, I3, I4, I5, I6) O1 {
+	return Func61E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, error) {
 		o1 := f(ctx, i1, i2, i3, i4, i5, i6)
 		return o1, nil
-	}, i1, i2, i3, i4, i5, i6)
+	})
 }
 
-func Call61E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6)(O1, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6)  O1 {
-	inputs := []any{i1, i2, i3, i4, i5, i6}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1)
+func Func61E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, error)) func(context.Context, I1, I2, I3, I4, I5, I6) O1 {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) O1 {
+		inputs := []any{i1, i2, i3, i4, i5, i6}
+		outputs := make([]any, 2)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1)
+	}
 }
 
-func Call62[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2) {
-	return Call62E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, error) {
+func Func62[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2) {
+	return Func62E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, error) {
 		o1, o2 := f(ctx, i1, i2, i3, i4, i5, i6)
 		return o1, o2, nil
-	}, i1, i2, i3, i4, i5, i6)
+	})
 }
 
-func Call62E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6)(O1, O2, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6)  (O1, O2) {
-	inputs := []any{i1, i2, i3, i4, i5, i6}
-	outputs := make([]any, 3)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2)
+func Func62E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, error)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2) {
+		inputs := []any{i1, i2, i3, i4, i5, i6}
+		outputs := make([]any, 3)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2)
+	}
 }
 
-func Call63[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3) {
-	return Call63E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, error) {
+func Func63[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3) {
+	return Func63E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, error) {
 		o1, o2, o3 := f(ctx, i1, i2, i3, i4, i5, i6)
 		return o1, o2, o3, nil
-	}, i1, i2, i3, i4, i5, i6)
+	})
 }
 
-func Call63E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6)(O1, O2, O3, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6)  (O1, O2, O3) {
-	inputs := []any{i1, i2, i3, i4, i5, i6}
-	outputs := make([]any, 4)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+func Func63E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, error)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3) {
+		inputs := []any{i1, i2, i3, i4, i5, i6}
+		outputs := make([]any, 4)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+	}
 }
 
-func Call64[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4) {
-	return Call64E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, error) {
+func Func64[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4) {
+	return Func64E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, error) {
 		o1, o2, o3, o4 := f(ctx, i1, i2, i3, i4, i5, i6)
 		return o1, o2, o3, o4, nil
-	}, i1, i2, i3, i4, i5, i6)
+	})
 }
 
-func Call64E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6)(O1, O2, O3, O4, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6)  (O1, O2, O3, O4) {
-	inputs := []any{i1, i2, i3, i4, i5, i6}
-	outputs := make([]any, 5)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+func Func64E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, error)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4) {
+		inputs := []any{i1, i2, i3, i4, i5, i6}
+		outputs := make([]any, 5)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+	}
 }
 
-func Call65[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5) {
-	return Call65E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, error) {
+func Func65[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5) {
+	return Func65E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, error) {
 		o1, o2, o3, o4, o5 := f(ctx, i1, i2, i3, i4, i5, i6)
 		return o1, o2, o3, o4, o5, nil
-	}, i1, i2, i3, i4, i5, i6)
+	})
 }
 
-func Call65E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6)(O1, O2, O3, O4, O5, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6)  (O1, O2, O3, O4, O5) {
-	inputs := []any{i1, i2, i3, i4, i5, i6}
-	outputs := make([]any, 6)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+func Func65E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, error)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5) {
+		inputs := []any{i1, i2, i3, i4, i5, i6}
+		outputs := make([]any, 6)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+	}
 }
 
-func Call66[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, O6) {
-	return Call66E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, O6, error) {
+func Func66[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6) {
+	return Func66E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, O6, error) {
 		o1, o2, o3, o4, o5, o6 := f(ctx, i1, i2, i3, i4, i5, i6)
 		return o1, o2, o3, o4, o5, o6, nil
-	}, i1, i2, i3, i4, i5, i6)
+	})
 }
 
-func Call66E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6)(O1, O2, O3, O4, O5, O6, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6)  (O1, O2, O3, O4, O5, O6) {
-	inputs := []any{i1, i2, i3, i4, i5, i6}
-	outputs := make([]any, 7)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+func Func66E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6, error)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, O6) {
+		inputs := []any{i1, i2, i3, i4, i5, i6}
+		outputs := make([]any, 7)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+	}
 }
 
-func Call67[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6, O7), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, O6, O7) {
-	return Call67E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, O6, O7, error) {
+func Func67[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6, O7)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6, O7) {
+	return Func67E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, O6, O7, error) {
 		o1, o2, o3, o4, o5, o6, o7 := f(ctx, i1, i2, i3, i4, i5, i6)
 		return o1, o2, o3, o4, o5, o6, o7, nil
-	}, i1, i2, i3, i4, i5, i6)
+	})
 }
 
-func Call67E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6)(O1, O2, O3, O4, O5, O6, O7, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6)  (O1, O2, O3, O4, O5, O6, O7) {
-	inputs := []any{i1, i2, i3, i4, i5, i6}
-	outputs := make([]any, 8)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+func Func67E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6, O7, error)) func(context.Context, I1, I2, I3, I4, I5, I6) (O1, O2, O3, O4, O5, O6, O7) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6) (O1, O2, O3, O4, O5, O6, O7) {
+		inputs := []any{i1, i2, i3, i4, i5, i6}
+		outputs := make([]any, 8)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+	}
 }
 
-func Call70[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) {
-	Call70E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) error {
+func Func70[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) {
+	return Func70E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) error {
 		f(ctx, i1, i2, i3, i4, i5, i6, i7)
 		return nil
-	}, i1, i2, i3, i4, i5, i6, i7)
+	})
 }
 
-func Call70E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7)error, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7)  {
-	inputs := []any{i1, i2, i3, i4, i5, i6, i7}
-	outputs := make([]any, 1)
-	run(ctx, name, f, inputs, outputs)
-	return
+func Func70E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) error) func(context.Context, I1, I2, I3, I4, I5, I6, I7) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) {
+		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
+		outputs := make([]any, 1)
+		run(ctx, name, f, inputs, outputs)
+		return
+	}
 }
 
-func Call71[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) O1, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) O1 {
-	return Call71E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, error) {
+func Func71[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) O1) func(context.Context, I1, I2, I3, I4, I5, I6, I7) O1 {
+	return Func71E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, error) {
 		o1 := f(ctx, i1, i2, i3, i4, i5, i6, i7)
 		return o1, nil
-	}, i1, i2, i3, i4, i5, i6, i7)
+	})
 }
 
-func Call71E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7)(O1, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7)  O1 {
-	inputs := []any{i1, i2, i3, i4, i5, i6, i7}
-	outputs := make([]any, 2)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1)
+func Func71E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, error)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) O1 {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) O1 {
+		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
+		outputs := make([]any, 2)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1)
+	}
 }
 
-func Call72[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2) {
-	return Call72E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, error) {
+func Func72[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2) {
+	return Func72E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, error) {
 		o1, o2 := f(ctx, i1, i2, i3, i4, i5, i6, i7)
 		return o1, o2, nil
-	}, i1, i2, i3, i4, i5, i6, i7)
+	})
 }
 
-func Call72E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7)(O1, O2, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7)  (O1, O2) {
-	inputs := []any{i1, i2, i3, i4, i5, i6, i7}
-	outputs := make([]any, 3)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2)
+func Func72E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, error)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2) {
+		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
+		outputs := make([]any, 3)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2)
+	}
 }
 
-func Call73[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3) {
-	return Call73E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, error) {
+func Func73[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3) {
+	return Func73E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, error) {
 		o1, o2, o3 := f(ctx, i1, i2, i3, i4, i5, i6, i7)
 		return o1, o2, o3, nil
-	}, i1, i2, i3, i4, i5, i6, i7)
+	})
 }
 
-func Call73E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7)(O1, O2, O3, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7)  (O1, O2, O3) {
-	inputs := []any{i1, i2, i3, i4, i5, i6, i7}
-	outputs := make([]any, 4)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+func Func73E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, error)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3) {
+		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
+		outputs := make([]any, 4)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+	}
 }
 
-func Call74[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4) {
-	return Call74E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, error) {
+func Func74[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4) {
+	return Func74E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, error) {
 		o1, o2, o3, o4 := f(ctx, i1, i2, i3, i4, i5, i6, i7)
 		return o1, o2, o3, o4, nil
-	}, i1, i2, i3, i4, i5, i6, i7)
+	})
 }
 
-func Call74E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7)(O1, O2, O3, O4, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7)  (O1, O2, O3, O4) {
-	inputs := []any{i1, i2, i3, i4, i5, i6, i7}
-	outputs := make([]any, 5)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+func Func74E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, error)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4) {
+		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
+		outputs := make([]any, 5)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+	}
 }
 
-func Call75[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5) {
-	return Call75E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, error) {
+func Func75[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5) {
+	return Func75E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, error) {
 		o1, o2, o3, o4, o5 := f(ctx, i1, i2, i3, i4, i5, i6, i7)
 		return o1, o2, o3, o4, o5, nil
-	}, i1, i2, i3, i4, i5, i6, i7)
+	})
 }
 
-func Call75E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7)(O1, O2, O3, O4, O5, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7)  (O1, O2, O3, O4, O5) {
-	inputs := []any{i1, i2, i3, i4, i5, i6, i7}
-	outputs := make([]any, 6)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+func Func75E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, error)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5) {
+		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
+		outputs := make([]any, 6)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+	}
 }
 
-func Call76[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, O6) {
-	return Call76E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, O6, error) {
+func Func76[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6) {
+	return Func76E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, O6, error) {
 		o1, o2, o3, o4, o5, o6 := f(ctx, i1, i2, i3, i4, i5, i6, i7)
 		return o1, o2, o3, o4, o5, o6, nil
-	}, i1, i2, i3, i4, i5, i6, i7)
+	})
 }
 
-func Call76E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7)(O1, O2, O3, O4, O5, O6, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7)  (O1, O2, O3, O4, O5, O6) {
-	inputs := []any{i1, i2, i3, i4, i5, i6, i7}
-	outputs := make([]any, 7)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+func Func76E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6, error)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, O6) {
+		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
+		outputs := make([]any, 7)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+	}
 }
 
-func Call77[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6, O7), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, O6, O7) {
-	return Call77E(ctx, name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, O6, O7, error) {
+func Func77[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6, O7)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6, O7) {
+	return Func77E(name, func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, O6, O7, error) {
 		o1, o2, o3, o4, o5, o6, o7 := f(ctx, i1, i2, i3, i4, i5, i6, i7)
 		return o1, o2, o3, o4, o5, o6, o7, nil
-	}, i1, i2, i3, i4, i5, i6, i7)
+	})
 }
 
-func Call77E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](ctx context.Context, name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7)(O1, O2, O3, O4, O5, O6, O7, error), i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7)  (O1, O2, O3, O4, O5, O6, O7) {
-	inputs := []any{i1, i2, i3, i4, i5, i6, i7}
-	outputs := make([]any, 8)
-	run(ctx, name, f, inputs, outputs)
-	return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+func Func77E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string, f func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6, O7, error)) func(context.Context, I1, I2, I3, I4, I5, I6, I7) (O1, O2, O3, O4, O5, O6, O7) {
+	return func(ctx context.Context, i1 I1, i2 I2, i3 I3, i4 I4, i5 I5, i6 I6, i7 I7) (O1, O2, O3, O4, O5, O6, O7) {
+		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
+		outputs := make([]any, 8)
+		run(ctx, name, f, inputs, outputs)
+		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+	}
 }
 
