@@ -35,16 +35,14 @@ func WriteFile(ctx context.Context, path, content string) {
 
 // Run a shell command, halting the pipeline on error.
 func Cmd(ctx context.Context, name string, args ...string) string {
-	cmd := exec.CommandContext(ctx, name, args...)
-	key := cmd.String()
-	return Func11E(name, func(ctx context.Context, _ string) (string, error) {
+	return Func21E(name, func(ctx context.Context, _ string, _ []string) (string, error) {
 		MarkImpure(ctx)
-		out, err := cmd.Output()
+		out, err := exec.CommandContext(ctx, name, args...).Output()
 		if exit, ok := err.(*exec.ExitError); ok {
 			err = fmt.Errorf("%s:\n%s", err.Error(), string(exit.Stderr))
 		}
 		return string(out), err
-	})(ctx, key)
+	})(ctx, name, args)
 }
 
 // Halt the pipeline if err is non-nil.
