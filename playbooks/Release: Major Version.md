@@ -11,18 +11,30 @@ For the purposes of example code in this document, we'll assume the provider is 
 
 In the provider repo:
 
-1. In the `Makefile`, alter the `PROVIDER_PATH` variable:
+1. Set the `major-version` field in `.ci-mgmt.yaml` to `2`:
 
-    ```makefile
-    PROVIDER_PATH := provider/v2
+    ```patch
+    -major-version: 1
+    +major-version: 2
     ```
 
-1. In `.goreleaser-prerelease.yml` and `.goreleaser.yml`, change the `ldflags` so that the major version is specified,
-   e.g.:
+1. Run `make ci-mgmt` to reflect the changes made in the previous step. At minimum, you
+   should see these changes in `.goreleaser.prerelease.yml`, `.goreleaser.yml` and
+   `Makefile`:
 
-    ```yaml
+    .goreleaser.prerelease.yml, .goreleaser.yml:
+
+    ```patch
     ldflags:
-    - -X github.com/pulumi/pulumi-${PROVIDER}/provider/v2/pkg/version.Version={{.Tag}}
+    -- -X github.com/pulumi/pulumi-${PROVIDER}/provider/pkg/version.Version={{.Tag}}
+    +- -X github.com/pulumi/pulumi-${PROVIDER}/provider/v2/pkg/version.Version={{.Tag}}
+    ```
+
+    Makefile:
+
+    ```patch
+    -PROVIDER_PATH := provider
+    +PROVIDER_PATH := provider/v2
     ```
 
 1. In `provider/go.mod`, change the `module` directive to be v2, e.g.:
@@ -98,18 +110,6 @@ In the provider repo:
 
    When merging the PR, make sure to use "Create a merge commit" method (and not Rebase or Squash) so that after merging
    to the main branch the tag continues pointing to a valid commit on the main branch.
-
-
-## Updating the ci-mgmt code for the new version
-
-After the provider itself has been upgraded, we need to ensure the provider's GitHub Actions workflows in [the CI
-management repo](github.com/pulumi/ci-mgmt) are similarly updated.
-
-1. Change the value of `major-version` in `provider-ci/providers/${PROVIDER}/config.yaml` to `2`.
-1. Generate the files for the provider: `cd provider-ci && make provider NAME=${PROVIDER}`.
-1. Create a PR in ci-mgmt for the change
-1. When the PR is merged, dispatch the "Deploy workflow files, single provider" GitHub Actions workflow in ci-mgmt. This
-   will create a PR in the provider repo to ensure the workflow files are in sync
 
 
 ## Notes
