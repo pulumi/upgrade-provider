@@ -469,7 +469,7 @@ func tfgenAndBuildSDKs(
 		stepv2.Cmd(root, "make", "tfgen")
 
 		stepv2.Cmd(root, "git", "add", "--all")
-		stepv2.Call10(ctx, "Tfgen", gitCommit, "make tfgen")
+		gitCommit(ctx, "make tfgen")
 
 		stepv2.Cmd(root, "make", "build_sdks")
 
@@ -491,9 +491,9 @@ func tfgenAndBuildSDKs(
 
 		stepv2.Cmd(root, "git", "add", "--all")
 
-		stepv2.Call10(ctx, "Build SDKs", gitCommit, "make build_sdks")
+		gitCommit(ctx, "make build_sdks")
 
-		stepv2.Call70E(ctx, "Inform Github", InformGitHub,
-			upgradeTarget, repo, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade, os.Args)
+		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion,
+			targetPfVersion, tfSDKUpgrade, os.Args)
 	}
 }

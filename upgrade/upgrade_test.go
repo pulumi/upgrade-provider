@@ -23,7 +23,7 @@ func TestInformGithub(t *testing.T) {
 	}).Wrap(ctx)
 
 	err := step.PipelineCtx(ctx, "Tfgen & Build SDKs", func(ctx context.Context) {
-		step.Call70E(ctx, "Inform Github", InformGitHub,
+		InformGitHub(ctx,
 			&UpstreamUpgradeTarget{
 				GHIssues: []UpgradeTargetIssue{
 					{Number: 232},
