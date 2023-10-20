@@ -47,24 +47,21 @@ func exitOnError(err error) {
 }
 
 func call(w io.Writer, in, out int) error {
-	genericTypeArr := make([]string, in+out)
-	var namedInputs string
-	var inputTypes string
-	inputsArr := make([]string, in)
-	for i := 0; i < in; i++ {
-		genericTypeArr[i] = fmt.Sprintf("I%d any", i+1)
-		namedInputs += fmt.Sprintf(", i%[1]d I%[1]d", i+1)
-		inputTypes += fmt.Sprintf(", I%d", i+1)
-		inputsArr[i] = fmt.Sprintf("i%d", i+1)
-	}
-	outputTypeArr := make([]string, out)
-	var outputsArr = make([]string, out)
-	for i := 0; i < out; i++ {
-		genericTypeArr[i+in] = fmt.Sprintf("O%d any", i+1)
-		outputTypeArr[i] = fmt.Sprintf("O%d", i+1)
-		outputsArr[i] = fmt.Sprintf("o%d", i+1)
+	t := types{in, out}
+	genericTypes := t.fullTypeList()
 
+	inputsArr := t.argListFmt("i%d")
+	inputTypes := strings.Join(t.argListFmt(", I%d"), "")
+	namedInputs := strings.Join(t.argListFmt(", i%[1]d I%[1]d"), "")
+
+	var inputArgs string
+	if in > 0 {
+		inputArgs = ", " + strings.Join(inputsArr, ", ")
 	}
+
+	outputTypeArr := t.retListFmt("O%d")
+	outputsArr := t.retListFmt("o%d")
+
 	outputTypes := strings.Join(outputTypeArr, ", ")
 	if out > 1 {
 		outputTypes = "(" + outputTypes + ")"
@@ -79,11 +76,6 @@ func call(w io.Writer, in, out int) error {
 		outputTypesWithErr = "(" + strings.Join(outputTypeArr, ", ") + ", error)"
 	}
 
-	var genericTypes string
-	if in+out > 0 {
-		genericTypes = "[" + strings.Join(genericTypeArr, ", ") + "]"
-	}
-
 	var retCall, retF, retErrorValue, retNoOutputs string
 	if out > 0 {
 		retCall = "return "
@@ -93,12 +85,7 @@ func call(w io.Writer, in, out int) error {
 		retNoOutputs = "\n\t\treturn nil"
 	}
 
-	var inputArgs string
-	if in > 0 {
-		inputArgs = ", " + strings.Join(inputsArr, ", ")
-	}
-
-	f := fmt.Sprintf(`func Call%d%d%s(ctx context.Context, name string, f func(context.Context%s)%s%s)%s {
+	_, err := fmt.Fprintf(w, `func Call%d%d%s(ctx context.Context, name string, f func(context.Context%s)%s%s)%s {
 	%sCall%d%dE(ctx, name, func(ctx context.Context%s) %s {
 		%sf(ctx%s)%s%s
 	}%s)
@@ -109,7 +96,6 @@ func call(w io.Writer, in, out int) error {
 		retF, inputArgs, retErrorValue, retNoOutputs,
 		inputArgs,
 	)
-	_, err := w.Write([]byte(f))
 	if err != nil {
 		return err
 	}
@@ -123,7 +109,7 @@ func call(w io.Writer, in, out int) error {
 		retValues = " " + retValues
 	}
 
-	fE := fmt.Sprintf(`func Call%d%dE%s(ctx context.Context, name string, f func(context.Context%s)%s%s) %s {
+	_, err = fmt.Fprintf(w, `func Call%d%dE%s(ctx context.Context, name string, f func(context.Context%s)%s%s) %s {
 	inputs := []any{%s}
 	outputs := make([]any, %d)
 	run(ctx, name, f, inputs, outputs)
@@ -135,6 +121,32 @@ func call(w io.Writer, in, out int) error {
 		out+1, // +1 for the returned error value
 		retValues)
 
-	_, err = w.Write([]byte(fE))
 	return err
+}
+
+type types struct{ in, out int }
+
+func (a types) argListFmt(in string) []string {
+	elems := make([]string, 0, a.in)
+	for i := 1; i <= a.in; i++ {
+		elems = append(elems, fmt.Sprintf(in, i))
+	}
+	return elems
+}
+
+func (a types) retListFmt(out string) []string {
+	elems := make([]string, 0, a.out)
+	for i := 1; i <= a.out; i++ {
+		elems = append(elems, fmt.Sprintf(out, i))
+	}
+	return elems
+}
+
+func (a types) fullTypeList() string {
+	if a.in+a.out == 0 {
+		return ""
+	}
+	ins := a.argListFmt("I%d any")
+	outs := a.retListFmt("O%d any")
+	return "[" + strings.Join(append(ins, outs...), ", ") + "]"
 }
