@@ -37,7 +37,9 @@ func WriteFile(ctx context.Context, path, content string) {
 func Cmd(ctx context.Context, name string, args ...string) string {
 	return Func21E(name, func(ctx context.Context, _ string, _ []string) (string, error) {
 		MarkImpure(ctx)
-		out, err := exec.CommandContext(ctx, name, args...).Output()
+		cmd := exec.CommandContext(ctx, name, args...)
+		SetLabel(ctx, cmd.String())
+		out, err := cmd.Output()
 		if exit, ok := err.(*exec.ExitError); ok {
 			err = fmt.Errorf("%s:\n%s", err.Error(), string(exit.Stderr))
 		}
@@ -53,4 +55,22 @@ func HaltOnError(ctx context.Context, err error) {
 	Func00E(err.Error(), func(context.Context) error {
 		return err
 	})(ctx)
+}
+
+// Run `f` in `dir`.
+//
+// If the dir does not exist, then the current pipeline will fail.
+func WithCwd(ctx context.Context, dir string, f func(context.Context)) {
+	c := &Cwd{To: dir}
+	err := c.Enter(ctx, StepInfo{})
+	HaltOnError(ctx, err)
+	c.depth--
+
+	defer func() {
+		c.depth++
+		err := c.Exit(ctx, nil)
+		HaltOnError(ctx, err)
+	}()
+
+	f(WithEnv(ctx, c))
 }
