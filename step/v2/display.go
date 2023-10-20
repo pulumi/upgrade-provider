@@ -49,7 +49,7 @@ func (s *spinnerDisplay) Start(ctx context.Context, title string) error {
 	s.spinner = spinner.New([]string{"|", "/", "-", "\\"},
 		time.Millisecond*250,
 		spinner.WithHiddenCursor(true))
-	return nil
+	return s.Resume(ctx)
 }
 
 func (s *spinnerDisplay) SetLabel(ctx context.Context, label string) error {

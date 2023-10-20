@@ -72,7 +72,7 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context), 
 	}
 
 	var options options
-	for _, o := range opts {
+	for _, o := range append([]Option{DefaultDisplay}, opts...) {
 		o(&options)
 	}
 
@@ -82,9 +82,8 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context), 
 	}
 
 	// If we are initially silent, don't bother to create and start a spinner
-	var silent bool
 	for _, env := range getEnvs(ctx) {
-		_, silent = env.(*Silent)
+		_, silent := env.(*Silent)
 		if silent {
 			p.display = nullDisplay
 			break
@@ -100,6 +99,7 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context), 
 	done := make(chan struct{})
 	go func() {
 		defer func() { close(done) }()
+
 		steps(withPipeline(ctx, p))
 	}()
 	<-done

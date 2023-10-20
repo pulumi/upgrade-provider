@@ -30,34 +30,33 @@ func main() {
 
 func pipeline(ctx context.Context) {
 	bytes := step.ReadFile(ctx, "input.txt")
-	process := step.Call11(ctx, "hide-secret", hide, bytes)
-	step.Call10E(ctx, "write", writeFile, process)
+	process := hide(ctx, bytes)
+	writeFile(ctx, process)
 }
 
-func hide(ctx context.Context, input string) string {
-	step.Call10(step.WithEnv(ctx, &step.EnvVar{
+var hide = step.Func11("hide-secret", func(ctx context.Context, input string) string {
+	sleep(step.WithEnv(ctx, &step.EnvVar{
 		Key:   "PROCESSING",
 		Value: "1",
-	}), "sleep", sleep, 3)
+	}), 3)
 	return strings.ReplaceAll(input, "secret", "[SECRET]")
-}
+})
 
-func writeFile(ctx context.Context, content string) error {
+var writeFile = step.Func10E("write", func(ctx context.Context, content string) error {
 	step.MarkImpure(ctx)
-
-	step.Call10(step.WithEnv(ctx, &step.EnvVar{
+	sleep(step.WithEnv(ctx, &step.EnvVar{
 		Key:   "WRITING",
 		Value: "1",
-	}), "sleep", sleep, 4)
+	}), 4)
 	err := os.WriteFile("output.txt", []byte(content), 0600)
 	step.SetLabel(ctx, fmt.Sprintf("%d bytes written", len(content)))
 	return err
-}
+})
 
-func sleep(ctx context.Context, seconds int) {
+var sleep = step.Func10("sleep", func(ctx context.Context, seconds int) {
 	for i := seconds; i > 0; i-- {
 		step.SetLabel(ctx, fmt.Sprintf("%d seconds remaining", i))
 		time.Sleep(time.Second * 1)
 	}
 	step.SetLabel(ctx, "done")
-}
+})
