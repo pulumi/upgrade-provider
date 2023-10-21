@@ -1,11 +1,11 @@
 package upgrade
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"io"
+	"os"
 	"sort"
 	"strings"
 
@@ -16,6 +16,7 @@ import (
 
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
+	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
 type CodeMigration = func(ctx context.Context, repo ProviderRepo) (step.Step, error)
@@ -25,8 +26,15 @@ var CodeMigrations = map[string]CodeMigration{
 	"assertnoerror": ReplaceAssertNoError,
 }
 
-func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
-	var err error
+func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) {
+
+	// Setup ctx to enable replay tests with stepv2:
+	if file := os.Getenv("PULUMI_REPLAY"); file != "" {
+		var write io.Closer
+		ctx, write = stepv2.WithRecord(ctx, file)
+		defer func() { err = errors.Join(err, write.Close()) }()
+	}
+
 	repo := ProviderRepo{
 		name: repoName,
 		org:  repoOrg,
@@ -433,52 +441,69 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) error {
 		}
 	}
 
-	artifacts := append(steps,
-		step.Cmd("go", "mod", "tidy").In(repo.providerDir()),
-		step.Cmd("go", "mod", "tidy").In(repo.examplesDir()),
-		step.Cmd("go", "mod", "tidy").In(repo.sdkDir()),
-		step.Computed(func() step.Step {
-			if GetContext(ctx).RemovePlugins {
-				return step.Cmd("pulumi", "plugin", "rm", "--all", "--yes")
-			}
-			return nil
-		}),
-		step.Cmd("make", "tfgen").In(&repo.root),
-		step.Cmd("git", "add", "--all").In(&repo.root),
-		GitCommit(ctx, "make tfgen").In(&repo.root),
-		step.Cmd("make", "build_sdks").In(&repo.root),
-		step.Computed(func() step.Step {
-			if !GetContext(ctx).MajorVersionBump {
-				return nil
-			}
+	ok = step.Run(ctx, step.Combined("Update Repository", steps...))
+	if !ok {
+		return ErrHandled
+	}
 
-			return UpdateFile("Update module in sdk/go.mod", "sdk/go.mod", func(b []byte) ([]byte, error) {
+	return stepv2.PipelineCtx(ctx, "Tfgen & Build SDKs",
+		tfgenAndBuildSDKs(repo, repoName, upgradeTarget, goMod,
+			targetBridgeVersion, targetPfVersion, tfSDKUpgrade))
+}
+
+func tfgenAndBuildSDKs(
+	repo ProviderRepo, repoName string, upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
+	targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
+) func(ctx context.Context) {
+	return func(ctx context.Context) {
+		ctx = stepv2.WithEnv(ctx, &stepv2.Cwd{To: repo.root})
+
+		stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
+			stepv2.Cmd(ctx, "go", "mod", "tidy")
+		})
+
+		stepv2.WithCwd(ctx, *repo.examplesDir(), func(ctx context.Context) {
+			stepv2.Cmd(ctx, "go", "mod", "tidy")
+		})
+
+		stepv2.WithCwd(ctx, *repo.sdkDir(), func(ctx context.Context) {
+			stepv2.Cmd(ctx, "go", "mod", "tidy")
+		})
+
+		if GetContext(ctx).RemovePlugins {
+			stepv2.Cmd(ctx, "pulumi", "plugin", "rm", "--all", "--yes")
+		}
+
+		stepv2.Cmd(ctx, "make", "tfgen")
+
+		stepv2.Cmd(ctx, "git", "add", "--all")
+		gitCommit(ctx, "make tfgen")
+
+		stepv2.Cmd(ctx, "make", "build_sdks")
+
+		// Update sdk/go.mod's module after rebuilding the go SDK
+		if GetContext(ctx).MajorVersionBump {
+			update := func(_ context.Context, s string) string {
 				base := "module github.com/" + repoName + "/sdk"
 				old := base
 				if repo.currentVersion.Major() > 1 {
 					old += fmt.Sprintf("/v%d", repo.currentVersion.Major())
 				}
 				new := base + fmt.Sprintf("/v%d", repo.currentVersion.Major()+1)
-				return bytes.ReplaceAll(b, []byte(old), []byte(new)), nil
-			}).In(&repo.root)
-		}),
-		step.Computed(func() step.Step {
-			if !GetContext(ctx).MajorVersionBump {
-				return nil
+				return strings.ReplaceAll(s, old, new)
 			}
-			dir := filepath.Join(repo.root, "sdk")
-			return step.Cmd("go", "mod", "tidy").
-				In(&dir)
-		}),
-		step.Cmd("git", "add", "--all").In(&repo.root),
-		GitCommit(ctx, "make build_sdks").In(&repo.root),
-		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade),
-	)
 
-	ok = step.Run(ctx, step.Combined("Update Artifacts", artifacts...))
-	if !ok {
-		return ErrHandled
+			stepv2.WithCwd(ctx, *repo.sdkDir(), func(ctx context.Context) {
+				UpdateFileV2(ctx, "go.mod", update)
+				stepv2.Cmd(ctx, "go", "mod", "tidy")
+			})
+		}
+
+		stepv2.Cmd(ctx, "git", "add", "--all")
+
+		gitCommit(ctx, "make build_sdks")
+
+		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion,
+			targetPfVersion, tfSDKUpgrade, os.Args)
 	}
-
-	return nil
 }
