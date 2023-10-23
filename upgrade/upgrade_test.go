@@ -13,7 +13,7 @@ import (
 )
 
 func TestInformGithub(t *testing.T) {
-	ctx := newReplay(t, "wavefront-inform-github")
+	ctx := newReplay(t, "wavefront_inform_github")
 
 	ctx = (&Context{
 		UpgradeProviderVersion: true,
