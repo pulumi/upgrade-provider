@@ -46,14 +46,14 @@ type Replay struct {
 	}
 
 	pipeline int // The index of the current pipline
-	r        *replayV1
+	r        *ReplayV1
 
 	next  int // The index of the next step the replay should contain
 	steps []Step
 }
 
 func NewReplay(t *testing.T, source []byte) *Replay {
-	var s replayV1
+	var s ReplayV1
 	err := json.Unmarshal(source, &s)
 	require.NoError(t, err)
 	return &Replay{t: t, r: &s}
@@ -79,7 +79,7 @@ func (r *Replay) setPipeline(name string) {
 			r.t.Logf("Found pipeline %q", name)
 			return
 		}
-		r.t.Logf("Skipping pipeline %q", name)
+		r.t.Logf("Skipping pipeline %q (!= %q)", p.Name, name)
 	}
 
 	r.t.Logf("Failed to find pipline %q", name)
@@ -97,12 +97,12 @@ func (r *Replay) findNextStep(name string) int {
 			r.t.Logf("Found expected next step: %q", name)
 			return current
 		}
-		current++
-
 		// The replay has a recorded step that didn't show up. This indicates an
 		// error.
-		r.t.Logf("Required step %q skipped.", r.steps[current].Name)
+		r.t.Logf("FAIL: Required step %q skipped.", r.steps[current].Name)
 		r.t.Fail()
+
+		current++
 	}
 }
 
@@ -202,7 +202,6 @@ type FinishRecord func() error
 //			}
 //		}
 //	}
-//
 func WithRecord(ctx context.Context, filePath string) (context.Context, io.Closer) {
 	record := &record{filePath: filePath}
 	ctx = WithEnv(ctx, record)
@@ -273,23 +272,23 @@ func (r *record) Exit(_ context.Context, output []any) error {
 
 func (r *record) String() string { return "Recording" }
 
-type replayV1 struct {
-	Pipelines []recordV1 `json:"pipelines"`
+type ReplayV1 struct {
+	Pipelines []RecordV1 `json:"pipelines"`
 }
 
-type recordV1 struct {
+type RecordV1 struct {
 	Name  string  `json:"name"`
 	Steps []*Step `json:"steps"`
 }
 
 func (r *record) Marshal() []byte {
-	pipelines := make([]recordV1, len(r.pipelines))
+	pipelines := make([]RecordV1, len(r.pipelines))
 
 	for i, p := range r.pipelines {
-		pipelines[i] = recordV1{p.name, p.steps}
+		pipelines[i] = RecordV1{p.name, p.steps}
 	}
 
-	m, err := json.MarshalIndent(replayV1{pipelines}, "", "  ")
+	m, err := json.MarshalIndent(ReplayV1{pipelines}, "", "  ")
 	if err != nil {
 		panic(err)
 	}
