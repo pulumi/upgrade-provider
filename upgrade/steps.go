@@ -4,6 +4,7 @@ package upgrade
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -307,7 +308,13 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 ) error {
 	ctx = stepv2.WithEnv(ctx, &stepv2.Cwd{To: repo.root})
 
-	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch)
+	// --force:
+	//
+	// If there is no existing branch, then --force doesn't have any effect. It is thus safe.
+	//
+	// If there is an existing branch, then we will want to override it since we don't
+	// attempt to build on existing branches.
+	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch, "--force")
 
 	var prTitle string
 	if ctx := GetContext(ctx); ctx.UpgradeProviderVersion {
@@ -325,13 +332,21 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		return fmt.Errorf("Unknown action")
 	}
 
-	stepv2.Cmd(ctx, "gh", "pr", "create",
-		"--assignee", GetContext(ctx).PrAssign,
-		"--base", repo.defaultBranch,
-		"--head", repo.workingBranch,
-		"--reviewer", GetContext(ctx).PrReviewers,
-		"--title", prTitle,
-		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs))
+	if repo.prAlreadyExists {
+		// Update the description in case anything else was upgraded (or not
+		// upgraded) in this run, compared to the existing PR.
+		stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
+			"--title", prTitle,
+			"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs))
+	} else {
+		stepv2.Cmd(ctx, "gh", "pr", "create",
+			"--assignee", GetContext(ctx).PrAssign,
+			"--base", repo.defaultBranch,
+			"--head", repo.workingBranch,
+			"--reviewer", GetContext(ctx).PrReviewers,
+			"--title", prTitle,
+			"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs))
+	}
 
 	// If we are only upgrading the bridge, we wont have a list of issues.
 	if !GetContext(ctx).UpgradeProviderVersion {
@@ -414,6 +429,26 @@ var ensureBranchCheckedOut = stepv2.Func10("Ensure Branch", func(ctx context.Con
 	default:
 		stepv2.Cmd(ctx, "git", "checkout", "-b", branchName)
 	}
+})
+
+var hasRemoteBranch = stepv2.Func11("Has Remote Branch", func(ctx context.Context, branchName string) bool {
+	prBytes := []byte(stepv2.Cmd(ctx, "gh", "pr", "list", "--json=title,headRefName"))
+	prs := []struct {
+		Title       string `json:"title"`
+		HeadRefName string `json:"headRefName"`
+	}{}
+	err := json.Unmarshal(prBytes, &prs)
+	stepv2.HaltOnError(ctx, err)
+
+	for _, pr := range prs {
+		if pr.HeadRefName == branchName {
+			stepv2.SetLabel(ctx, fmt.Sprintf("yes %q", pr.Title))
+			return true
+		}
+	}
+
+	stepv2.SetLabel(ctx, "no")
+	return false
 })
 
 var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Context, c Context,

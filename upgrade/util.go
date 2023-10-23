@@ -84,6 +84,8 @@ type ProviderRepo struct {
 	defaultBranch string
 	// The working branch of the repository
 	workingBranch string
+	// If there is already a PR on GitHub who is merging from `repo.workingBranch`.
+	prAlreadyExists bool
 
 	// The highest version tag released on the repo
 	currentVersion *semver.Version

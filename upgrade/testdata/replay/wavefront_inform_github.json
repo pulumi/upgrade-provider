@@ -51,7 +51,8 @@
               "push",
               "--set-upstream",
               "origin",
-              "upgrade-terraform-provider-wavefront-to-v5.0.5"
+              "upgrade-terraform-provider-wavefront-to-v5.0.5",
+              "--force"
             ]
           ],
           "outputs": [
