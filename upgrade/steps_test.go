@@ -62,17 +62,17 @@ func TestGetWorkingBranch(t *testing.T) {
 func TestHasRemoteBranch(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		responce   string
+		response   string
 		branchName string
 		expect     bool
 	}{
 		{
-			responce:   `[{"headRefName":"dependabot/go_modules/provider/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.13.0 to 0.17.0 in /provider"},{"headRefName":"dependabot/go_modules/sdk/golang.org/x/net-0.17.0","title":"bump golang.org/x/net from 0.10.0 to 0.17.0 in /sdk"},{"headRefName":"dependabot/go_modules/examples/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.8.0 to 0.17.0 in /examples"}]`,
+			response:   `[{"headRefName":"dependabot/go_modules/provider/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.13.0 to 0.17.0 in /provider"},{"headRefName":"dependabot/go_modules/sdk/golang.org/x/net-0.17.0","title":"bump golang.org/x/net from 0.10.0 to 0.17.0 in /sdk"},{"headRefName":"dependabot/go_modules/examples/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.8.0 to 0.17.0 in /examples"}]`,
 			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
 			expect:     false,
 		},
 		{
-			responce:   `[{"headRefName":"upgrade-pulumi-terraform-bridge-to-v3.62.0","title":"Upgrade pulumi-terraform-bridge to v3.62.0"},{"headRefName":"dependabot/go_modules/provider/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.13.0 to 0.17.0 in /provider"},{"headRefName":"dependabot/go_modules/sdk/golang.org/x/net-0.17.0","title":"bump golang.org/x/net from 0.10.0 to 0.17.0 in /sdk"},{"headRefName":"dependabot/go_modules/examples/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.8.0 to 0.17.0 in /examples"}]`,
+			response:   `[{"headRefName":"upgrade-pulumi-terraform-bridge-to-v3.62.0","title":"Upgrade pulumi-terraform-bridge to v3.62.0"},{"headRefName":"dependabot/go_modules/provider/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.13.0 to 0.17.0 in /provider"},{"headRefName":"dependabot/go_modules/sdk/golang.org/x/net-0.17.0","title":"bump golang.org/x/net from 0.10.0 to 0.17.0 in /sdk"},{"headRefName":"dependabot/go_modules/examples/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.8.0 to 0.17.0 in /examples"}]`,
 			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
 			expect:     true,
 		},
@@ -102,7 +102,7 @@ func TestHasRemoteBranch(t *testing.T) {
 						Inputs: encode([]any{
 							"gh", []string{"pr", "list", "--json=title,headRefName"},
 						}),
-						Outputs: encode([]any{tt.responce, nil}),
+						Outputs: encode([]any{tt.response, nil}),
 						Impure:  true,
 					},
 				},
@@ -114,25 +114,25 @@ func TestHasRemoteBranch(t *testing.T) {
 func TestEnsureBranchCheckedOut(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		responce   string
+		response   string
 		branchName string
 		call       []string
 		namedValue string
 	}{
 		{
-			responce:   "* master\n",
+			response:   "* master\n",
 			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
 			namedValue: "",
 			call:       []string{"checkout", "-b", "upgrade-pulumi-terraform-bridge-to-v3.62.0"},
 		},
 		{
-			responce:   "* master\n  upgrade-pulumi-terraform-bridge-to-v3.62.0\n",
+			response:   "* master\n  upgrade-pulumi-terraform-bridge-to-v3.62.0\n",
 			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
 			namedValue: "already exists",
 			call:       []string{"checkout", "upgrade-pulumi-terraform-bridge-to-v3.62.0"},
 		},
 		{
-			responce:   "  master\n* upgrade-pulumi-terraform-bridge-to-v3.62.0\n",
+			response:   "  master\n* upgrade-pulumi-terraform-bridge-to-v3.62.0\n",
 			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
 			namedValue: "already current",
 		},
@@ -162,7 +162,7 @@ func TestEnsureBranchCheckedOut(t *testing.T) {
 						Inputs: encode([]any{
 							"git", []string{"branch"},
 						}),
-						Outputs: encode([]any{tt.responce, nil}),
+						Outputs: encode([]any{tt.response, nil}),
 						Impure:  true,
 					},
 					{
