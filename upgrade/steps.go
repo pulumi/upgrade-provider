@@ -4,6 +4,7 @@ package upgrade
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -307,7 +308,13 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 ) error {
 	ctx = stepv2.WithEnv(ctx, &stepv2.Cwd{To: repo.root})
 
-	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch)
+	// --force:
+	//
+	// If there is no existing branch, then --force doesn't have any effect. It is thus safe.
+	//
+	// If there is an existing branch, then we will want to override it since we don't
+	// attempt to build on existing branches.
+	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch, "--force")
 
 	var prTitle string
 	if ctx := GetContext(ctx); ctx.UpgradeProviderVersion {
@@ -325,13 +332,21 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		return fmt.Errorf("Unknown action")
 	}
 
-	stepv2.Cmd(ctx, "gh", "pr", "create",
-		"--assignee", GetContext(ctx).PrAssign,
-		"--base", repo.defaultBranch,
-		"--head", repo.workingBranch,
-		"--reviewer", GetContext(ctx).PrReviewers,
-		"--title", prTitle,
-		"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs))
+	if repo.prAlreadyExists {
+		// Update the description in case anything else was upgraded (or not
+		// upgraded) in this run, compared to the existing PR.
+		stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
+			"--title", prTitle,
+			"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs))
+	} else {
+		stepv2.Cmd(ctx, "gh", "pr", "create",
+			"--assignee", GetContext(ctx).PrAssign,
+			"--base", repo.defaultBranch,
+			"--head", repo.workingBranch,
+			"--reviewer", GetContext(ctx).PrReviewers,
+			"--title", prTitle,
+			"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs))
+	}
 
 	// If we are only upgrading the bridge, we wont have a list of issues.
 	if !GetContext(ctx).UpgradeProviderVersion {
@@ -388,42 +403,74 @@ func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA *st
 	}).In(repo.providerDir())
 }
 
-func EnsureBranchCheckedOut(ctx context.Context, branchName string) step.Step {
-	var branches string
+var ensureBranchCheckedOut = stepv2.Func10("Ensure Branch", func(ctx context.Context, branchName string) {
+	branches := stepv2.Cmd(ctx, "git", "branch")
+
 	var alreadyExists bool
 	var alreadyCurrent bool
-	return step.Combined("Ensure Branch",
-		step.Cmd("git", "branch").AssignTo(&branches),
-		step.F("Already exists", func(context.Context) (string, error) {
-			lines := strings.Split(branches, "\n")
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				if line == branchName {
-					alreadyExists = true
-					return "yes", nil
-				}
-				if line == "* "+branchName {
-					alreadyCurrent = true
-					return "yes, current branch", nil
-				}
-			}
-			return "no", nil
-		}),
+	lines := strings.Split(branches, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == branchName {
+			alreadyExists = stepv2.NamedValue(ctx, "already exists", true)
+			break
+		}
+		if line == "* "+branchName {
+			alreadyCurrent = stepv2.NamedValue(ctx, "already current", true)
+			break
+		}
+	}
 
-		step.Computed(func() step.Step {
-			if alreadyExists || alreadyCurrent {
-				return nil
-			}
-			return step.Cmd("git", "checkout", "-b", branchName)
-		}),
-		step.Computed(func() step.Step {
-			if alreadyCurrent {
-				return nil
-			}
-			return step.Cmd("git", "checkout", branchName)
-		}),
-	)
-}
+	switch {
+	case alreadyCurrent:
+		// We are already on the right branch, so do nothing
+	case alreadyExists:
+		stepv2.Cmd(ctx, "git", "checkout", branchName)
+	default:
+		stepv2.Cmd(ctx, "git", "checkout", "-b", branchName)
+	}
+})
+
+var hasRemoteBranch = stepv2.Func11("Has Remote Branch", func(ctx context.Context, branchName string) bool {
+	prBytes := []byte(stepv2.Cmd(ctx, "gh", "pr", "list", "--json=title,headRefName"))
+	prs := []struct {
+		Title       string `json:"title"`
+		HeadRefName string `json:"headRefName"`
+	}{}
+	err := json.Unmarshal(prBytes, &prs)
+	stepv2.HaltOnError(ctx, err)
+
+	for _, pr := range prs {
+		if pr.HeadRefName == branchName {
+			stepv2.SetLabel(ctx, fmt.Sprintf("yes %q", pr.Title))
+			return true
+		}
+	}
+
+	stepv2.SetLabel(ctx, "no")
+	return false
+})
+
+var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Context, c Context,
+	targetBridgeVersion, targetPfVersion Ref, upgradeTarget *UpstreamUpgradeTarget) (string, error) {
+	ret := func(s string) (string, error) { stepv2.SetLabel(ctx, s); return s, nil }
+	switch {
+	case c.UpgradeProviderVersion:
+		return ret(fmt.Sprintf("upgrade-%s-to-v%s", c.UpstreamProviderName, upgradeTarget.Version))
+	case c.UpgradeBridgeVersion:
+		contract.Assertf(targetBridgeVersion != nil,
+			"We are upgrading the bridge, so we must have a target version")
+		return ret(fmt.Sprintf("upgrade-pulumi-terraform-bridge-to-%s", targetBridgeVersion))
+	case c.UpgradeCodeMigration:
+		return ret("upgrade-code-migration")
+	case c.UpgradePfVersion:
+		return ret(fmt.Sprintf("upgrade-pf-version-to-%s", targetPfVersion))
+	case c.UpgradeSdkVersion:
+		return ret("upgrade-pulumi-sdk")
+	default:
+		return "", fmt.Errorf("calculating branch name: unknown action")
+	}
+})
 
 func OrgProviderRepos(ctx context.Context, org, repo string) step.Step {
 	return ensureUpstreamRepo(ctx, path.Join("github.com", org, repo))

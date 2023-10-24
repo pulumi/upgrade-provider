@@ -320,26 +320,16 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	}
 
 	var targetSHA string
-	if ctx := GetContext(ctx); ctx.UpgradeProviderVersion {
-		repo.workingBranch = fmt.Sprintf("upgrade-%s-to-v%s",
-			ctx.UpstreamProviderName, upgradeTarget.Version)
-	} else if ctx.UpgradeBridgeVersion {
-		contract.Assertf(targetBridgeVersion != nil,
-			"We are upgrading the bridge, so we must have a target version")
-		repo.workingBranch = fmt.Sprintf("upgrade-pulumi-terraform-bridge-to-%s",
-			targetBridgeVersion)
-	} else if ctx.UpgradeCodeMigration {
-		repo.workingBranch = "upgrade-code-migration"
-	} else if ctx.UpgradePfVersion {
-		repo.workingBranch = fmt.Sprintf("upgrade-pf-version-to-%s", targetPfVersion)
-	} else if ctx.UpgradeSdkVersion {
-		repo.workingBranch = "upgrade-pulumi-sdk"
-	} else {
-		return fmt.Errorf("calculating branch name: unknown action")
+	err = stepv2.PipelineCtx(ctx, "Setup working branch", func(ctx context.Context) {
+		repo.workingBranch = getWorkingBranch(ctx, *GetContext(ctx), targetBridgeVersion, targetPfVersion, upgradeTarget)
+		ensureBranchCheckedOut(ctx, repo.workingBranch)
+		repo.prAlreadyExists = hasRemoteBranch(ctx, repo.workingBranch)
+	})
+	if err != nil {
+		return err
 	}
-	steps := []step.Step{
-		EnsureBranchCheckedOut(ctx, repo.workingBranch).In(&repo.root),
-	}
+
+	var steps []step.Step
 
 	if GetContext(ctx).MajorVersionBump {
 		steps = append(steps, MajorVersionBump(ctx, goMod, upgradeTarget, repo))

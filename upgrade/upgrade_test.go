@@ -2,12 +2,14 @@ package upgrade
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/upgrade-provider/step/v2"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/module"
 )
@@ -50,6 +52,43 @@ func TestInformGithub(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestInformGithubExistingPR(t *testing.T) {
+	ctx := newReplay(t, "kong_existing_pr")
+
+	ctx = (&Context{
+		PrAssign:             "@me",
+		PrReviewers:          "pulumi/Providers,lukehoban",
+		UpstreamProviderName: "terraform-provider-kong",
+		UpgradeBridgeVersion: true,
+	}).Wrap(ctx)
+
+	err := step.PipelineCtx(ctx, "Tfgen & Build SDKs", func(ctx context.Context) {
+		InformGitHub(ctx,
+			nil, ProviderRepo{
+				workingBranch:   "upgrade-pulumi-terraform-bridge-to-v3.62.0",
+				defaultBranch:   "master",
+				name:            "pulumi/pulumi-kong",
+				prAlreadyExists: true,
+			}, &GoMod{
+				UpstreamProviderOrg: "kevholditch",
+				Kind:                "plain",
+				Upstream: module.Version{
+					Path:    "github.com/kevholditch/terraform-provider-kong",
+					Version: "v1.9.2-0.20220328204855-9e50bd93437f",
+				},
+				Bridge: module.Version{
+					Path:    "github.com/pulumi/pulumi-terraform-bridge/v3",
+					Version: "v3.60.0",
+				},
+			},
+			&Version{SemVer: semver.MustParse("v3.62.0")},
+			nil, "Up to date at 2.29.0",
+			[]string{"upgrade-provider",
+				"pulumi/pulumi-kong", "--kind=bridge"})
+	})
+	require.NoError(t, err)
+}
+
 func newReplay(t *testing.T, name string) context.Context {
 	ctx := context.Background()
 	path := filepath.Join("testdata", "replay", name+".json")
@@ -62,4 +101,17 @@ func readFile(t *testing.T, path string) []byte {
 	bytes, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return bytes
+}
+
+func simpleReplay(t *testing.T, stepReplay step.RecordV1, f func(context.Context)) {
+	bytes, err := json.Marshal(step.ReplayV1{
+		Pipelines: []step.RecordV1{stepReplay},
+	})
+	require.NoError(t, err)
+
+	r := step.NewReplay(t, bytes)
+	ctx := step.WithEnv(context.Background(), r)
+
+	err = step.PipelineCtx(ctx, t.Name(), f)
+	assert.NoError(t, err)
 }
