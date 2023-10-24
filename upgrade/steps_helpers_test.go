@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/hexops/autogold/v2"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/mod/module"
 )
 
 func TestGetRepoExpectedLocation(t *testing.T) {
@@ -48,9 +50,27 @@ func trimSeparators(path string) string {
 }
 
 func TestPullRequestBody(t *testing.T) {
-	ctx := context.Background()
-	uc := Context{PRDescription: "Some extra description here with links to pulumi/repo#123"}
-	args := []string{"upgrade-provider", "--kind", "bridge", "--pr-description", uc.PRDescription}
-	got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, nil, nil, "", args)
-	autogold.ExpectFile(t, got)
+	t.Run("description", func(t *testing.T) {
+		ctx := context.Background()
+		uc := Context{PRDescription: "Some extra description here with links to pulumi/repo#123"}
+		args := []string{"upgrade-provider", "--kind", "bridge", "--pr-description", uc.PRDescription}
+		got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, nil, nil, nil, "", args)
+		autogold.ExpectFile(t, got)
+	})
+
+	t.Run("upgrades", func(t *testing.T) {
+		ctx := context.Background()
+		uc := Context{
+			UpgradePfVersion:     true,
+			UpgradeBridgeVersion: true,
+		}
+		args := []string{"upgrade-provider", "--kind", "bridge", "--pr-description", uc.PRDescription}
+		got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, &GoMod{
+			Bridge: module.Version{Version: "v1.2.2"},
+			Pf:     module.Version{Version: "v4.5.5"},
+		},
+			&Version{SemVer: semver.MustParse("v1.2.3")},
+			&Version{SemVer: semver.MustParse("v4.5.6")}, "", args)
+		autogold.ExpectFile(t, got)
+	})
 }
