@@ -117,7 +117,7 @@ func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, er
 
 func prBody(ctx context.Context, repo ProviderRepo,
 	upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
-	targetBridge Ref, tfSDKUpgrade string, osArgs []string) string {
+	targetBridge, targetPf Ref, tfSDKUpgrade string, osArgs []string) string {
 	b := new(strings.Builder)
 
 	argsSpliced := strings.ReplaceAll(
@@ -160,7 +160,7 @@ func prBody(ctx context.Context, repo ProviderRepo,
 	}
 	if GetContext(ctx).UpgradePfVersion {
 		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge/pf from %s to %v.\n",
-			goMod.Pf.Version, targetBridge)
+			goMod.Pf.Version, targetPf)
 	}
 
 	if GetContext(ctx).UpgradeSdkVersion {

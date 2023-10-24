@@ -332,12 +332,13 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		return fmt.Errorf("Unknown action")
 	}
 
+	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade, osArgs)
 	if repo.prAlreadyExists {
 		// Update the description in case anything else was upgraded (or not
 		// upgraded) in this run, compared to the existing PR.
 		stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
 			"--title", prTitle,
-			"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs))
+			"--body", prBody)
 	} else {
 		stepv2.Cmd(ctx, "gh", "pr", "create",
 			"--assignee", GetContext(ctx).PrAssign,
@@ -345,7 +346,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 			"--head", repo.workingBranch,
 			"--reviewer", GetContext(ctx).PrReviewers,
 			"--title", prTitle,
-			"--body", prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs))
+			"--body", prBody)
 	}
 
 	// If we are only upgrading the bridge, we wont have a list of issues.
