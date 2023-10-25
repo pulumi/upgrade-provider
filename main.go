@@ -131,18 +131,6 @@ func cmd() *cobra.Command {
 					if experimental {
 						context.UpgradeCodeMigration = true
 					}
-
-					if len(upgradeKind) > 1 {
-						for _, v := range upgradeKind {
-							if v == "sdk" {
-								context.UpgradeSdkVersion = true
-							}
-						}
-						if !context.UpgradeSdkVersion {
-							warnedAll = true
-							warn("`--kind=all` implies all of bridge,provider,code options")
-						}
-					}
 				case "bridge":
 					set(&context.UpgradeBridgeVersion)
 					set(&context.UpgradePfVersion)
@@ -150,8 +138,6 @@ func cmd() *cobra.Command {
 					set(&context.UpgradeProviderVersion)
 				case "code":
 					set(&context.UpgradeCodeMigration)
-				case "sdk":
-					set(&context.UpgradeSdkVersion)
 				case "pf":
 					set(&context.UpgradePfVersion)
 				default:

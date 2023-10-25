@@ -295,7 +295,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		!ctx.UpgradeCodeMigration && !ctx.UpgradeSdkVersion && !ctx.UpgradePfVersion {
+		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -384,18 +384,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		upgradePulumiEverywhereStep := BridgePulumiVersions(ctx, repo)
 
 		steps = append(steps, upgradePulumiEverywhereStep)
-
-	}
-	if GetContext(ctx).UpgradeSdkVersion {
-		steps = append(steps, step.Combined("Upgrade Pulumi SDK",
-			step.Cmd("go", "get", "github.com/pulumi/pulumi/sdk/v3").
-				In(repo.providerDir()),
-			step.Cmd("go", "get", "github.com/pulumi/pulumi/pkg/v3").
-				In(repo.providerDir())),
-			step.Cmd("go", "get", "github.com/pulumi/pulumi/sdk/v3").
-				In(repo.examplesDir()),
-			step.Cmd("go", "get", "github.com/pulumi/pulumi/pkg/v3").
-				In(repo.examplesDir()))
 	}
 	if GetContext(ctx).UpgradePfVersion {
 		steps = append(steps, step.Cmd("go", "get",

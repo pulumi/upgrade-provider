@@ -326,8 +326,6 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		prTitle = fmt.Sprintf("Code migration: %s", strings.Join(ctx.MigrationOpts, ", "))
 	} else if ctx.UpgradePfVersion {
 		prTitle = "Upgrade pulumi-terraform-bridge/pf to " + targetPfVersion.String()
-	} else if ctx.UpgradeSdkVersion {
-		prTitle = "Upgrade Pulumi SDK dependency"
 	} else {
 		return fmt.Errorf("Unknown action")
 	}
@@ -466,8 +464,6 @@ var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Co
 		return ret("upgrade-code-migration")
 	case c.UpgradePfVersion:
 		return ret(fmt.Sprintf("upgrade-pf-version-to-%s", targetPfVersion))
-	case c.UpgradeSdkVersion:
-		return ret("upgrade-pulumi-sdk")
 	default:
 		return "", fmt.Errorf("calculating branch name: unknown action")
 	}

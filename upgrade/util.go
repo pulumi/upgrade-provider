@@ -30,8 +30,7 @@ type Context struct {
 	UpgradeBridgeVersion bool
 	TargetBridgeRef      Ref
 
-	UpgradeSdkVersion bool
-	UpgradePfVersion  bool
+	UpgradePfVersion bool
 
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
