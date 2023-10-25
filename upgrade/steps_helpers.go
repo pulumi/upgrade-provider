@@ -16,27 +16,11 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
+
+	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
 var versionSuffix = regexp.MustCompile("/v[2-9][0-9]*$")
-
-func runGitCommand[T any](
-	ctx context.Context, filter func([]byte) (T, error), args ...string,
-) (result T, err error) {
-	var t T
-
-	cmd := exec.CommandContext(ctx, "git", args...)
-	if filter != nil {
-		out := new(bytes.Buffer)
-		cmd.Stdout = out
-		err = cmd.Run()
-		if err != nil {
-			return t, err
-		}
-		return filter(out.Bytes())
-	}
-	return t, cmd.Run()
-}
 
 func modPathWithoutVersion(path string) string {
 	if match := versionSuffix.FindStringIndex(path); match != nil {
@@ -182,29 +166,19 @@ func prBody(ctx context.Context, repo ProviderRepo,
 	return b.String()
 }
 
-func ensurePulumiRemote(ctx context.Context, name string) (string, error) {
-	remotes, err := runGitCommand(ctx, func(b []byte) ([]string, error) {
-		return strings.Split(string(b), "\n"), nil
-	}, "remote")
-	if err != nil {
-		return "", fmt.Errorf("listing remotes: %w", err)
-	}
+var ensurePulumiRemote = stepv2.Func10("Ensure Pulumi Remote", func(ctx context.Context, name string) {
+	remotes := strings.Split(stepv2.Cmd(ctx, "git", "remote"), "\n")
 	for _, remote := range remotes {
 		if remote == "pulumi" {
-			return "'pulumi' already exists", nil
+			stepv2.SetLabel(ctx, "remote 'pulumi' already exists")
+			return
 		}
 	}
-	return runGitCommand(ctx, func([]byte) (string, error) {
-		return "set to 'pulumi'", nil
-	}, "remote", "add", "pulumi",
-		fmt.Sprintf("https://github.com/pulumi/terraform-provider-%s.git", name))
-}
 
-func say(msg string) func([]byte) (string, error) {
-	return func([]byte) (string, error) {
-		return msg, nil
-	}
-}
+	stepv2.Cmd(ctx, "git", "remote", "add", "pulumi",
+		fmt.Sprintf("https://github.com/pulumi/terraform-provider-%s.git", name))
+	stepv2.SetLabel(ctx, "remote set to 'pulumi'")
+})
 
 // setCurrentUpstreamFromPatched sets repo.currentUpstreamVersion to the version pointed to in the
 // submodule in the default branch.

@@ -315,10 +315,11 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() && GetContext(ctx).UpgradeProviderVersion {
-		ok = step.Run(ctx, upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod).
-			AssignTo(&forkedProviderUpstreamCommit))
-		if !ok {
-			return ErrHandled
+		err := stepv2.PipelineCtx(ctx, "Upgrade Forked Provider", func(ctx context.Context) {
+			upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod)
+		})
+		if err != nil {
+			return err
 		}
 	}
 

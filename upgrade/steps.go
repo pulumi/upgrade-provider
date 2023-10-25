@@ -38,76 +38,71 @@ var gitCommit = stepv2.Func10("git commit", func(ctx context.Context, msg string
 // Upgrade the upstream fork of a pulumi provider.
 //
 // The SHA of the new upstream branch is returned.
-//
-// TODO: Port to stepv2. This step.Step is freestanding in it's own pipeline, so it can be safely converted.
-// This is necessary to get the first part of the Discover pipeline converted.
-func upgradeUpstreamFork(ctx context.Context, name string, target *semver.Version, goMod *GoMod) step.Step {
-	var forkedProviderUpstreamCommit string
-	var upstreamPath string
-	var previousUpstreamVersion *semver.Version
-	return step.Combined("Upgrading Forked Provider",
-		ensureUpstreamRepo(ctx, goMod.Fork.Old.Path).AssignTo(&upstreamPath),
-		step.F("Ensure Pulumi Remote", func(context.Context) (string, error) {
-			remoteName := strings.TrimPrefix(name, "pulumi-")
-			if s, ok := ProviderName[remoteName]; ok {
-				remoteName = s
-			}
-			return ensurePulumiRemote(ctx, remoteName)
-		}).In(&upstreamPath),
-		step.Cmd("git", "fetch", "pulumi").In(&upstreamPath),
-		step.Cmd("git", "fetch", "origin", "--tags").In(&upstreamPath),
-		step.F("Discover Previous Upstream Version", func(context.Context) (string, error) {
-			return runGitCommand(ctx, func(b []byte) (string, error) {
-				lines := strings.Split(string(b), "\n")
-				for _, line := range lines {
-					line = strings.TrimSpace(line)
-					version, err := semver.NewVersion(strings.TrimPrefix(line, "pulumi/upstream-v"))
-					if err != nil {
-						continue
-					}
-					if previousUpstreamVersion == nil || previousUpstreamVersion.LessThan(version) {
-						previousUpstreamVersion = version
-					}
-				}
-				if previousUpstreamVersion == nil {
-					return "", fmt.Errorf("no version found")
-				}
-				return previousUpstreamVersion.String(), nil
-			}, "branch", "--remote", "--list", "pulumi/upstream-v*")
-		}).In(&upstreamPath),
-		step.Computed(func() step.Step {
-			return step.Cmd("git", "checkout", "pulumi/upstream-v"+previousUpstreamVersion.String())
-		}).In(&upstreamPath),
-		step.F("Upstream Branch", func(context.Context) (string, error) {
-			target := "upstream-v" + target.String()
-			branchExists, err := runGitCommand(ctx, func(b []byte) (bool, error) {
-				lines := strings.Split(string(b), "\n")
-				for _, line := range lines {
-					if strings.TrimSpace(line) == target {
-						return true, nil
-					}
-				}
-				return false, nil
-			}, "branch")
+var upgradeUpstreamFork = stepv2.Func31("Upgrade Forked Provider", func(ctx context.Context, name string, target *semver.Version, goMod *GoMod) string {
+	upstreamPath := ensureUpstreamRepo(ctx, goMod.Fork.Old.Path)
+
+	// Run the rest of the function inside of upstreamPath
+	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: upstreamPath})
+
+	remoteName := strings.TrimPrefix(name, "pulumi-")
+	if s, ok := ProviderName[remoteName]; ok {
+		remoteName = s
+	}
+	ensurePulumiRemote(ctx, remoteName)
+
+	stepv2.Cmd(ctx, "git", "fetch", "pulumi")
+	stepv2.Cmd(ctx, "git", "fetch", "origin", "--tags")
+
+	previousUpstreamVersion := stepv2.Func01E("Discover Previous Upstream Version", func(ctx context.Context) (*semver.Version, error) {
+		b := stepv2.Cmd(ctx, "git", "branch", "--remote", "--list", "pulumi/upstream-v*")
+		lines := strings.Split(string(b), "\n")
+		var previous *semver.Version
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			version, err := semver.NewVersion(strings.TrimPrefix(line, "pulumi/upstream-v"))
 			if err != nil {
-				return "", err
+				continue
 			}
-			if !branchExists {
-				return runGitCommand(ctx, say("creating "+target),
-					"checkout", "-b", target)
+			if previous == nil || previous.LessThan(version) {
+				previous = version
 			}
-			return target + " already exists", nil
-		}).In(&upstreamPath),
-		step.Cmd("git", "merge", "v"+target.String()).In(&upstreamPath),
-		step.Cmd("go", "build", ".").In(&upstreamPath),
-		step.Cmd("git", "push", "pulumi", "upstream-v"+target.String()).In(&upstreamPath),
-		step.F("Get Head Commit", func(context.Context) (string, error) {
-			return runGitCommand(ctx, func(b []byte) (string, error) {
-				return strings.TrimSpace(string(b)), nil
-			}, "rev-parse", "HEAD")
-		}).AssignTo(&forkedProviderUpstreamCommit).In(&upstreamPath),
-	).Return(&forkedProviderUpstreamCommit)
-}
+		}
+		if previous == nil {
+			return nil, fmt.Errorf("no version found")
+		}
+		return previous, nil
+	})(ctx)
+
+	stepv2.Cmd(ctx, "git", "checkout", "pulumi/upstream-v"+previousUpstreamVersion.String())
+
+	stepv2.Func00("Upstream Branch", func(context.Context) {
+		target := "upstream-v" + target.String()
+		var branchExists bool
+		lines := strings.Split(stepv2.Cmd(ctx, "git", "branch"), "\n")
+		for _, line := range lines {
+			if strings.TrimSpace(line) == target {
+				branchExists = true
+				break
+			}
+		}
+		if !branchExists {
+			stepv2.SetLabel(ctx, "creating"+target)
+			stepv2.Cmd(ctx, "git", "checkout", "-b", target)
+			return
+		}
+		stepv2.SetLabel(ctx, target+" already exists")
+	})(ctx)
+
+	stepv2.Cmd(ctx, "git", "merge", "v"+target.String())
+	stepv2.Cmd(ctx, "go", "build", ".")
+	stepv2.Cmd(ctx, "git", "push", "pulumi", "upstream-v"+target.String())
+
+	return stepv2.Func01("Get Head Commit", func(context.Context) string {
+		c := strings.TrimSpace(stepv2.Cmd(ctx, "git", "rev-parse", "HEAD"))
+		stepv2.SetLabel(ctx, c)
+		return c
+	})(ctx)
+})
 
 // Ensure that the upstream repo exists.
 //
