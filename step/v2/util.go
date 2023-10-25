@@ -79,7 +79,11 @@ func WithCwd(ctx context.Context, dir string, f func(context.Context)) {
 func GetCwd(ctx context.Context) string {
 	return Func01E("GetCwd", func(context.Context) (string, error) {
 		MarkImpure(ctx)
-		return os.Getwd()
+		c, err := os.Getwd()
+		if err == nil {
+			SetLabel(ctx, c)
+		}
+		return c, err
 	})(ctx)
 }
 
