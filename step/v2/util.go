@@ -61,7 +61,7 @@ func HaltOnError(ctx context.Context, err error) {
 //
 // If the dir does not exist, then the current pipeline will fail.
 func WithCwd(ctx context.Context, dir string, f func(context.Context)) {
-	c := &Cwd{To: dir}
+	c := &SetCwd{To: dir}
 	err := c.Enter(ctx, StepInfo{})
 	HaltOnError(ctx, err)
 	c.depth--
@@ -73,4 +73,20 @@ func WithCwd(ctx context.Context, dir string, f func(context.Context)) {
 	}()
 
 	f(WithEnv(ctx, c))
+}
+
+// Read the current working directory.
+func GetCwd(ctx context.Context) string {
+	return Func01E("GetCwd", func(context.Context) (string, error) {
+		MarkImpure(ctx)
+		return os.Getwd()
+	})(ctx)
+}
+
+// MkDirAll wraps os.MkdirAll with error handling and impure validation.
+func MkDirAll(ctx context.Context, path string, perm os.FileMode) {
+	Func20E("MkDirAll", func(_ context.Context, path string, perm os.FileMode) error {
+		MarkImpure(ctx)
+		return os.MkdirAll(path, perm)
+	})(ctx, path, perm)
 }

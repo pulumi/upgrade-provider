@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -39,6 +38,9 @@ var gitCommit = stepv2.Func10("git commit", func(ctx context.Context, msg string
 // Upgrade the upstream fork of a pulumi provider.
 //
 // The SHA of the new upstream branch is returned.
+//
+// TODO: Port to stepv2. This step.Step is freestanding in it's own pipeline, so it can be safely converted.
+// This is necessary to get the first part of the Discover pipeline converted.
 func upgradeUpstreamFork(ctx context.Context, name string, target *semver.Version, goMod *GoMod) step.Step {
 	var forkedProviderUpstreamCommit string
 	var upstreamPath string
@@ -107,53 +109,42 @@ func upgradeUpstreamFork(ctx context.Context, name string, target *semver.Versio
 	).Return(&forkedProviderUpstreamCommit)
 }
 
-func ensureUpstreamRepo(ctx context.Context, repoPath string) step.Step {
-	var expectedLocation string
+// Ensure that the upstream repo exists.
+//
+// The path that the upstream repo exists at is returned.
+var ensureUpstreamRepo = stepv2.Func11("ensure upstream repo", func(ctx context.Context, repoPath string) string {
 	var repoExists bool
-	return step.Combined("Ensure '"+repoPath+"'",
-		step.F("Expected Location", func(context.Context) (string, error) {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return "", fmt.Errorf("could not resolve cwd: %w", err)
+	expectedLocation := stepv2.Func11E("Expected Location", func(ctx context.Context, repoPath string) (string, error) {
+		cwd := stepv2.GetCwd(ctx)
+		expectedLocation, err := getRepoExpectedLocation(ctx, cwd, repoPath)
+		if err != nil {
+			return "", err
+		}
+		if info, err := os.Stat(expectedLocation); err == nil {
+			if !info.IsDir() {
+				return "", fmt.Errorf("'%s' not a directory", expectedLocation)
 			}
-			expectedLocation, err = getRepoExpectedLocation(ctx, cwd, repoPath)
-			if err != nil {
-				return "", err
-			}
-			if info, err := os.Stat(expectedLocation); err == nil {
-				if !info.IsDir() {
-					return "", fmt.Errorf("'%s' not a directory", expectedLocation)
-				}
-				repoExists = true
-			}
-			return expectedLocation, nil
-		}),
-		step.Computed(func() step.Step {
-			const tag = "Downloading"
-			if repoExists {
-				return step.F(tag, func(context.Context) (string, error) {
-					return "skipped - already exists", nil
-				})
-			}
-			targetDir := filepath.Dir(expectedLocation)
-			return step.Combined(tag,
-				step.F("Ensuring Path", func(context.Context) (string, error) {
-					err := os.MkdirAll(targetDir, 0700)
-					if err != nil && !os.IsExist(err) {
-						return "", err
-					}
-					return "", nil
-				}),
-				step.Cmd("git", "clone",
-					fmt.Sprintf("https://%s.git", repoPath),
-					expectedLocation),
-			)
-		}),
-		step.F("Validating", func(ctx context.Context) (string, error) {
-			return "done", exec.CommandContext(ctx, "git", "status", "--short").Run()
-		}).In(&expectedLocation),
-	).Return(&expectedLocation)
-}
+			repoExists = true
+		}
+		stepv2.SetLabel(ctx, expectedLocation)
+		return expectedLocation, nil
+	})(ctx, repoPath)
+
+	if !repoExists {
+		stepv2.Func10("Downloading", func(ctx context.Context, path string) {
+			targetDir := stepv2.NamedValue(ctx, "Target Dir", filepath.Dir(path))
+			stepv2.MkDirAll(ctx, targetDir, 0700)
+			stepv2.Cmd(ctx, "git", "clone", fmt.Sprintf("https://%s.git", repoPath), path)
+		})(ctx, expectedLocation)
+	}
+
+	stepv2.Func10("Validate Repository", func(ctx context.Context, path string) {
+		ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: expectedLocation})
+		stepv2.Cmd(ctx, "git", "status", "--short")
+	})(ctx, expectedLocation)
+
+	return expectedLocation
+})
 
 var javaVersionRegexp *regexp.Regexp = regexp.MustCompile(`JAVA_GEN_VERSION := (v[0-9]+\.[0-9]+\.[0-9]+)`)
 
@@ -306,7 +297,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	goMod *GoMod, targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
 	osArgs []string,
 ) error {
-	ctx = stepv2.WithEnv(ctx, &stepv2.Cwd{To: repo.root})
+	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
 	c := GetContext(ctx)
 
 	// --force:
@@ -478,7 +469,7 @@ var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Co
 	}
 })
 
-func OrgProviderRepos(ctx context.Context, org, repo string) step.Step {
+func OrgProviderRepos(ctx context.Context, org, repo string) string {
 	return ensureUpstreamRepo(ctx, path.Join("github.com", org, repo))
 }
 
