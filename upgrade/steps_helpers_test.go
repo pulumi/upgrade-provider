@@ -50,10 +50,18 @@ func trimSeparators(path string) string {
 }
 
 func TestPullRequestBody(t *testing.T) {
-	t.Run("description", func(t *testing.T) {
+	t.Run("description-space", func(t *testing.T) {
 		ctx := context.Background()
 		uc := Context{PRDescription: "Some extra description here with links to pulumi/repo#123"}
 		args := []string{"upgrade-provider", "--kind", "bridge", "--pr-description", uc.PRDescription}
+		got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, nil, nil, nil, "", args)
+		autogold.ExpectFile(t, got)
+	})
+
+	t.Run("description-equal", func(t *testing.T) {
+		ctx := context.Background()
+		uc := Context{PRDescription: "Some extra description here with links to pulumi/repo#123"}
+		args := []string{"upgrade-provider", "--kind", "bridge", "--pr-description=" + uc.PRDescription}
 		got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, nil, nil, nil, "", args)
 		autogold.ExpectFile(t, got)
 	})

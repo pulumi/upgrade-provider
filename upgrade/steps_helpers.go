@@ -120,10 +120,17 @@ func prBody(ctx context.Context, repo ProviderRepo,
 	targetBridge, targetPf Ref, tfSDKUpgrade string, osArgs []string) string {
 	b := new(strings.Builder)
 
-	argsSpliced := strings.ReplaceAll(
-		strings.Join(osArgs[1:], " "),
-		fmt.Sprintf(" --pr-description %s", GetContext(ctx).PRDescription),
-		"")
+	// We strip out --pr-description since it will appear later in the pr body.
+	for i, v := range osArgs {
+		if v == "--pr-description" {
+			osArgs = append(osArgs[:i], osArgs[i+2:]...)
+			break
+		} else if strings.HasPrefix(v, "--pr-description=") {
+			osArgs = append(osArgs[:i], osArgs[i+1:]...)
+			break
+		}
+	}
+	argsSpliced := strings.Join(osArgs[1:], " ")
 
 	fmt.Fprintf(b, "This PR was generated via `$ upgrade-provider %s`.\n", argsSpliced)
 
