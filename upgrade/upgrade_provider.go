@@ -383,18 +383,33 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	}
 
 	if v := GetContext(ctx).TargetPulumiVersion; v != "" {
+		r := func(kind string) string {
+			mod := "github.com/pulumi/pulumi/" + kind + "/v3"
+			return fmt.Sprintf("%[1]s=%[1]s@%s", mod, v)
+
+		}
+
+		upgrade := func(name string) step.Step {
+			return step.Combined(name,
+				step.Cmd("go", "mod", "edit",
+					"-replace", r("pkg"),
+					"-replace", r("sdk")),
+				step.Cmd("go", "mod", "tidy"))
+		}
+
 		steps = append(steps, step.Combined("Upgrade Pulumi Version",
-			step.Cmd("go", "get", "github.com/pulumi/pulumi/pkg/v3@"+v),
-			step.Cmd("go", "get", "github.com/pulumi/pulumi/sdk/v3@"+v),
-			step.Cmd("go", "mod", "tidy"),
-		).In(repo.providerDir()))
+			upgrade("provider").In(repo.providerDir()),
+			upgrade("examples").In(repo.examplesDir()),
+			upgrade("sdk").In(repo.sdkDir())))
 	}
 
-	if GetContext(ctx).UpgradeBridgeVersion ||
-		GetContext(ctx).UpgradePfVersion ||
-		GetContext(ctx).TargetPulumiVersion != "" {
+	if (GetContext(ctx).UpgradeBridgeVersion || GetContext(ctx).UpgradePfVersion) &&
+		GetContext(ctx).TargetPulumiVersion == "" {
 		// Having changed the version of pulumi/{sdk,pkg} that we are using, we
 		// need to propagate that change to the go.mod in {sdk,examples}/go.mod
+		//
+		// We make sure that TargetPulumiVersion == "", since we cannot discover
+		// the version of a replace statement.
 		steps = append(steps, applyPulumiVersion(ctx, repo))
 	}
 
