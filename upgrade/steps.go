@@ -307,6 +307,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	osArgs []string,
 ) error {
 	ctx = stepv2.WithEnv(ctx, &stepv2.Cwd{To: repo.root})
+	c := GetContext(ctx)
 
 	// --force:
 	//
@@ -317,16 +318,18 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch, "--force")
 
 	var prTitle string
-	if ctx := GetContext(ctx); ctx.UpgradeProviderVersion {
-		prTitle = fmt.Sprintf("Upgrade %s to v%s",
-			ctx.UpstreamProviderName, target.Version)
-	} else if ctx.UpgradeBridgeVersion {
+	switch {
+	case c.UpgradeProviderVersion:
+		prTitle = fmt.Sprintf("Upgrade %s to v%s", c.UpstreamProviderName, target.Version)
+	case c.UpgradeBridgeVersion:
 		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion.String()
-	} else if ctx.UpgradeCodeMigration {
-		prTitle = fmt.Sprintf("Code migration: %s", strings.Join(ctx.MigrationOpts, ", "))
-	} else if ctx.UpgradePfVersion {
+	case c.UpgradeCodeMigration:
+		prTitle = fmt.Sprintf("Code migration: %s", strings.Join(c.MigrationOpts, ", "))
+	case c.UpgradePfVersion:
 		prTitle = "Upgrade pulumi-terraform-bridge/pf to " + targetPfVersion.String()
-	} else {
+	case c.TargetPulumiVersion != "":
+		prTitle = "Test: Upgrade pulumi/{pkg,sdk} to " + c.TargetPulumiVersion
+	default:
 		return fmt.Errorf("Unknown action")
 	}
 
@@ -339,16 +342,16 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 			"--body", prBody)
 	} else {
 		stepv2.Cmd(ctx, "gh", "pr", "create",
-			"--assignee", GetContext(ctx).PrAssign,
+			"--assignee", c.PrAssign,
 			"--base", repo.defaultBranch,
 			"--head", repo.workingBranch,
-			"--reviewer", GetContext(ctx).PrReviewers,
+			"--reviewer", c.PrReviewers,
 			"--title", prTitle,
 			"--body", prBody)
 	}
 
 	// If we are only upgrading the bridge, we wont have a list of issues.
-	if !GetContext(ctx).UpgradeProviderVersion {
+	if !c.UpgradeProviderVersion {
 		return nil
 	}
 
@@ -357,7 +360,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		// PR itself.
 		for _, t := range target.GHIssues {
 			stepv2.Cmd(ctx, "gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-				"--add-assignee", GetContext(ctx).PrAssign)
+				"--add-assignee", c.PrAssign)
 		}
 	})(ctx)
 
