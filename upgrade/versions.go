@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/spf13/pflag"
 )
 
 type Ref interface {
@@ -53,3 +54,24 @@ func ParseRef(s string) (Ref, error) {
 	// assume this is a hash reference otherwise
 	return &HashReference{s}, nil
 }
+
+func RefFlag(r *Ref) pflag.Value { return &refFlag{r} }
+
+type refFlag struct{ r *Ref }
+
+func (f *refFlag) String() string {
+	if f == nil || f.r == nil || *f.r == nil {
+		return ""
+	}
+	return (*f.r).String()
+}
+
+func (f *refFlag) Set(s string) error {
+	r, err := ParseRef(s)
+	if err == nil {
+		*f.r = r
+	}
+	return err
+}
+
+func (*refFlag) Type() string { return "ref" }

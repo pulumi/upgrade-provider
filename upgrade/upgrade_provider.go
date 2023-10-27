@@ -295,7 +295,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion {
+		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion && ctx.TargetPulumiVersion == nil {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -366,29 +366,51 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	}
 
 	if GetContext(ctx).UpgradeBridgeVersion {
-		steps = append(steps, step.Cmd("go", "get",
-			"github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion.String()).
-			In(repo.providerDir()))
-
-		steps = append(steps, step.Cmd("go", "get",
-			"github.com/hashicorp/terraform-plugin-framework").
-			In(repo.providerDir()))
-		steps = append(steps, step.Cmd("go", "get",
-			"github.com/hashicorp/terraform-plugin-mux").
-			In(repo.providerDir()))
-		steps = append(steps, step.Cmd("go", "mod", "tidy").
-			In(repo.providerDir()))
-
-		// Now that we've upgraded the bridge, we want the other places in the repo to use the bridge's
-		// Pulumi version.
-		upgradePulumiEverywhereStep := BridgePulumiVersions(ctx, repo)
-
-		steps = append(steps, upgradePulumiEverywhereStep)
+		steps = append(steps, step.Combined("Upgrade Bridge Version",
+			step.Cmd("go", "get",
+				"github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion.String()),
+			step.Cmd("go", "get", "github.com/hashicorp/terraform-plugin-framework"),
+			step.Cmd("go", "get", "github.com/hashicorp/terraform-plugin-mux"),
+			step.Cmd("go", "mod", "tidy"),
+		).In(repo.providerDir()))
 	}
 	if GetContext(ctx).UpgradePfVersion {
-		steps = append(steps, step.Cmd("go", "get",
-			"github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion.String()).
-			In(repo.providerDir()))
+		steps = append(steps, step.Combined("Upgrade Pf Version",
+			step.Cmd("go", "get",
+				"github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion.String()),
+			step.Cmd("go", "mod", "tidy"),
+		).In(repo.providerDir()))
+	}
+
+	if ref := GetContext(ctx).TargetPulumiVersion; ref != nil {
+		r := func(kind string) string {
+			mod := "github.com/pulumi/pulumi/" + kind + "/v3"
+			return fmt.Sprintf("%[1]s=%[1]s@%s", mod, ref)
+
+		}
+
+		upgrade := func(name string) step.Step {
+			return step.Combined(name,
+				step.Cmd("go", "mod", "edit",
+					"-replace", r("pkg"),
+					"-replace", r("sdk")),
+				step.Cmd("go", "mod", "tidy"))
+		}
+
+		steps = append(steps, step.Combined("Upgrade Pulumi Version",
+			upgrade("provider").In(repo.providerDir()),
+			upgrade("examples").In(repo.examplesDir()),
+			upgrade("sdk").In(repo.sdkDir())))
+	}
+
+	if (GetContext(ctx).UpgradeBridgeVersion || GetContext(ctx).UpgradePfVersion) &&
+		GetContext(ctx).TargetPulumiVersion == nil {
+		// Having changed the version of pulumi/{sdk,pkg} that we are using, we
+		// need to propagate that change to the go.mod in {sdk,examples}/go.mod
+		//
+		// We make sure that TargetPulumiVersion == "", since we cannot discover
+		// the version of a replace statement.
+		steps = append(steps, applyPulumiVersion(ctx, repo))
 	}
 
 	if GetContext(ctx).UpgradeCodeMigration {
