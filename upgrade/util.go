@@ -48,7 +48,7 @@ type Context struct {
 	// If TargetPulumiVersion is nil, then pulumi/{pkg,sdk} should follow the bridge.
 	//
 	// Otherwise, we will `replace` with TargetPulumiVersion for both pkg and sdk.
-	TargetPulumiVersion string
+	TargetPulumiVersion Ref
 
 	// The desired java version.
 	JavaVersion string

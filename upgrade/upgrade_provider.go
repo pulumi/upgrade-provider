@@ -295,7 +295,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion && ctx.TargetPulumiVersion == "" {
+		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion && ctx.TargetPulumiVersion == nil {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -382,10 +382,10 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		).In(repo.providerDir()))
 	}
 
-	if v := GetContext(ctx).TargetPulumiVersion; v != "" {
+	if ref := GetContext(ctx).TargetPulumiVersion; ref != nil {
 		r := func(kind string) string {
 			mod := "github.com/pulumi/pulumi/" + kind + "/v3"
-			return fmt.Sprintf("%[1]s=%[1]s@%s", mod, v)
+			return fmt.Sprintf("%[1]s=%[1]s@%s", mod, ref)
 
 		}
 
@@ -404,7 +404,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	}
 
 	if (GetContext(ctx).UpgradeBridgeVersion || GetContext(ctx).UpgradePfVersion) &&
-		GetContext(ctx).TargetPulumiVersion == "" {
+		GetContext(ctx).TargetPulumiVersion == nil {
 		// Having changed the version of pulumi/{sdk,pkg} that we are using, we
 		// need to propagate that change to the go.mod in {sdk,examples}/go.mod
 		//
