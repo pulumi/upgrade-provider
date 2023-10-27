@@ -43,6 +43,13 @@ type Context struct {
 	//
 	UpstreamProviderName string
 
+	// The desired version of pulumi/{pkg,sdk} to link to.
+	//
+	// If TargetPulumiVersion is nil, then pulumi/{pkg,sdk} should follow the bridge.
+	//
+	// Otherwise, we will `require` the described version.
+	TargetPulumiVersion string
+
 	// The desired java version.
 	JavaVersion string
 	// The old java version we found.

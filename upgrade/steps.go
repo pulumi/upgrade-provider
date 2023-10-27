@@ -452,18 +452,24 @@ var hasRemoteBranch = stepv2.Func11("Has Remote Branch", func(ctx context.Contex
 
 var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Context, c Context,
 	targetBridgeVersion, targetPfVersion Ref, upgradeTarget *UpstreamUpgradeTarget) (string, error) {
-	ret := func(s string) (string, error) { stepv2.SetLabel(ctx, s); return s, nil }
+	ret := func(format string, a ...any) (string, error) {
+		s := fmt.Sprintf(format, a...)
+		stepv2.SetLabel(ctx, s)
+		return s, nil
+	}
 	switch {
 	case c.UpgradeProviderVersion:
-		return ret(fmt.Sprintf("upgrade-%s-to-v%s", c.UpstreamProviderName, upgradeTarget.Version))
+		return ret("upgrade-%s-to-v%s", c.UpstreamProviderName, upgradeTarget.Version)
 	case c.UpgradeBridgeVersion:
 		contract.Assertf(targetBridgeVersion != nil,
 			"We are upgrading the bridge, so we must have a target version")
-		return ret(fmt.Sprintf("upgrade-pulumi-terraform-bridge-to-%s", targetBridgeVersion))
+		return ret("upgrade-pulumi-terraform-bridge-to-%s", targetBridgeVersion)
 	case c.UpgradeCodeMigration:
 		return ret("upgrade-code-migration")
 	case c.UpgradePfVersion:
-		return ret(fmt.Sprintf("upgrade-pf-version-to-%s", targetPfVersion))
+		return ret("upgrade-pf-version-to-%s", targetPfVersion)
+	case c.TargetPulumiVersion != "":
+		return ret("upgrade-pulumi-version-to-%s", c.TargetPulumiVersion)
 	default:
 		return "", fmt.Errorf("calculating branch name: unknown action")
 	}
@@ -812,14 +818,13 @@ func ReplaceAssertNoError(ctx context.Context, repo ProviderRepo) (step.Step, er
 	return step.Combined("Replace AssertNoError with AssertNoErrorf", steps...), nil
 }
 
-// UpgradePulumiVersions reads the current Pulumi SDK version from go.mod and applies it to:
+// applyPulumiVersion reads the current Pulumi SDK version from provider/go.mod and applies it to:
 // sdk/go.mod
 // examples/go.mod - we also infer the `pkg` version here and add it.
-func BridgePulumiVersions(ctx context.Context, repo ProviderRepo) step.Step {
+func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 	// When we've updated the bridge version, we need to update the corresponding pulumi version in sdk/go.mod.
 	// It needs to match the version used in provider/go.mod, which is *not* necessarily `latest`.
 	var newSdkVersion string
-	steps := []step.Step{}
 	getNewPulumiVersionStep := step.F("Get Pulumi SDK version", func(context.Context) (string, error) {
 		modFile := filepath.Join(repo.root, "provider", "go.mod")
 		lookupModule := "github.com/pulumi/pulumi/sdk/v3"
@@ -831,7 +836,6 @@ func BridgePulumiVersions(ctx context.Context, repo ProviderRepo) step.Step {
 			return "", fmt.Errorf("%s: %s not found\n", modFile, lookupModule)
 		}
 		return pulumiMod.Version, nil
-
 	}).AssignTo(&newSdkVersion)
 
 	goGet := func(pack string) step.Step {
@@ -841,12 +845,9 @@ func BridgePulumiVersions(ctx context.Context, repo ProviderRepo) step.Step {
 		})
 	}
 
-	steps = append(steps,
+	return step.Combined("Upgrade Pulumi version in all places",
 		getNewPulumiVersionStep,
 		goGet("sdk").In(repo.sdkDir()),
 		goGet("sdk").In(repo.examplesDir()),
-		goGet("pkg").In(repo.examplesDir()),
-	)
-
-	return step.Combined("Upgrade Pulumi version in all places", steps...)
+		goGet("pkg").In(repo.examplesDir()))
 }
