@@ -186,7 +186,7 @@ If the passed version does not exist, an error is signaled.`)
 	cmd.PersistentFlags().VarP(upgrade.RefFlag(&context.TargetPulumiVersion), "target-pulumi-version", "",
 		`Upgrade the provider to the passed pulumi/{pkg,sdk} version.
 
-	If no version is passed, the pulumi/{pkg,sdk} version will track the bridge`)
+If no version is passed, the pulumi/{pkg,sdk} version will track the bridge`)
 
 	cmd.PersistentFlags().BoolVar(&context.InferVersion, "pulumi-infer-version", false,
 		`Use our GH issues to infer the target upgrade version.

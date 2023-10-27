@@ -60,10 +60,9 @@ func RefFlag(r *Ref) pflag.Value { return &refFlag{r} }
 type refFlag struct{ r *Ref }
 
 func (f *refFlag) String() string {
-	if f == nil || f.r == nil && *f.r == nil {
+	if f == nil || f.r == nil || *f.r == nil {
 		return ""
 	}
-
 	return (*f.r).String()
 }
 
