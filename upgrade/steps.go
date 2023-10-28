@@ -120,8 +120,8 @@ var ensureUpstreamRepo = stepv2.Func11("Ensure Upstream Repo", func(ctx context.
 		})(ctx, repoPath)
 
 	repoExists := stepv2.Func11E("Repo Exists", func(ctx context.Context, loc string) (bool, error) {
-		info, err := stepv2.Stat(ctx, loc)
-		if err != nil {
+		info, exists := stepv2.Stat(ctx, loc)
+		if !exists {
 			return false, nil
 		}
 		if !info.IsDir {

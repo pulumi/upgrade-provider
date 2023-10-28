@@ -6,6 +6,7 @@ package step
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -191,8 +192,32 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 				outputs[i] = v.Interface()
 			}
 		} else {
+			// Hydrate complex objects by round-tripping them through JSON.
+			fType := reflect.TypeOf(f)
+			for i := 0; i < fType.NumOut(); i++ {
+				t := fType.Out(i)
+				v := reflect.New(t)
+				v.Elem().Set(reflect.Zero(t))
+
+				if retImmediatly.Out[i] == nil {
+					outputs[i] = v.Elem().Interface()
+					continue
+				}
+				b, err := json.Marshal(retImmediatly.Out[i])
+				if err != nil {
+					panic(err)
+				}
+
+				p.handleError([]any{err})
+				err = json.Unmarshal(b, v.Interface())
+				if err != nil {
+					panic(err)
+				}
+				p.handleError([]any{err})
+				outputs[i] = v.Elem().Interface()
+			}
 			// This call is mocked, so just set the output
-			copy(outputs, retImmediatly.Out)
+			// copy(outputs, retImmediatly.Out)
 		}
 
 		p.handleError(outputs)

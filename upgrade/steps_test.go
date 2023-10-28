@@ -192,3 +192,14 @@ func TestEnsureBranchCheckedOut(t *testing.T) {
 		})
 	}
 }
+
+func TestEnsureUpstreamRepo(t *testing.T) {
+	ctx := newReplay(t, "download_aiven")
+	err := step.PipelineCtx(ctx, "Discover Provider", func(ctx context.Context) {
+		ctx = (&Context{
+			GoPath: "/goPath",
+		}).Wrap(ctx)
+		ensureUpstreamRepo(ctx, "github.com/pulumi/pulumi-aiven")
+	})
+	require.NoError(t, err)
+}

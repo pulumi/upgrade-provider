@@ -96,12 +96,17 @@ func MkDirAll(ctx context.Context, path string, perm os.FileMode) {
 	})(ctx, path, perm)
 }
 
-func Stat(ctx context.Context, name string) (FileInfo, error) {
-	return Func12("Stat", func(ctx context.Context, name string) (FileInfo, error) {
+// Returns FileInfo{...}, true if the file exists, or FileInfo{}, false if it does
+// not. Any other error type will fail the pipeline.
+func Stat(ctx context.Context, name string) (FileInfo, bool) {
+	return Func12E("Stat", func(ctx context.Context, name string) (FileInfo, bool, error) {
 		MarkImpure(ctx)
 		info, err := os.Stat(name)
+		if os.IsNotExist(err) {
+			return FileInfo{}, false, nil
+		}
 		if err != nil {
-			return FileInfo{}, err
+			return FileInfo{}, false, err
 		}
 
 		return FileInfo{
@@ -109,7 +114,7 @@ func Stat(ctx context.Context, name string) (FileInfo, error) {
 			Size:  info.Size(),
 			Mode:  info.Mode(),
 			IsDir: info.IsDir(),
-		}, nil
+		}, true, nil
 	})(ctx, name)
 }
 
