@@ -107,23 +107,28 @@ var upgradeUpstreamFork = stepv2.Func31("Upgrade Forked Provider", func(ctx cont
 // Ensure that the upstream repo exists.
 //
 // The path that the upstream repo exists at is returned.
-var ensureUpstreamRepo = stepv2.Func11("ensure upstream repo", func(ctx context.Context, repoPath string) string {
-	var repoExists bool
-	expectedLocation := stepv2.Func11E("Expected Location", func(ctx context.Context, repoPath string) (string, error) {
-		cwd := stepv2.GetCwd(ctx)
-		expectedLocation, err := getRepoExpectedLocation(ctx, cwd, repoPath)
-		if err != nil {
-			return "", err
-		}
-		if info, err := os.Stat(expectedLocation); err == nil {
-			if !info.IsDir() {
-				return "", fmt.Errorf("'%s' not a directory", expectedLocation)
+var ensureUpstreamRepo = stepv2.Func11("Ensure Upstream Repo", func(ctx context.Context, repoPath string) string {
+	expectedLocation := stepv2.Func11E("Expected Location",
+		func(ctx context.Context, repoPath string) (string, error) {
+			cwd := stepv2.GetCwd(ctx)
+			loc, err := getRepoExpectedLocation(ctx, cwd, repoPath)
+			if err != nil {
+				return "", err
 			}
-			repoExists = true
+			stepv2.SetLabel(ctx, loc)
+			return loc, nil
+		})(ctx, repoPath)
+
+	repoExists := stepv2.Func11E("Repo Exists", func(ctx context.Context, loc string) (bool, error) {
+		info, err := stepv2.Stat(ctx, loc)
+		if err != nil {
+			return false, nil
 		}
-		stepv2.SetLabel(ctx, expectedLocation)
-		return expectedLocation, nil
-	})(ctx, repoPath)
+		if !info.IsDir {
+			return false, fmt.Errorf("'%s' not a directory", loc)
+		}
+		return true, nil
+	})(ctx, expectedLocation)
 
 	if !repoExists {
 		stepv2.Func10("Downloading", func(ctx context.Context, path string) {

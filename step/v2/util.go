@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 )
@@ -77,7 +78,7 @@ func WithCwd(ctx context.Context, dir string, f func(context.Context)) {
 
 // Read the current working directory.
 func GetCwd(ctx context.Context) string {
-	return Func01E("GetCwd", func(context.Context) (string, error) {
+	return Func01E("GetCwd", func(ctx context.Context) (string, error) {
 		MarkImpure(ctx)
 		c, err := os.Getwd()
 		if err == nil {
@@ -89,8 +90,35 @@ func GetCwd(ctx context.Context) string {
 
 // MkDirAll wraps os.MkdirAll with error handling and impure validation.
 func MkDirAll(ctx context.Context, path string, perm os.FileMode) {
-	Func20E("MkDirAll", func(_ context.Context, path string, perm os.FileMode) error {
+	Func20E("MkDirAll", func(ctx context.Context, path string, perm os.FileMode) error {
 		MarkImpure(ctx)
 		return os.MkdirAll(path, perm)
 	})(ctx, path, perm)
+}
+
+func Stat(ctx context.Context, name string) (FileInfo, error) {
+	return Func12("Stat", func(ctx context.Context, name string) (FileInfo, error) {
+		MarkImpure(ctx)
+		info, err := os.Stat(name)
+		if err != nil {
+			return FileInfo{}, err
+		}
+
+		return FileInfo{
+			Name:  info.Name(),
+			Size:  info.Size(),
+			Mode:  info.Mode(),
+			IsDir: info.IsDir(),
+		}, nil
+	})(ctx, name)
+}
+
+// This is a partial copy of fs.FileInfo that is fully serializable.
+//
+// This is necessary for replay tests.
+type FileInfo struct {
+	Name  string      `json:"name"`  // base name of the file
+	Size  int64       `json:"size"`  // length in bytes for regular files; system-dependent for others
+	Mode  fs.FileMode `json:"mode"`  // file mode bits
+	IsDir bool        `json:"isDir"` // abbreviation for Mode().IsDir()
 }
