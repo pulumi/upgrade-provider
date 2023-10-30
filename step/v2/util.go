@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 )
@@ -61,7 +62,7 @@ func HaltOnError(ctx context.Context, err error) {
 //
 // If the dir does not exist, then the current pipeline will fail.
 func WithCwd(ctx context.Context, dir string, f func(context.Context)) {
-	c := &Cwd{To: dir}
+	c := &SetCwd{To: dir}
 	err := c.Enter(ctx, StepInfo{})
 	HaltOnError(ctx, err)
 	c.depth--
@@ -73,4 +74,56 @@ func WithCwd(ctx context.Context, dir string, f func(context.Context)) {
 	}()
 
 	f(WithEnv(ctx, c))
+}
+
+// Read the current working directory.
+func GetCwd(ctx context.Context) string {
+	return Func01E("GetCwd", func(ctx context.Context) (string, error) {
+		MarkImpure(ctx)
+		c, err := os.Getwd()
+		if err == nil {
+			SetLabel(ctx, c)
+		}
+		return c, err
+	})(ctx)
+}
+
+// MkDirAll wraps os.MkdirAll with error handling and impure validation.
+func MkDirAll(ctx context.Context, path string, perm os.FileMode) {
+	Func20E("MkDirAll", func(ctx context.Context, path string, perm os.FileMode) error {
+		MarkImpure(ctx)
+		return os.MkdirAll(path, perm)
+	})(ctx, path, perm)
+}
+
+// Returns FileInfo{...}, true if the file exists, or FileInfo{}, false if it does
+// not. Any other error type will fail the pipeline.
+func Stat(ctx context.Context, name string) (FileInfo, bool) {
+	return Func12E("Stat", func(ctx context.Context, name string) (FileInfo, bool, error) {
+		MarkImpure(ctx)
+		info, err := os.Stat(name)
+		if os.IsNotExist(err) {
+			return FileInfo{}, false, nil
+		}
+		if err != nil {
+			return FileInfo{}, false, err
+		}
+
+		return FileInfo{
+			Name:  info.Name(),
+			Size:  info.Size(),
+			Mode:  info.Mode(),
+			IsDir: info.IsDir(),
+		}, true, nil
+	})(ctx, name)
+}
+
+// This is a partial copy of fs.FileInfo that is fully serializable.
+//
+// This is necessary for replay tests.
+type FileInfo struct {
+	Name  string      `json:"name"`  // base name of the file
+	Size  int64       `json:"size"`  // length in bytes for regular files; system-dependent for others
+	Mode  fs.FileMode `json:"mode"`  // file mode bits
+	IsDir bool        `json:"isDir"` // abbreviation for Mode().IsDir()
 }

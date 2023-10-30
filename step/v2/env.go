@@ -77,12 +77,12 @@ func (e *EnvVar) Exit(context.Context, []any) error {
 func (e *EnvVar) String() string { return fmt.Sprintf("%s=%s", e.Key, e.Value) }
 
 // Modify the current working directory for the duration of the Env.
-type Cwd struct {
+type SetCwd struct {
 	To, restore string
 	depth       int
 }
 
-func (e *Cwd) Enter(ctx context.Context, _ StepInfo) error {
+func (e *SetCwd) Enter(ctx context.Context, _ StepInfo) error {
 	e.depth++
 	if e.depth != 1 || IsReplay(ctx) {
 		return nil
@@ -95,7 +95,7 @@ func (e *Cwd) Enter(ctx context.Context, _ StepInfo) error {
 	return os.Chdir(e.To)
 }
 
-func (e *Cwd) Exit(ctx context.Context, _ []any) error {
+func (e *SetCwd) Exit(ctx context.Context, _ []any) error {
 	defer func() { e.depth-- }()
 	if e.depth == 1 && !IsReplay(ctx) {
 		return os.Chdir(e.restore)
@@ -103,7 +103,7 @@ func (e *Cwd) Exit(ctx context.Context, _ []any) error {
 	return nil
 }
 
-func (e *Cwd) String() string { return fmt.Sprintf("cd %q", e.To) }
+func (e *SetCwd) String() string { return fmt.Sprintf("cd %q", e.To) }
 
 // Silence all output from the step
 type Silent struct{}

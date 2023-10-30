@@ -59,8 +59,11 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return ErrHandled
 	}
 
+	err = stepv2.PipelineCtx(ctx, "Discover Provider", func(ctx context.Context) {
+		repo.root = OrgProviderRepos(ctx, repoOrg, repoName)
+	})
+
 	discoverSteps := []step.Step{
-		OrgProviderRepos(ctx, repoOrg, repoName).AssignTo(&repo.root),
 		PullDefaultBranch(ctx, "origin").In(&repo.root).
 			AssignTo(&repo.defaultBranch),
 	}
@@ -312,10 +315,11 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() && GetContext(ctx).UpgradeProviderVersion {
-		ok = step.Run(ctx, upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod).
-			AssignTo(&forkedProviderUpstreamCommit))
-		if !ok {
-			return ErrHandled
+		err := stepv2.PipelineCtx(ctx, "Upgrade Forked Provider", func(ctx context.Context) {
+			upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod)
+		})
+		if err != nil {
+			return err
 		}
 	}
 
@@ -456,7 +460,7 @@ func tfgenAndBuildSDKs(
 	targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
 ) func(ctx context.Context) {
 	return func(ctx context.Context) {
-		ctx = stepv2.WithEnv(ctx, &stepv2.Cwd{To: repo.root})
+		ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
 
 		stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
 			stepv2.Cmd(ctx, "go", "mod", "tidy")

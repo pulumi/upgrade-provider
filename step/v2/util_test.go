@@ -50,8 +50,8 @@ func TestEnvScoping(t *testing.T) {
 
 	t.Run("raw", func(t *testing.T) {
 		err = step.Pipeline("test", func(ctx context.Context) {
-			ctx = step.WithEnv(ctx, &step.Cwd{To: dir1})
-			ctx = step.WithEnv(ctx, &step.Cwd{To: dir2}, &step.Cwd{To: dir3})
+			ctx = step.WithEnv(ctx, &step.SetCwd{To: dir1})
+			ctx = step.WithEnv(ctx, &step.SetCwd{To: dir2}, &step.SetCwd{To: dir3})
 
 			checkPwd(t, ctx, target)
 		})
@@ -59,7 +59,7 @@ func TestEnvScoping(t *testing.T) {
 
 	t.Run("scoped", func(t *testing.T) {
 		err = step.Pipeline("test", func(ctx context.Context) {
-			ctx = step.WithEnv(ctx, &step.Cwd{To: dir1})
+			ctx = step.WithEnv(ctx, &step.SetCwd{To: dir1})
 			step.WithCwd(ctx, dir2, func(ctx context.Context) {
 				checkPwd(t, ctx, dir2)
 			})

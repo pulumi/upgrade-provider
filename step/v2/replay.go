@@ -298,6 +298,8 @@ func (r *record) Marshal() []byte {
 type recordKey struct{}
 
 // Mark the calling context as an impure function.
+//
+// Note: Impure functions must have serializable inputs and outputs for replay testing.
 func MarkImpure(ctx context.Context) {
 	if IsReplay(ctx) {
 		HaltOnError(ctx, fmt.Errorf("Calling impure function in replay"))
