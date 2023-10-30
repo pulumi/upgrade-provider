@@ -352,10 +352,19 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		if tfSDKTargetSHA == "" {
 			return nil
 		}
-		return step.Combined("Update Plugin SDK",
+		steps := []step.Step{}
+
+		// If a provider is patched, running `go mod tidy` without running `make
+		// upstream` may be invalid.
+		if goMod.Kind.IsPatched() {
+			steps = append(steps, step.Cmd("make", "upstream").In(&repo.root))
+		}
+
+		steps = append(steps,
 			setTFPluginSDKReplace(ctx, repo, &tfSDKTargetSHA),
-			step.Cmd("go", "mod", "tidy").In(repo.providerDir()),
-		)
+			step.Cmd("go", "mod", "tidy").In(repo.providerDir()))
+
+		return step.Combined("Update Plugin SDK", steps...)
 	}))
 
 	if GetContext(ctx).UpgradeProviderVersion {
