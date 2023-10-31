@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
@@ -205,21 +206,34 @@ func TestEnsureUpstreamRepo(t *testing.T) {
 }
 
 func TestReleaseLabel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		from, to string
 		expect   string
 	}{
+		// Same version
 		{"v1.2.3", "v1.2.3", ""},
-		{"v1.2.3", "v1.2.4", "needs-release/patch"},
-		{"v1.1.3", "v1.2.4", "needs-release/minor"},
-		{"v2.2.3", "v1.2.4", "needs-release/major"},
+		{"v1.2.3", "v1.2.3+alpha", ""},
+
+		// Upgrade
+		{"v1.2.3", "v1.2.4", "needs-release/patch"}, // Patch
+		{"v1.1.3", "v1.2.0", "needs-release/minor"}, // Minor+ Patch-
+		{"v1.1.3", "v1.2.4", "needs-release/minor"}, // Minor+ Patch+
+		{"1.2.4", "v2.0.0", "needs-release/major"},  // Major+ Minor- Patch-
+
+		// Downgrades
+		{"v2.1.3", "v1.2.4", ""}, // Major
+		{"v1.1.3", "v1.0.4", ""}, // Minor
+		{"v1.0.3", "v1.0.2", ""}, // Patch
+
+		// Missing versions
 		{"", "v1.2.4", ""},
 		{"v2.2.3", "", ""},
 	}
 
 	for _, tt := range tests {
 		tt := tt
-		t.Run("", func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s->%s", tt.from, tt.to), func(t *testing.T) {
 			parse := func(s string) *semver.Version {
 				if s == "" {
 					return nil

@@ -372,21 +372,35 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	return nil
 })
 
-var upgradeLabel = stepv2.Func21("Release Label", func(ctx context.Context, to, from *semver.Version) string {
+var upgradeLabel = stepv2.Func21("Release Label", func(ctx context.Context, from, to *semver.Version) string {
 	if to == nil || from == nil {
 		return ""
 	}
-	r := func(s string) string { return "needs-release/" + s }
-	switch {
-	case to.Major() != from.Major():
-		return r("major")
-	case to.Minor() != from.Minor():
-		return r("minor")
-	case to.Patch() != from.Patch():
-		return r("patch")
-	default:
-		return ""
+
+	cmp := func(toF, fromF func() uint64, name string) (string, bool) {
+		to, from := toF(), fromF()
+		switch {
+		case to > from:
+			l := "needs-release/" + name
+			stepv2.SetLabel(ctx, l)
+			return l, true
+		case to < from:
+			return "", true
+		default:
+			return "", false
+		}
 	}
+
+	if l, ok := cmp(to.Major, from.Major, "major"); ok {
+		return l
+	}
+	if l, ok := cmp(to.Minor, from.Minor, "minor"); ok {
+		return l
+	}
+	if l, ok := cmp(to.Patch, from.Patch, "patch"); ok {
+		return l
+	}
+	return ""
 })
 
 // Most if not all of our TF SDK based providers use a "replace" based version of
