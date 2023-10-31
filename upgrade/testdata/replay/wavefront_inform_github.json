@@ -62,6 +62,17 @@
           "impure": true
         },
         {
+          "name": "Release Label",
+          "inputs": [
+            "5.0.3",
+            "5.0.5"
+          ],
+          "outputs": [
+            "needs-release/patch",
+            null
+          ]
+        },
+        {
           "name": "gh",
           "inputs": [
             "gh",
@@ -79,7 +90,9 @@
               "--title",
               "Upgrade terraform-provider-wavefront to v5.0.5",
               "--body",
-              "This PR was generated via `$ upgrade-provider pulumi/pulumi-wavefront`.\n\n---\n\n- Upgrading terraform-provider-wavefront from 5.0.3  to 5.0.5.\n\tFixes #232\n"
+              "This PR was generated via `$ upgrade-provider pulumi/pulumi-wavefront`.\n\n---\n\n- Upgrading terraform-provider-wavefront from 5.0.3  to 5.0.5.\n\tFixes #232\n",
+              "--label",
+              "needs-release/patch"
             ]
           ],
           "outputs": [

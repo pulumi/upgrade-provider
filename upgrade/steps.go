@@ -325,6 +325,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	}
 
 	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade, osArgs)
+
 	if repo.prAlreadyExists {
 		// Update the description in case anything else was upgraded (or not
 		// upgraded) in this run, compared to the existing PR.
@@ -332,13 +333,26 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 			"--title", prTitle,
 			"--body", prBody)
 	} else {
-		stepv2.Cmd(ctx, "gh", "pr", "create",
-			"--assignee", c.PrAssign,
-			"--base", repo.defaultBranch,
-			"--head", repo.workingBranch,
-			"--reviewer", c.PrReviewers,
-			"--title", prTitle,
-			"--body", prBody)
+		addLabels := []string{}
+		// We only create release labels when we are running the full pulumi
+		// providers process: i.e. when we discovered issues to close at the
+		// beginning of the pipeline.
+		if c.UpgradeProviderVersion && len(target.GHIssues) > 0 {
+			label := upgradeLabel(ctx, repo.currentUpstreamVersion, target.Version)
+			if label != "" {
+				addLabels = []string{"--label", label}
+			}
+		}
+
+		stepv2.Cmd(ctx, "gh",
+			append([]string{"pr", "create",
+				"--assignee", c.PrAssign,
+				"--base", repo.defaultBranch,
+				"--head", repo.workingBranch,
+				"--reviewer", c.PrReviewers,
+				"--title", prTitle,
+				"--body", prBody},
+				addLabels...)...)
 	}
 
 	// If we are only upgrading the bridge, we wont have a list of issues.
@@ -356,6 +370,37 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	})(ctx)
 
 	return nil
+})
+
+var upgradeLabel = stepv2.Func21("Release Label", func(ctx context.Context, from, to *semver.Version) string {
+	if to == nil || from == nil {
+		return ""
+	}
+
+	cmp := func(toF, fromF func() uint64, name string) (string, bool) {
+		to, from := toF(), fromF()
+		switch {
+		case to > from:
+			l := "needs-release/" + name
+			stepv2.SetLabel(ctx, l)
+			return l, true
+		case to < from:
+			return "", true
+		default:
+			return "", false
+		}
+	}
+
+	if l, ok := cmp(to.Major, from.Major, "major"); ok {
+		return l
+	}
+	if l, ok := cmp(to.Minor, from.Minor, "minor"); ok {
+		return l
+	}
+	if l, ok := cmp(to.Patch, from.Patch, "patch"); ok {
+		return l
+	}
+	return ""
 })
 
 // Most if not all of our TF SDK based providers use a "replace" based version of
