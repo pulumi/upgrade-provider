@@ -203,3 +203,37 @@ func TestEnsureUpstreamRepo(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+func TestReleaseLabel(t *testing.T) {
+	tests := []struct {
+		from, to string
+		expect   string
+	}{
+		{"v1.2.3", "v1.2.3", ""},
+		{"v1.2.3", "v1.2.4", "needs-release/patch"},
+		{"v1.1.3", "v1.2.4", "needs-release/minor"},
+		{"v2.2.3", "v1.2.4", "needs-release/major"},
+		{"", "v1.2.4", ""},
+		{"v2.2.3", "", ""},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run("", func(t *testing.T) {
+			parse := func(s string) *semver.Version {
+				if s == "" {
+					return nil
+				}
+				return semver.MustParse(s)
+			}
+
+			from, to := parse(tt.from), parse(tt.to)
+
+			err := step.Pipeline("test", func(ctx context.Context) {
+				actual := upgradeLabel(ctx, from, to)
+				assert.Equal(t, tt.expect, actual)
+			})
+			assert.NoError(t, err)
+		})
+	}
+}
