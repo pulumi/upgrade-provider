@@ -518,41 +518,41 @@ func OrgProviderRepos(ctx context.Context, org, repo string) string {
 	return ensureUpstreamRepo(ctx, path.Join("github.com", org, repo))
 }
 
-func PullDefaultBranch(ctx context.Context, remote string) step.Step {
-	var lsRemoteHeads string
-	var defaultBranch string
-	return step.Combined("pull default branch",
-		step.Cmd("git", "ls-remote", "--heads", remote).AssignTo(&lsRemoteHeads),
-		step.F("finding default branch", func(context.Context) (string, error) {
-			var hasMaster bool
-			lines := strings.Split(lsRemoteHeads, "\n")
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
-				}
-				_, ref, found := strings.Cut(line, "\t")
-				contract.Assertf(found, "not found")
-				branch := strings.TrimPrefix(ref, "refs/heads/")
-				if branch == "master" {
-					hasMaster = true
-				}
-				if branch == "main" {
-					return branch, nil
-				}
+var pullDefaultBranch = stepv2.Func11("Pull Default Branch", func(ctx context.Context, remote string) string {
+	lsRemoteHeads := stepv2.Cmd(ctx, "git", "ls-remote", "--heads", remote)
+	defaultBranch := stepv2.Func01E("Find default Branch", func(ctx context.Context) (string, error) {
+		var hasMaster bool
+		lines := strings.Split(lsRemoteHeads, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
 			}
-			if hasMaster {
-				return "master", nil
+			_, ref, found := strings.Cut(line, "\t")
+			contract.Assertf(found, "not found")
+			branch := strings.TrimPrefix(ref, "refs/heads/")
+			if branch == "master" {
+				hasMaster = true
 			}
-			return "", fmt.Errorf("could not find 'master' or 'main' branch")
-		}).AssignTo(&defaultBranch),
-		step.Cmd("git", "fetch"),
-		step.Computed(func() step.Step {
-			return step.Cmd("git", "checkout", defaultBranch)
-		}),
-		step.Cmd("git", "pull", remote),
-	).Return(&defaultBranch)
-}
+			if branch == "main" {
+				stepv2.SetLabel(ctx, branch)
+				return branch, nil
+			}
+		}
+		if hasMaster {
+			stepv2.SetLabel(ctx, "master")
+			return "master", nil
+		}
+		return "", fmt.Errorf("could not find 'master' or 'main' branch")
+
+	})(ctx)
+
+	stepv2.Cmd(ctx, "git", "fetch")
+	stepv2.Cmd(ctx, "git", "checkout", defaultBranch)
+	stepv2.Cmd(ctx, "git", "pull", remote)
+
+	return defaultBranch
+})
 
 func MajorVersionBump(ctx context.Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo) step.Step {
 	if repo.currentVersion.Major() == 0 {

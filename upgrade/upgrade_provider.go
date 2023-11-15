@@ -61,20 +61,14 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	err = stepv2.PipelineCtx(ctx, "Discover Provider", func(ctx context.Context) {
 		repo.root = OrgProviderRepos(ctx, repoOrg, repoName)
+		repo.defaultBranch = pullDefaultBranch(ctx, "origin")
+		goMod = getRepoKind(ctx, repo)
 	})
-
-	discoverSteps := []step.Step{
-		PullDefaultBranch(ctx, "origin").In(&repo.root).
-			AssignTo(&repo.defaultBranch),
+	if err != nil {
+		return err
 	}
 
-	discoverSteps = append(discoverSteps, step.F("Repo kind", func(context.Context) (string, error) {
-		goMod, err = GetRepoKind(ctx, repo)
-		if err != nil {
-			return "", err
-		}
-		return string(goMod.Kind), nil
-	}))
+	discoverSteps := []step.Step{}
 
 	if GetContext(ctx).UpgradeProviderVersion {
 		discoverSteps = append(discoverSteps,

@@ -89,6 +89,35 @@ func currentGoVersionOf(modFile, lookupModule string) (module.Version, bool, err
 	return module.Version{}, false, nil
 }
 
+// Look up the version of the go dependency requirement of a given module in a given modfile.
+//
+// This version is a stepv2 compatible instance of currentGoVersionOf.
+var currentGoVersionOfV2 = stepv2.Func22E("Current Go Version", func(ctx context.Context,
+	modFile, lookupModule string) (module.Version, bool, error) {
+	fileData := stepv2.ReadFile(ctx, modFile)
+	goMod, err := modfile.Parse(modFile, []byte(fileData), nil)
+	if err != nil {
+		return module.Version{}, false, fmt.Errorf("%s: %w",
+			modFile, err)
+	}
+
+	// We can only look up requirements in this way.
+	for _, replacement := range goMod.Replace {
+		if replacement.Old.Path == lookupModule {
+			return module.Version{}, false, fmt.Errorf(
+				"module %s is being replaced, cannot lookup version", lookupModule,
+			)
+		}
+	}
+
+	for _, requirement := range goMod.Require {
+		if requirement.Mod.Path == lookupModule {
+			return requirement.Mod, true, nil
+		}
+	}
+	return module.Version{}, false, nil
+})
+
 func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", "show", repo.defaultBranch+":"+file)
 	cmd.Dir = repo.root
