@@ -90,22 +90,19 @@ func TestHasRemoteBranch(t *testing.T) {
 				return json.RawMessage(b)
 			}
 
-			simpleReplay(t, step.RecordV1{
-				Name: t.Name(),
-				Steps: []*step.Step{
-					{
-						Name:    "Has Remote Branch",
-						Inputs:  encode([]string{tt.branchName}),
-						Outputs: encode([]any{tt.expect, nil}),
-					},
-					{
-						Name: "gh",
-						Inputs: encode([]any{
-							"gh", []string{"pr", "list", "--json=title,headRefName"},
-						}),
-						Outputs: encode([]any{tt.response, nil}),
-						Impure:  true,
-					},
+			simpleReplay(t, []*step.Step{
+				{
+					Name:    "Has Remote Branch",
+					Inputs:  encode([]string{tt.branchName}),
+					Outputs: encode([]any{tt.expect, nil}),
+				},
+				{
+					Name: "gh",
+					Inputs: encode([]any{
+						"gh", []string{"pr", "list", "--json=title,headRefName"},
+					}),
+					Outputs: encode([]any{tt.response, nil}),
+					Impure:  true,
 				},
 			}, func(ctx context.Context) { hasRemoteBranch(ctx, tt.branchName) })
 		})
@@ -150,41 +147,38 @@ func TestEnsureBranchCheckedOut(t *testing.T) {
 				return json.RawMessage(b)
 			}
 
-			replay := step.RecordV1{
-				Name: t.Name(),
-				Steps: []*step.Step{
-					{
-						Name:    "Ensure Branch",
-						Inputs:  encode([]string{tt.branchName}),
-						Outputs: encode([]any{nil}),
-					},
-					{
-						Name: "git",
-						Inputs: encode([]any{
-							"git", []string{"branch"},
-						}),
-						Outputs: encode([]any{tt.response, nil}),
-						Impure:  true,
-					},
-					{
-						Name:    tt.namedValue,
-						Inputs:  encode([]any{}),
-						Outputs: encode([]any{true, nil}),
-					},
-					{
-						Name:    "git",
-						Inputs:  encode([]any{"git", tt.call}),
-						Outputs: encode([]any{"", nil}),
-						Impure:  true,
-					},
+			replay := []*step.Step{
+				{
+					Name:    "Ensure Branch",
+					Inputs:  encode([]string{tt.branchName}),
+					Outputs: encode([]any{nil}),
+				},
+				{
+					Name: "git",
+					Inputs: encode([]any{
+						"git", []string{"branch"},
+					}),
+					Outputs: encode([]any{tt.response, nil}),
+					Impure:  true,
+				},
+				{
+					Name:    tt.namedValue,
+					Inputs:  encode([]any{}),
+					Outputs: encode([]any{true, nil}),
+				},
+				{
+					Name:    "git",
+					Inputs:  encode([]any{"git", tt.call}),
+					Outputs: encode([]any{"", nil}),
+					Impure:  true,
 				},
 			}
 
 			if tt.namedValue == "" {
-				replay.Steps = append(replay.Steps[:2], replay.Steps[3:]...)
+				replay = append(replay[:2], replay[3:]...)
 			}
 			if len(tt.call) == 0 {
-				replay.Steps = replay.Steps[:len(replay.Steps)-1]
+				replay = replay[:len(replay)-1]
 			}
 
 			simpleReplay(t, replay, func(ctx context.Context) {
