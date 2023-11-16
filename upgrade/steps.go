@@ -17,8 +17,10 @@ import (
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
+	goSemver "golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 
+	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
@@ -890,3 +892,72 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 		goGet("sdk").In(repo.examplesDir()),
 		goGet("pkg").In(repo.examplesDir()))
 }
+
+var planProviderUpgrade = stepv2.Func41E("Planning Provider Update", func(ctx context.Context,
+	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo) (*UpstreamUpgradeTarget, error) {
+	upgradeTarget := getExpectedTarget(ctx, repoOrg+"/"+repoName,
+		goMod.UpstreamProviderOrg)
+	if upgradeTarget == nil {
+		return nil, fmt.Errorf("could not determine an upstream version")
+	}
+
+	// If we don't have any upgrades to target, assume that we don't need to upgrade.
+	if upgradeTarget.Version == nil {
+		// Otherwise, we don't bother to try to upgrade the provider.
+		GetContext(ctx).UpgradeProviderVersion = false
+		GetContext(ctx).MajorVersionBump = false
+		stepv2.SetLabel(ctx, "Up to date")
+		return nil, nil
+	}
+
+	switch {
+	case goMod.Kind.IsPatched():
+		setCurrentUpstreamFromPatched(ctx, repo)
+	case goMod.Kind.IsForked():
+		setCurrentUpstreamFromForked(ctx, repo, goMod)
+	case goMod.Kind.IsShimmed():
+		setCurrentUpstreamFromShimmed(ctx, repo, goMod)
+	case goMod.Kind == Plain:
+		setCurrentUpstreamFromPlain(ctx, repo, goMod)
+	default:
+		return nil, fmt.Errorf("Unexpected repo kind: %s", goMod.Kind)
+	}
+
+	// If we have a target version, we need to make sure that
+	// it is valid for an upgrade.
+	var msg string
+	if repo.currentUpstreamVersion != nil {
+		switch goSemver.Compare("v"+repo.currentUpstreamVersion.String(),
+			"v"+upgradeTarget.Version.String()) {
+
+		// Target version is less then the current version
+		case 1:
+			// This is a weird situation, so we warn
+			msg = colorize.Warnf(
+				" no upgrade: %s (current) > %s (target)",
+				repo.currentUpstreamVersion,
+				upgradeTarget.Version)
+			GetContext(ctx).UpgradeProviderVersion = false
+			GetContext(ctx).MajorVersionBump = false
+
+		// Target version is equal to the current version
+		case 0:
+			GetContext(ctx).UpgradeProviderVersion = false
+			GetContext(ctx).MajorVersionBump = false
+			msg = "Up to date"
+
+		// Target version is greater then the current version, so upgrade
+		case -1:
+			msg = fmt.Sprintf("%s -> %s",
+				repo.currentUpstreamVersion,
+				upgradeTarget.Version)
+		}
+	} else {
+		// If we don't have an old version, just assume
+		// that we will upgrade.
+		msg = upgradeTarget.Version.String()
+	}
+
+	stepv2.SetLabel(ctx, msg)
+	return upgradeTarget, nil
+})

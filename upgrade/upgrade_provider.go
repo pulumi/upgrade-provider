@@ -12,7 +12,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/module"
-	goSemver "golang.org/x/mod/semver"
 
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
@@ -63,87 +62,15 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		repo.root = OrgProviderRepos(ctx, repoOrg, repoName)
 		repo.defaultBranch = pullDefaultBranch(ctx, "origin")
 		goMod = getRepoKind(ctx, repo)
+		if GetContext(ctx).UpgradeProviderVersion {
+			upgradeTarget = planProviderUpgrade(ctx, repoOrg, repoName, goMod, &repo)
+		}
 	})
 	if err != nil {
 		return err
 	}
 
 	discoverSteps := []step.Step{}
-
-	if GetContext(ctx).UpgradeProviderVersion {
-		discoverSteps = append(discoverSteps,
-			step.F("Planning Provider Update", func(context.Context) (string, error) {
-				upgradeTarget, err = GetExpectedTarget(ctx, repoOrg+"/"+repoName,
-					goMod.UpstreamProviderOrg)
-				if err != nil {
-					return "", fmt.Errorf("expected target: %w", err)
-				}
-				if upgradeTarget == nil {
-					return "", errors.New("could not determine an upstream version")
-				}
-
-				// If we don't have any upgrades to target, assume that we don't need to upgrade.
-				if upgradeTarget.Version == nil {
-					// Otherwise, we don't bother to try to upgrade the provider.
-					GetContext(ctx).UpgradeProviderVersion = false
-					GetContext(ctx).MajorVersionBump = false
-					return "Up to date", nil
-				}
-
-				switch {
-				case goMod.Kind.IsPatched():
-					err = setCurrentUpstreamFromPatched(ctx, &repo)
-				case goMod.Kind.IsForked():
-					err = setCurrentUpstreamFromForked(ctx, &repo, goMod)
-				case goMod.Kind.IsShimmed():
-					err = setCurrentUpstreamFromShimmed(ctx, &repo, goMod)
-				case goMod.Kind == Plain:
-					err = setCurrentUpstreamFromPlain(ctx, &repo, goMod)
-				default:
-					return "", fmt.Errorf("Unexpected repo kind: %s", goMod.Kind)
-				}
-				if err != nil {
-					return "", fmt.Errorf("current upstream version: %w", err)
-				}
-
-				// If we have a target version, we need to make sure that
-				// it is valid for an upgrade.
-				var result string
-				if repo.currentUpstreamVersion != nil {
-					switch goSemver.Compare("v"+repo.currentUpstreamVersion.String(),
-						"v"+upgradeTarget.Version.String()) {
-
-					// Target version is less then the current version
-					case 1:
-						// This is a weird situation, so we warn
-						result = colorize.Warnf(
-							" no upgrade: %s (current) > %s (target)",
-							repo.currentUpstreamVersion,
-							upgradeTarget.Version)
-						GetContext(ctx).UpgradeProviderVersion = false
-						GetContext(ctx).MajorVersionBump = false
-
-					// Target version is equal to the current version
-					case 0:
-						GetContext(ctx).UpgradeProviderVersion = false
-						GetContext(ctx).MajorVersionBump = false
-						result = "Up to date"
-
-					// Target version is greater then the current version, so upgrade
-					case -1:
-						result = fmt.Sprintf("%s -> %s",
-							repo.currentUpstreamVersion,
-							upgradeTarget.Version)
-					}
-				} else {
-					// If we don't have an old version, just assume
-					// that we will upgrade.
-					result = upgradeTarget.Version.String()
-				}
-
-				return result, nil
-			}))
-	}
 
 	if GetContext(ctx).UpgradeBridgeVersion {
 		discoverSteps = append(discoverSteps,
