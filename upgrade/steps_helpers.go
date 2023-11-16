@@ -476,13 +476,12 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 //
 // The second argument represents a message to describe the result. It may be empty.
 var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Context, name, upstreamOrg string) *UpstreamUpgradeTarget {
+	if GetContext(ctx).TargetVersion != nil {
+		return &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
+	}
 	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
 	if GetContext(ctx).InferVersion {
 		return getExpectedTargetFromIssues(ctx, name)
-	}
-	if GetContext(ctx).TargetVersion != nil {
-		return &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
-
 	}
 	return getExpectedTargetLatest(ctx, name, upstreamOrg)
 })

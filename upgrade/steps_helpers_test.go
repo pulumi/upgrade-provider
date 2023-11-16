@@ -145,3 +145,43 @@ func TestGetExpectedTargetFromUpstream(t *testing.T) {
 		assert.NotNil(t, result)
 	})
 }
+
+func TestGetExpectedTargetFromTarget(t *testing.T) {
+	repo, name := "pulumi/pulumi-cloudflare", "cloudflare"
+
+	steps := jsonMarshal[[]*step.Step](t, `[
+  {
+    "name": "Get Expected Target",
+    "inputs": [
+      "`+repo+`",
+      "`+name+`"
+    ],
+    "outputs": [
+      {
+        "Version": "4.19.0",
+        "GHIssues": null
+      },
+      null
+    ]
+  }
+]`)
+
+	test := func(inferVersion bool) {
+		t.Run(fmt.Sprintf("infer-version=%t", inferVersion), func(t *testing.T) {
+			simpleReplay(t, steps, func(ctx context.Context) {
+				context := &Context{
+					GoPath:               "/Users/myuser/go",
+					UpstreamProviderName: "terraform-provider-cloudflare",
+					InferVersion:         inferVersion,
+					TargetVersion:        semver.MustParse("4.19.0"),
+				}
+				result := getExpectedTarget(context.Wrap(ctx),
+					repo, name)
+				assert.NotNil(t, result)
+			})
+		})
+	}
+
+	test(true)
+	test(false)
+}
