@@ -60,7 +60,13 @@ func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleMod
 	return module.Version{}, false, nil
 }
 
-var originalGoVersionOfV2 = stepv2.Func32E("Original Go Version of", func(ctx context.Context, repo ProviderRepo, file, needleModule string) (module.Version, bool, error) {
+// Find the go module version of needleModule, searching from the default repo branch, not
+// the currently checked out code.
+//
+// originalGoVersionOfV2 performs the same function as originalGoVersionOf, except that it
+// is stepv2 compatible.
+var originalGoVersionOfV2 = stepv2.Func32E("Original Go Version of", func(ctx context.Context,
+	repo ProviderRepo, file, needleModule string) (module.Version, bool, error) {
 	data := baseFileAtV2(ctx, repo, file)
 	goMod, err := modfile.Parse(file, []byte(data), nil)
 	if err != nil {
@@ -481,6 +487,8 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 	return getExpectedTargetLatest(ctx, name, upstreamOrg)
 })
 
+// Figure out what version of upstream to target by searching for the latest GitHub
+// release.
 var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx context.Context,
 	name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
 	latest := stepv2.Cmd(ctx, "gh", "release", "list",
@@ -499,6 +507,10 @@ var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx 
 	return &UpstreamUpgradeTarget{Version: v}, nil
 })
 
+// Figure out what version of upstream to target by looking at specific pulumi-bot
+// issues. These issues are created by other automation in the Pulumi GH org.
+//
+// This method of discovery is assumed to be specific to providers maintained by Pulumi.
 var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context.Context,
 	name string) (*UpstreamUpgradeTarget, error) {
 	target := &UpstreamUpgradeTarget{}

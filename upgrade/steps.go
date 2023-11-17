@@ -893,7 +893,11 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 		goGet("pkg").In(repo.examplesDir()))
 }
 
-var planProviderUpgrade = stepv2.Func41E("Planning Provider Update", func(ctx context.Context,
+// Plan the update for a provider.
+//
+// That means figuring out the old and the new version, and producing a
+// UpstreamUpgradeTarget.
+var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx context.Context,
 	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo) (*UpstreamUpgradeTarget, error) {
 	upgradeTarget := getExpectedTarget(ctx, repoOrg+"/"+repoName,
 		goMod.UpstreamProviderOrg)
@@ -903,7 +907,6 @@ var planProviderUpgrade = stepv2.Func41E("Planning Provider Update", func(ctx co
 
 	// If we don't have any upgrades to target, assume that we don't need to upgrade.
 	if upgradeTarget.Version == nil {
-		// Otherwise, we don't bother to try to upgrade the provider.
 		GetContext(ctx).UpgradeProviderVersion = false
 		GetContext(ctx).MajorVersionBump = false
 		stepv2.SetLabel(ctx, "Up to date")
