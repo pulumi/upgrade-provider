@@ -145,3 +145,119 @@ func TestGetExpectedTargetFromUpstream(t *testing.T) {
 		assert.NotNil(t, result)
 	})
 }
+
+func TestGetExpectedTargetFromTarget(t *testing.T) {
+	repo, name := "pulumi/pulumi-cloudflare", "cloudflare"
+	test := func(testName string, inferVersion bool, targetVersion, expected string) {
+		t.Run(testName, func(t *testing.T) {
+			expectedSteps := jsonMarshal[[]*step.Step](t, expected)
+			simpleReplay(t, expectedSteps, func(ctx context.Context) {
+				context := &Context{
+					GoPath:               "/Users/myuser/go",
+					UpstreamProviderName: "terraform-provider-cloudflare",
+					InferVersion:         inferVersion,
+					TargetVersion:        semver.MustParse(targetVersion),
+				}
+				result := getExpectedTarget(context.Wrap(ctx),
+					repo, name)
+				assert.NotNil(t, result)
+			})
+		})
+	}
+
+	test("expected-target", false, "4.19.0", `[
+  {
+    "name": "Get Expected Target",
+    "inputs": [
+      "`+repo+`",
+      "`+name+`"
+    ],
+    "outputs": [
+      {
+        "Version": "4.19.0",
+        "GHIssues": null
+      },
+      null
+    ]
+  }
+]`)
+
+	// The replay for when "Get Expected Target" is called with `Context.InferVersion
+	// = true`.
+	expectedTargetWithIssues := func(output string) string {
+		return `[
+  {
+    "name": "Get Expected Target",
+    "inputs": [
+      "` + repo + `",
+      "` + name + `"
+    ],
+    "outputs": [
+      ` + output + `,
+      null
+    ]
+  },
+  {
+    "name": "From Issues",
+    "inputs": [
+      "` + repo + `"
+    ],
+    "outputs": [
+      {
+        "Version": "2.32.0",
+        "GHIssues": [
+          {
+            "number": 540
+          },
+          {
+            "number": 538
+          }
+        ]
+      },
+      null
+    ]
+  },
+  {
+    "name": "gh",
+    "inputs": [
+      "gh",
+      [
+        "issue",
+        "list",
+        "--state=open",
+        "--author=pulumi-bot",
+        "--repo=pulumi/pulumi-cloudflare",
+        "--limit=100",
+        "--json=title,number"
+      ]
+    ],
+    "outputs": [
+      "[{\"number\":540,\"title\":\"Upgrade terraform-provider-cloudflare to v2.32.0\"},{\"number\":538,\"title\":\"Upgrade terraform-provider-cloudflare to v2.31.0\"}]\n",
+      null
+    ],
+    "impure": true
+  }
+]`
+	}
+
+	test("expected-target-all-issues", true, "v2.32.0",
+		expectedTargetWithIssues(`{
+  "Version": "2.32.0",
+  "GHIssues": [
+    { "number": 540 },
+    { "number": 538 }
+  ]
+}`))
+
+	test("expected-target-some-issues", true, "v2.31.0",
+		expectedTargetWithIssues(`{
+  "Version": "2.31.0",
+  "GHIssues": [{ "number": 538 }]
+}`))
+
+	test("expected-target-no-issues", true, "v2.30.0",
+		expectedTargetWithIssues(`{
+  "Version": "2.30.0",
+  "GHIssues": null
+}`))
+}

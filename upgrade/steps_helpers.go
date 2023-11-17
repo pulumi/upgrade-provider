@@ -475,14 +475,28 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 // sorted by semantic version. The list may be empty.
 //
 // The second argument represents a message to describe the result. It may be empty.
-var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Context, name, upstreamOrg string) *UpstreamUpgradeTarget {
+var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Context,
+	name, upstreamOrg string) *UpstreamUpgradeTarget {
+	if GetContext(ctx).TargetVersion != nil {
+		target := &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
+
+		// If we are also inferring versions, check if this PR will close any
+		// issues.
+		if GetContext(ctx).InferVersion {
+			for _, issue := range getExpectedTargetFromIssues(ctx, name).GHIssues {
+				if issue.Version != nil &&
+					(issue.Version.LessThan(target.Version) ||
+						issue.Version.Equal(target.Version)) {
+					target.GHIssues = append(target.GHIssues, issue)
+				}
+			}
+		}
+
+		return target
+	}
 	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
 	if GetContext(ctx).InferVersion {
 		return getExpectedTargetFromIssues(ctx, name)
-	}
-	if GetContext(ctx).TargetVersion != nil {
-		return &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
-
 	}
 	return getExpectedTargetLatest(ctx, name, upstreamOrg)
 })
@@ -513,7 +527,6 @@ var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx 
 // This method of discovery is assumed to be specific to providers maintained by Pulumi.
 var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context.Context,
 	name string) (*UpstreamUpgradeTarget, error) {
-	target := &UpstreamUpgradeTarget{}
 	issueList := stepv2.Cmd(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--author=pulumi-bot",
@@ -555,23 +568,8 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 		return versions[j].Version.LessThan(versions[i].Version)
 	})
 
-	if ctx := GetContext(ctx); ctx.TargetVersion != nil {
-		var foundTarget bool
-		for i, v := range versions {
-			if v.Version.Equal(ctx.TargetVersion) {
-				// Change the target version to be the latest that we
-				// found.
-				versions = versions[i:]
-				foundTarget = true
-				break
-			}
-		}
-		if !foundTarget {
-			return nil, fmt.Errorf("possible upgrades exist, but none match %s", ctx.TargetVersion)
-		}
-	}
-
-	target.GHIssues = versions
-	target.Version = versions[0].Version
-	return target, nil
+	return &UpstreamUpgradeTarget{
+		Version:  versions[0].Version,
+		GHIssues: versions,
+	}, nil
 })
