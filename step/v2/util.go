@@ -127,3 +127,16 @@ type FileInfo struct {
 	Mode  fs.FileMode `json:"mode"`  // file mode bits
 	IsDir bool        `json:"isDir"` // abbreviation for Mode().IsDir()
 }
+
+// GetEnv wraps os.Getenv.
+//
+// It correctly declares itself as an impure function, making it safe to use in replay
+// pipelines.
+func GetEnv(ctx context.Context, key string) string {
+	return Func11("GetEnv", func(ctx context.Context, key string) string {
+		MarkImpure(ctx)
+		result := os.Getenv(key)
+		SetLabel(ctx, key+"="+result)
+		return result
+	})(ctx, key)
+}

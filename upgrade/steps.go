@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"math"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -493,11 +495,23 @@ var hasRemoteBranch = stepv2.Func11("Has Remote Branch", func(ctx context.Contex
 
 var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Context, c Context,
 	targetBridgeVersion, targetPfVersion Ref, upgradeTarget *UpstreamUpgradeTarget) (string, error) {
+
+	ciSuffix := stepv2.Func01("Random Suffix", func(ctx context.Context) string {
+		stepv2.MarkImpure(ctx) // This needs to be impure since it is random
+		return fmt.Sprintf("-%08d", rand.Intn(int(math.Pow10(8))))
+	})
+
 	ret := func(format string, a ...any) (string, error) {
 		s := fmt.Sprintf(format, a...)
+
+		if stepv2.GetEnv(ctx, "CI") == "true" {
+			s += ciSuffix(ctx)
+		}
+
 		stepv2.SetLabel(ctx, s)
 		return s, nil
 	}
+
 	switch {
 	case c.UpgradeProviderVersion:
 		return ret("upgrade-%s-to-v%s", c.UpstreamProviderName, upgradeTarget.Version)

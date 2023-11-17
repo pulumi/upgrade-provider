@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
@@ -13,15 +14,15 @@ import (
 )
 
 func TestGetWorkingBranch(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
+	type test struct {
 		c                                    Context
 		targetBridgeVersion, targetPfVersion Ref
 		upgradeTarget                        UpstreamUpgradeTarget
 
 		expected    string
 		expectedErr string
-	}{
+	}
+	tests := []test{
 		{
 			c: Context{
 				UpgradeProviderVersion: true,
@@ -41,14 +42,17 @@ func TestGetWorkingBranch(t *testing.T) {
 		{expectedErr: "unknown action"}, // If no action can be produced, we should error.
 	}
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run("", func(t *testing.T) {
+	testF := func(tt test) func(t *testing.T) {
+		return func(t *testing.T) {
 			t.Parallel()
 
 			err := step.Pipeline(t.Name(), func(ctx context.Context) {
 				actual := getWorkingBranch(ctx, tt.c, tt.targetBridgeVersion, tt.targetPfVersion, &tt.upgradeTarget)
-				assert.Equal(t, tt.expected, actual)
+				if os.Getenv("CI") == "true" {
+					assert.Regexp(t, "^"+tt.expected+"-[0-9]{8}$", actual)
+				} else {
+					assert.Equal(t, tt.expected, actual)
+				}
 			})
 
 			if tt.expectedErr == "" {
@@ -56,8 +60,25 @@ func TestGetWorkingBranch(t *testing.T) {
 			} else {
 				assert.ErrorContains(t, err, tt.expectedErr)
 			}
-		})
+		}
 	}
+
+	t.Run("CI=false", func(t *testing.T) {
+		t.Setenv("CI", "false")
+		for _, tt := range tests {
+			tt := tt
+			t.Run("", testF(tt))
+		}
+	})
+
+	t.Run("CI=true", func(t *testing.T) {
+		t.Setenv("CI", "true")
+		for _, tt := range tests {
+			tt := tt
+			t.Run("", testF(tt))
+		}
+	})
+
 }
 
 func TestHasRemoteBranch(t *testing.T) {
