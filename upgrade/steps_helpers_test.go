@@ -10,6 +10,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/hexops/autogold/v2"
+	"github.com/pulumi/upgrade-provider/step/v2"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/mod/module"
 )
@@ -80,5 +81,67 @@ func TestPullRequestBody(t *testing.T) {
 			&Version{SemVer: semver.MustParse("v1.2.3")},
 			&Version{SemVer: semver.MustParse("v4.5.6")}, "", args)
 		autogold.ExpectFile(t, got)
+	})
+}
+
+func TestGetExpectedTargetFromUpstream(t *testing.T) {
+	repo, name := "pulumi/pulumi-cloudflare", "cloudflare"
+
+	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
+  {
+    "name": "Get Expected Target",
+    "inputs": [
+      "`+repo+`",
+      "`+name+`"
+    ],
+    "outputs": [
+      {
+        "Version": "4.19.0",
+        "GHIssues": null
+      },
+      null
+    ]
+  },
+  {
+    "name": "From Upstream Releases",
+    "inputs": [
+      "pulumi/pulumi-cloudflare",
+      "cloudflare"
+    ],
+    "outputs": [
+      {
+        "Version": "4.19.0",
+        "GHIssues": null
+      },
+      null
+    ]
+  },
+  {
+    "name": "gh",
+    "inputs": [
+      "gh",
+      [
+        "release",
+        "list",
+        "--repo=cloudflare/terraform-provider-cloudflare",
+        "--limit=1",
+        "--exclude-drafts",
+        "--exclude-pre-releases"
+      ]
+    ],
+    "outputs": [
+      "v4.19.0\tLatest\tv4.19.0\t2023-11-14T23:37:22Z\n",
+      null
+    ],
+    "impure": true
+  }
+]`), func(ctx context.Context) {
+		context := &Context{
+			GoPath:               "/Users/myuser/go",
+			UpstreamProviderName: "terraform-provider-cloudflare",
+		}
+		result := getExpectedTarget(context.Wrap(ctx),
+			repo, name)
+		assert.NotNil(t, result)
 	})
 }

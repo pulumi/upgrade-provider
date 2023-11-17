@@ -60,6 +60,37 @@ func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleMod
 	return module.Version{}, false, nil
 }
 
+// Find the go module version of needleModule, searching from the default repo branch, not
+// the currently checked out code.
+//
+// originalGoVersionOfV2 performs the same function as originalGoVersionOf, except that it
+// is stepv2 compatible.
+var originalGoVersionOfV2 = stepv2.Func32E("Original Go Version of", func(ctx context.Context,
+	repo ProviderRepo, file, needleModule string) (module.Version, bool, error) {
+	data := baseFileAtV2(ctx, repo, file)
+	goMod, err := modfile.Parse(file, []byte(data), nil)
+	if err != nil {
+		return module.Version{}, false, fmt.Errorf("%s:%s: %w",
+			repo.defaultBranch, file, err)
+	}
+
+	needleModule = modPathWithoutVersion(needleModule)
+
+	for _, req := range goMod.Replace {
+		path := modPathWithoutVersion(req.New.Path)
+		if path == needleModule {
+			return req.New, true, nil
+		}
+	}
+	for _, req := range goMod.Require {
+		path := modPathWithoutVersion(req.Mod.Path)
+		if path == needleModule {
+			return req.Mod, true, nil
+		}
+	}
+	return module.Version{}, false, nil
+})
+
 // Look up the version of the go dependency requirement of a given module in a given modfile.
 func currentGoVersionOf(modFile, lookupModule string) (module.Version, bool, error) {
 	fileData, err := os.ReadFile(modFile)
@@ -97,6 +128,11 @@ func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, er
 		return nil, fmt.Errorf("%s:%s: %w", repo.defaultBranch, file, err)
 	}
 	return data, nil
+}
+
+func baseFileAtV2(ctx context.Context, repo ProviderRepo, file string) string {
+	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
+	return stepv2.Cmd(ctx, "git", "show", repo.defaultBranch+":"+file)
 }
 
 func prBody(ctx context.Context, repo ProviderRepo,
@@ -185,59 +221,40 @@ var ensurePulumiRemote = stepv2.Func10("Ensure Pulumi Remote", func(ctx context.
 //
 // We don't use the current branch, since applying a partial update could change the current branch,
 // leading to a non idempotent result.
-func setCurrentUpstreamFromPatched(ctx context.Context, repo *ProviderRepo) error {
-	getCheckedInCommit := exec.CommandContext(ctx,
+var setCurrentUpstreamFromPatched = stepv2.Func10E("Set Upstream From Patched", func(ctx context.Context,
+	repo *ProviderRepo) error {
+	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
+	checkedInCommit := stepv2.Cmd(ctx,
 		"git", "ls-tree", repo.defaultBranch, "upstream", "--object-only")
-	getCheckedInCommit.Dir = repo.root
+	sha := strings.TrimSpace(checkedInCommit)
 
-	checkedInCommit, err := getCheckedInCommit.Output()
-	if err != nil {
-		return err
-	}
-	sha := bytes.TrimSpace(checkedInCommit)
+	stepv2.Cmd(ctx, "git", "submodule", "init")
+	remoteURL := strings.TrimSpace(stepv2.Cmd(ctx,
+		"git", "config", "--get", "submodule.upstream.url"))
 
-	ensureSubmoduleInit := exec.CommandContext(ctx,
-		"git", "submodule", "init")
-	ensureSubmoduleInit.Dir = repo.root
-	out, err := ensureSubmoduleInit.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to init submodule: %w: %s", err, string(out))
-	}
-	getRemoteURL := exec.CommandContext(ctx,
-		"git", "config", "--get", "submodule.upstream.url")
-	getRemoteURL.Dir = repo.root
-	remoteURLBytes, err := getRemoteURL.Output()
-	if err != nil {
-		return err
-	}
-	remoteURL := string(bytes.TrimSpace(remoteURLBytes))
-
-	getTags := exec.CommandContext(ctx,
+	allTags := stepv2.Cmd(ctx,
 		"git", "ls-remote", "--tags", remoteURL)
-	allTags, err := getTags.Output()
-	if err != nil {
-		return fmt.Errorf("failed to list remote tags for '%s': %w", remoteURL, err)
-	}
 
 	var version string
-	for _, tag := range bytes.Split(allTags, []byte{'\n'}) {
-		tag := bytes.TrimSpace(tag)
-		if !bytes.HasPrefix(tag, sha) {
+	for _, tag := range strings.Split(allTags, "\n") {
+		tag := strings.TrimSpace(tag)
+		if !strings.HasPrefix(tag, sha) {
 			continue
 		}
-		ref := string(bytes.Split(bytes.TrimSpace(tag), []byte{'\t'})[1])
+		ref := strings.Split(strings.TrimSpace(tag), "\t")[1]
 		version = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(ref, "refs/tags/"), "^{}"))
 	}
 	if version == "" {
 		return fmt.Errorf("No tags match expected SHA '%s'", string(sha))
 	}
 
+	var err error
 	repo.currentUpstreamVersion, err = semver.NewVersion(version)
 	if err != nil {
 		return fmt.Errorf("current upstream version '%s': %w", version, err)
 	}
 	return nil
-}
+})
 
 // SetCurrentUpstreamFromPlain sets repo.currentUpstreamVersion to the version pointed to in
 // provider/go.mod if the version is valid semver. Otherwise try to resolve a pseudo version against
@@ -245,24 +262,24 @@ func setCurrentUpstreamFromPatched(ctx context.Context, repo *ProviderRepo) erro
 //
 // We don't use the current branch, since applying a partial update could change the current branch,
 // leading to a non idempotent result.
-func setCurrentUpstreamFromPlain(ctx context.Context, repo *ProviderRepo, goMod *GoMod) error {
-	return setUpstreamFromRemoteRepo(ctx, repo, "tags",
-		filepath.Join("provider", "go.mod"), goMod.Upstream.Path,
+func setCurrentUpstreamFromPlain(ctx context.Context, repo *ProviderRepo, goMod *GoMod) {
+	f := stepv2.Func50E("Set Current Upstream From Plain", setUpstreamFromRemoteRepo)
+	f(ctx, repo, "tags", filepath.Join("provider", "go.mod"), goMod.Upstream.Path,
 		semver.NewVersion)
 }
 
-func setCurrentUpstreamFromForked(ctx context.Context, repo *ProviderRepo, goMod *GoMod) error {
-	return setUpstreamFromRemoteRepo(ctx, repo, "heads",
-		filepath.Join("provider", "go.mod"), goMod.Fork.New.Path,
+func setCurrentUpstreamFromForked(ctx context.Context, repo *ProviderRepo, goMod *GoMod) {
+	f := stepv2.Func50E("Set Current Upstream From Forked", setUpstreamFromRemoteRepo)
+	f(ctx, repo, "heads", filepath.Join("provider", "go.mod"), goMod.Fork.New.Path,
 		func(s string) (*semver.Version, error) {
 			version := strings.TrimPrefix(s, "upstream-")
 			return semver.NewVersion(version)
 		})
 }
 
-func setCurrentUpstreamFromShimmed(ctx context.Context, repo *ProviderRepo, goMod *GoMod) error {
-	return setUpstreamFromRemoteRepo(ctx, repo, "tags",
-		filepath.Join("provider", "shim", "go.mod"), goMod.Upstream.Path,
+func setCurrentUpstreamFromShimmed(ctx context.Context, repo *ProviderRepo, goMod *GoMod) {
+	f := stepv2.Func50E("Set Current Upstream From Shimmed", setUpstreamFromRemoteRepo)
+	f(ctx, repo, "tags", filepath.Join("provider", "shim", "go.mod"), goMod.Upstream.Path,
 		semver.NewVersion)
 }
 
@@ -270,10 +287,7 @@ func setUpstreamFromRemoteRepo(
 	ctx context.Context, repo *ProviderRepo, kind, goModPath, upstream string,
 	parse func(string) (*semver.Version, error),
 ) error {
-	version, found, err := originalGoVersionOf(ctx, *repo, goModPath, upstream)
-	if err != nil {
-		return fmt.Errorf("could not discover original version: %w", err)
-	}
+	version, found := originalGoVersionOfV2(ctx, *repo, goModPath, upstream)
 	if !found {
 		return fmt.Errorf("could not find previous upstream '%s'", upstream)
 	}
@@ -301,22 +315,19 @@ func setUpstreamFromRemoteRepo(
 
 	// We now fetch the set of tagged commits.
 	url := "https://" + modPathWithoutVersion(upstream) + ".git"
-	getTagCommits := exec.CommandContext(ctx, "git", "ls-remote", "--"+kind, "--quiet", url)
-	getTagCommits.Dir = repo.root
-	tagCommits, err := getTagCommits.Output()
-	if err != nil {
-		return fmt.Errorf("failed to get remote %s from '%s': %w", kind, url, err)
-	}
-	revBytes := []byte(rev)
-	for _, line := range bytes.Split(tagCommits, []byte{'\n'}) {
-		line = bytes.TrimSpace(line)
-		if !bytes.HasPrefix(line, revBytes) {
+	var tagCommits string
+	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
+		tagCommits = stepv2.Cmd(ctx, "git", "ls-remote", "--"+kind, "--quiet", url)
+	})
+	for _, line := range strings.Split(tagCommits, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, rev) {
 			continue
 		}
 
 		// It is possible that this is a different commit, since we just take the first 12
 		// characters, but its **very** unlikely.
-		line = bytes.Split(line, []byte{'\t'})[1]
+		line = strings.Split(line, "\t")[1]
 		versionComponent := strings.TrimPrefix(string(line), "refs/"+kind+"/")
 		version, err := parse(versionComponent)
 		if err != nil {
@@ -464,32 +475,29 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 // sorted by semantic version. The list may be empty.
 //
 // The second argument represents a message to describe the result. It may be empty.
-func GetExpectedTarget(ctx context.Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
+var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Context, name, upstreamOrg string) *UpstreamUpgradeTarget {
 	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
 	if GetContext(ctx).InferVersion {
 		return getExpectedTargetFromIssues(ctx, name)
 	}
 	if GetContext(ctx).TargetVersion != nil {
-		return &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}, nil
+		return &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
 
 	}
 	return getExpectedTargetLatest(ctx, name, upstreamOrg)
-}
+})
 
-func getExpectedTargetLatest(ctx context.Context, name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
-	latest := exec.CommandContext(ctx, "gh", "release", "list",
+// Figure out what version of upstream to target by searching for the latest GitHub
+// release.
+var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx context.Context,
+	name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
+	latest := stepv2.Cmd(ctx, "gh", "release", "list",
 		"--repo="+upstreamOrg+"/"+GetContext(ctx).UpstreamProviderName,
 		"--limit=1",
 		"--exclude-drafts",
 		"--exclude-pre-releases")
-	bytes := new(bytes.Buffer)
-	latest.Stdout = bytes
-	err := latest.Run()
-	if err != nil {
-		return nil, fmt.Errorf("%v: %w", latest.Args, err)
-	}
 
-	tok := strings.Fields(bytes.String())
+	tok := strings.Fields(latest)
 	contract.Assertf(len(tok) > 0, fmt.Sprintf("no releases found in %s/%s",
 		upstreamOrg, GetContext(ctx).UpstreamProviderName))
 	v, err := semver.NewVersion(tok[0])
@@ -497,27 +505,26 @@ func getExpectedTargetLatest(ctx context.Context, name, upstreamOrg string) (*Up
 		return nil, err
 	}
 	return &UpstreamUpgradeTarget{Version: v}, nil
-}
+})
 
-func getExpectedTargetFromIssues(ctx context.Context, name string) (*UpstreamUpgradeTarget, error) {
+// Figure out what version of upstream to target by looking at specific pulumi-bot
+// issues. These issues are created by other automation in the Pulumi GH org.
+//
+// This method of discovery is assumed to be specific to providers maintained by Pulumi.
+var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context.Context,
+	name string) (*UpstreamUpgradeTarget, error) {
 	target := &UpstreamUpgradeTarget{}
-	getIssues := exec.CommandContext(ctx, "gh", "issue", "list",
+	issueList := stepv2.Cmd(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--author=pulumi-bot",
 		"--repo="+name,
 		"--limit=100",
 		"--json=title,number")
-	bytes := new(bytes.Buffer)
-	getIssues.Stdout = bytes
-	err := getIssues.Run()
-	if err != nil {
-		return nil, err
-	}
 	titles := []struct {
 		Title  string `json:"title"`
 		Number int    `json:"number"`
 	}{}
-	err = json.Unmarshal(bytes.Bytes(), &titles)
+	err := json.Unmarshal([]byte(issueList), &titles)
 	if err != nil {
 		return nil, err
 	}
@@ -567,4 +574,4 @@ func getExpectedTargetFromIssues(ctx context.Context, name string) (*UpstreamUpg
 	target.GHIssues = versions
 	target.Version = versions[0].Version
 	return target, nil
-}
+})

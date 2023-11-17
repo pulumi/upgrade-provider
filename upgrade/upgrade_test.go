@@ -103,9 +103,12 @@ func readFile(t *testing.T, path string) []byte {
 	return bytes
 }
 
-func simpleReplay(t *testing.T, stepReplay step.RecordV1, f func(context.Context)) {
+func simpleReplay(t *testing.T, stepReplay []*step.Step, f func(context.Context)) {
 	bytes, err := json.Marshal(step.ReplayV1{
-		Pipelines: []step.RecordV1{stepReplay},
+		Pipelines: []step.RecordV1{{
+			Name:  t.Name(),
+			Steps: stepReplay,
+		}},
 	})
 	require.NoError(t, err)
 
@@ -114,4 +117,11 @@ func simpleReplay(t *testing.T, stepReplay step.RecordV1, f func(context.Context
 
 	err = step.PipelineCtx(ctx, t.Name(), f)
 	assert.NoError(t, err)
+}
+
+func jsonMarshal[T any](t *testing.T, content string) T {
+	var dst T
+	err := json.Unmarshal([]byte(content), &dst)
+	require.NoError(t, err)
+	return dst
 }

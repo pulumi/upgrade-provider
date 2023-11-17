@@ -3,12 +3,13 @@ package upgrade
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
+
+	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
 type RepoKind string
@@ -79,16 +80,13 @@ func (rk RepoKind) IsPatched() bool {
 	}
 }
 
-func GetRepoKind(ctx context.Context, repo ProviderRepo) (*GoMod, error) {
+var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo ProviderRepo) (*GoMod, error) {
 	path := repo.root
 	file := filepath.Join(path, "provider", "go.mod")
 
-	data, err := os.ReadFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("go.mod: %w", err)
-	}
+	data := stepv2.ReadFile(ctx, file)
 
-	goMod, err := modfile.Parse(file, data, nil)
+	goMod, err := modfile.Parse(file, []byte(data), nil)
 	if err != nil {
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
@@ -127,23 +125,17 @@ func GetRepoKind(ctx context.Context, repo ProviderRepo) (*GoMod, error) {
 	var upstream *modfile.Require
 	var patched bool
 	patchDir := filepath.Join(path, "upstream")
-	if _, err := os.Stat(patchDir); err == nil {
+	if _, hasPatch := stepv2.Stat(ctx, patchDir); hasPatch {
 		patched = true
-	} else if !os.IsNotExist(err) {
-		return nil, err
 	}
 
 	shimDir := filepath.Join(path, "provider", "shim")
-	_, err = os.Stat(shimDir)
 	var shimmed bool
-	if err == nil {
+	if _, hasShim := stepv2.Stat(ctx, shimDir); hasShim {
 		shimmed = true
 		modPath := filepath.Join(shimDir, "go.mod")
-		data, err := os.ReadFile(modPath)
-		if err != nil {
-			return nil, err
-		}
-		shimMod, err := modfile.Parse(modPath, data, nil)
+		data := stepv2.ReadFile(ctx, modPath)
+		shimMod, err := modfile.Parse(modPath, []byte(data), nil)
 		if err != nil {
 			return nil, fmt.Errorf("shim/go.mod: %w", err)
 		}
@@ -151,8 +143,6 @@ func GetRepoKind(ctx context.Context, repo ProviderRepo) (*GoMod, error) {
 		if err != nil {
 			return nil, fmt.Errorf("shim/go.mod: %w", err)
 		}
-	} else if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("unexpected error reading '%s': %w", shimDir, err)
 	} else {
 		upstream, err = getUpstream(goMod)
 		if err != nil {
@@ -213,4 +203,4 @@ func GetRepoKind(ctx context.Context, repo ProviderRepo) (*GoMod, error) {
 	}
 
 	return &out, nil
-}
+})

@@ -17,8 +17,10 @@ import (
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
+	goSemver "golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 
+	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
@@ -518,41 +520,41 @@ func OrgProviderRepos(ctx context.Context, org, repo string) string {
 	return ensureUpstreamRepo(ctx, path.Join("github.com", org, repo))
 }
 
-func PullDefaultBranch(ctx context.Context, remote string) step.Step {
-	var lsRemoteHeads string
-	var defaultBranch string
-	return step.Combined("pull default branch",
-		step.Cmd("git", "ls-remote", "--heads", remote).AssignTo(&lsRemoteHeads),
-		step.F("finding default branch", func(context.Context) (string, error) {
-			var hasMaster bool
-			lines := strings.Split(lsRemoteHeads, "\n")
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
-				}
-				_, ref, found := strings.Cut(line, "\t")
-				contract.Assertf(found, "not found")
-				branch := strings.TrimPrefix(ref, "refs/heads/")
-				if branch == "master" {
-					hasMaster = true
-				}
-				if branch == "main" {
-					return branch, nil
-				}
+var pullDefaultBranch = stepv2.Func11("Pull Default Branch", func(ctx context.Context, remote string) string {
+	lsRemoteHeads := stepv2.Cmd(ctx, "git", "ls-remote", "--heads", remote)
+	defaultBranch := stepv2.Func01E("Find default Branch", func(ctx context.Context) (string, error) {
+		var hasMaster bool
+		lines := strings.Split(lsRemoteHeads, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
 			}
-			if hasMaster {
-				return "master", nil
+			_, ref, found := strings.Cut(line, "\t")
+			contract.Assertf(found, "not found")
+			branch := strings.TrimPrefix(ref, "refs/heads/")
+			if branch == "master" {
+				hasMaster = true
 			}
-			return "", fmt.Errorf("could not find 'master' or 'main' branch")
-		}).AssignTo(&defaultBranch),
-		step.Cmd("git", "fetch"),
-		step.Computed(func() step.Step {
-			return step.Cmd("git", "checkout", defaultBranch)
-		}),
-		step.Cmd("git", "pull", remote),
-	).Return(&defaultBranch)
-}
+			if branch == "main" {
+				stepv2.SetLabel(ctx, branch)
+				return branch, nil
+			}
+		}
+		if hasMaster {
+			stepv2.SetLabel(ctx, "master")
+			return "master", nil
+		}
+		return "", fmt.Errorf("could not find 'master' or 'main' branch")
+
+	})(ctx)
+
+	stepv2.Cmd(ctx, "git", "fetch")
+	stepv2.Cmd(ctx, "git", "checkout", defaultBranch)
+	stepv2.Cmd(ctx, "git", "pull", remote)
+
+	return defaultBranch
+})
 
 func MajorVersionBump(ctx context.Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo) step.Step {
 	if repo.currentVersion.Major() == 0 {
@@ -890,3 +892,75 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 		goGet("sdk").In(repo.examplesDir()),
 		goGet("pkg").In(repo.examplesDir()))
 }
+
+// Plan the update for a provider.
+//
+// That means figuring out the old and the new version, and producing a
+// UpstreamUpgradeTarget.
+var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx context.Context,
+	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo) (*UpstreamUpgradeTarget, error) {
+	upgradeTarget := getExpectedTarget(ctx, repoOrg+"/"+repoName,
+		goMod.UpstreamProviderOrg)
+	if upgradeTarget == nil {
+		return nil, fmt.Errorf("could not determine an upstream version")
+	}
+
+	// If we don't have any upgrades to target, assume that we don't need to upgrade.
+	if upgradeTarget.Version == nil {
+		GetContext(ctx).UpgradeProviderVersion = false
+		GetContext(ctx).MajorVersionBump = false
+		stepv2.SetLabel(ctx, "Up to date")
+		return nil, nil
+	}
+
+	switch {
+	case goMod.Kind.IsPatched():
+		setCurrentUpstreamFromPatched(ctx, repo)
+	case goMod.Kind.IsForked():
+		setCurrentUpstreamFromForked(ctx, repo, goMod)
+	case goMod.Kind.IsShimmed():
+		setCurrentUpstreamFromShimmed(ctx, repo, goMod)
+	case goMod.Kind == Plain:
+		setCurrentUpstreamFromPlain(ctx, repo, goMod)
+	default:
+		return nil, fmt.Errorf("Unexpected repo kind: %s", goMod.Kind)
+	}
+
+	// If we have a target version, we need to make sure that
+	// it is valid for an upgrade.
+	var msg string
+	if repo.currentUpstreamVersion != nil {
+		switch goSemver.Compare("v"+repo.currentUpstreamVersion.String(),
+			"v"+upgradeTarget.Version.String()) {
+
+		// Target version is less then the current version
+		case 1:
+			// This is a weird situation, so we warn
+			msg = colorize.Warnf(
+				" no upgrade: %s (current) > %s (target)",
+				repo.currentUpstreamVersion,
+				upgradeTarget.Version)
+			GetContext(ctx).UpgradeProviderVersion = false
+			GetContext(ctx).MajorVersionBump = false
+
+		// Target version is equal to the current version
+		case 0:
+			GetContext(ctx).UpgradeProviderVersion = false
+			GetContext(ctx).MajorVersionBump = false
+			msg = "Up to date"
+
+		// Target version is greater then the current version, so upgrade
+		case -1:
+			msg = fmt.Sprintf("%s -> %s",
+				repo.currentUpstreamVersion,
+				upgradeTarget.Version)
+		}
+	} else {
+		// If we don't have an old version, just assume
+		// that we will upgrade.
+		msg = upgradeTarget.Version.String()
+	}
+
+	stepv2.SetLabel(ctx, msg)
+	return upgradeTarget, nil
+})
