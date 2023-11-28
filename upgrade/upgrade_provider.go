@@ -25,6 +25,13 @@ var CodeMigrations = map[string]CodeMigration{
 	"assertnoerror": ReplaceAssertNoError,
 }
 
+func setEnv(ctx context.Context, k, v string) {
+	stepv2.Func20E(k+"="+v, func(ctx context.Context, k, v string) error {
+		stepv2.MarkImpure(ctx)
+		return os.Setenv(k, v)
+	})(ctx, k, v)
+}
+
 func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) {
 
 	// Setup ctx to enable replay tests with stepv2:
@@ -44,18 +51,19 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	var upgradeTarget *UpstreamUpgradeTarget
 	var goMod *GoMod
 
-	ok := step.Run(ctx, step.Combined("Setting Up Environment",
-		step.Env("GOWORK", "off"),
-		step.Env("PULUMI_MISSING_DOCS_ERROR", func() string {
+	err = stepv2.PipelineCtx(ctx, "Set Up Environment", func(ctx context.Context) {
+		env := func(k, v string) { setEnv(ctx, k, v) }
+		env("GOWORK", "off")
+		env("PULUMI_MISSING_DOCS_ERROR", func() string {
 			if GetContext(ctx).AllowMissingDocs {
 				return "false"
 			}
 			return "true"
-		}()),
-		step.Env("PULUMI_CONVERT_EXAMPLES_CACHE_DIR", ""),
-	))
-	if !ok {
-		return ErrHandled
+		}())
+		env("PULUMI_EXTRA_MAPPING_ERROR", "true")
+	})
+	if err != nil {
+		return err
 	}
 
 	err = stepv2.PipelineCtx(ctx, "Discover Provider", func(ctx context.Context) {
@@ -200,7 +208,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			}))
 	}
 
-	ok = step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
+	ok := step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
 	if !ok {
 		return ErrHandled
 	}
