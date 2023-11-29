@@ -24,8 +24,9 @@ type Context struct {
 	// An optional path to clone the provider repo to
 	repoPath string
 
-	TargetVersion *semver.Version
-	InferVersion  bool
+	TargetVersion       *semver.Version
+	InferVersion        bool
+	CheckUpstreamLatest bool
 
 	UpgradeBridgeVersion bool
 	TargetBridgeRef      Ref

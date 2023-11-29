@@ -70,6 +70,18 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return err
 	}
 
+	// When we're only running a version check, we exit early.
+	if GetContext(ctx).CheckUpstreamLatest {
+		// UpgradeProviderVersion may be set to False at this point. We check again.
+		if GetContext(ctx).UpgradeProviderVersion {
+			fmt.Printf("New upstream version detected: %s\n", upgradeTarget.Version.String())
+		} else {
+			fmt.Println(colorize.Bold("No new upstream version detected. Everything up to date."))
+		}
+		//return early, as this is only a check.
+		return nil
+	}
+
 	discoverSteps := []step.Step{}
 
 	if GetContext(ctx).UpgradeBridgeVersion {

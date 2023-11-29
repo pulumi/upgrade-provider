@@ -477,26 +477,29 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 // The second argument represents a message to describe the result. It may be empty.
 var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Context,
 	name, upstreamOrg string) *UpstreamUpgradeTarget {
-	if GetContext(ctx).TargetVersion != nil {
-		target := &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
 
-		// If we are also inferring versions, check if this PR will close any
-		// issues.
-		if GetContext(ctx).InferVersion {
-			for _, issue := range getExpectedTargetFromIssues(ctx, name).GHIssues {
-				if issue.Version != nil &&
-					(issue.Version.LessThan(target.Version) ||
-						issue.Version.Equal(target.Version)) {
-					target.GHIssues = append(target.GHIssues, issue)
+	// we do not infer version from pulumi issues, or allow a target version when checking for a new upstream release
+	if !GetContext(ctx).CheckUpstreamLatest {
+		if GetContext(ctx).TargetVersion != nil {
+			target := &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
+
+			// If we are also inferring versions, check if this PR will close any
+			// issues.
+			if GetContext(ctx).InferVersion {
+				for _, issue := range getExpectedTargetFromIssues(ctx, name).GHIssues {
+					if issue.Version != nil &&
+						(issue.Version.LessThan(target.Version) ||
+							issue.Version.Equal(target.Version)) {
+						target.GHIssues = append(target.GHIssues, issue)
+					}
 				}
 			}
+			return target
 		}
-
-		return target
-	}
-	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
-	if GetContext(ctx).InferVersion {
-		return getExpectedTargetFromIssues(ctx, name)
+		// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
+		if GetContext(ctx).InferVersion {
+			return getExpectedTargetFromIssues(ctx, name)
+		}
 	}
 	return getExpectedTargetLatest(ctx, name, upstreamOrg)
 })
