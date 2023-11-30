@@ -58,11 +58,10 @@ type Context struct {
 	UpgradeCodeMigration bool
 	MigrationOpts        []string
 
-	AllowMissingDocs   bool
-	RemovePlugins      bool
-	PrReviewers        string
-	PrAssign           string
-	CreateFailureIssue bool
+	AllowMissingDocs bool
+	RemovePlugins    bool
+	PrReviewers      string
+	PrAssign         string
 
 	PRDescription string
 }
