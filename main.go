@@ -1,16 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"go/build"
 	"os"
-	"os/exec"
 	"strings"
-	"time"
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
@@ -149,19 +145,6 @@ func cmd() *cobra.Command {
 		Run: func(_ *cobra.Command, args []string) {
 			exitOnError(failedPreRun)
 			err := upgrade.UpgradeProvider(context.Wrap(ctx), repoOrg, repoName)
-			if err != nil && context.CreateFailureIssue {
-				// $GITHUB_ACTION is a default env var within github
-				// actions, but is unlikely to be defined elsewhere.
-				//
-				// We do this to test that we are being run inside a GH
-				// action.
-				if _, ci := os.LookupEnv("GITHUB_ACTION"); ci {
-					msg, err := createFailureIssue(ctx, repoOrg, repoName)
-					if err != nil {
-						fmt.Println(msg)
-					}
-				}
-			}
 			exitOnError(err)
 		},
 	}
@@ -223,9 +206,6 @@ Required unless running from provider root and set in upgrade-config.yml.`)
 	cmd.PersistentFlags().BoolVarP(&context.AllowMissingDocs, "allow-missing-docs", "", false,
 		`If true, don't error on missing docs during tfgen.
 This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
-
-	cmd.PersistentFlags().BoolVar(&context.CreateFailureIssue, "create-failure-issue", false,
-		`Create an issue in the target repository if the upgrade attempt fails in CI.`)
 
 	cmd.PersistentFlags().StringVar(&context.JavaVersion, "java-version", "",
 		"The version of pulumi-java-gen to target.")
@@ -299,76 +279,4 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 			contract.AssertNoErrorf(err, "error setting flag")
 		}
 	})
-}
-
-// Create an issue in the provider repo with a message describing the upgrade failure
-func createFailureIssue(ctx context.Context, repoOrg string, repoName string) (string, error) {
-	now := time.Now()
-	hr, min, _ := now.Clock()
-	yr, mth, day := now.Date()
-	minStr := fmt.Sprintf("%v", min)
-	if min < 10 {
-		minStr = fmt.Sprintf("0%v", min)
-	}
-	title := fmt.Sprintf("Workflow failure: Upgrade provider | %v %v, %v @ %v:%v", mth, day, yr, hr, minStr)
-
-	// From https://docs.github.com/en/actions/learn-github-actions/variables:
-	//
-	//	If you need to use a workflow run's URL from within a job, you can combine
-	//	these variables:
-	//	$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
-	workflowURL := fmt.Sprintf("%s/%s/actions/runs/%s",
-		os.Getenv("GITHUB_SERVER_URL"),
-		os.Getenv("GITHUB_REPOSITORY"),
-		os.Getenv("GITHUB_RUN_ID"))
-
-	getIssues := exec.CommandContext(ctx, "gh", "search", "issues",
-		"Workflow failure: Upgrade provider",
-		"--repo="+repoOrg+"/"+repoName,
-		"--json=title,number",
-		"--state=open",
-		"--author=@me",
-	)
-	ghSearchBytes := new(bytes.Buffer)
-	getIssues.Stdout = ghSearchBytes
-	err := getIssues.Run()
-	if err != nil {
-		return "createFailureIssue error: failed to search existing issues", err
-	}
-	titles := []struct {
-		Title  string `json:"title"`
-		Number int    `json:"number"`
-	}{}
-	err = json.Unmarshal(ghSearchBytes.Bytes(), &titles)
-	if err != nil {
-		return "createFailureIssue error: failed to unmarshal `gh search issues` output", err
-	}
-
-	// create new issue if none exist
-	if len(titles) == 0 {
-		cmd := exec.Command(
-			"gh", "issue", "create",
-			"--repo="+repoOrg+"/"+repoName,
-			"--body=View the latest workflow run: "+workflowURL,
-			"--title="+title,
-			"--label="+"needs-triage",
-		)
-		if err := cmd.Run(); err != nil {
-			return "createFailureIssue error: failed to create new issue", err
-		}
-
-		return "", err
-	}
-	// otherwise, comment on existing issue(s) with a link to the latest workflow ID
-	for _, t := range titles {
-		cmd := exec.Command("gh", "issue", "comment",
-			fmt.Sprintf("%v", t.Number),
-			"--repo="+repoOrg+"/"+repoName,
-			"--body="+fmt.Sprintf("%s\n\nView the latest workflow run: %s", title, workflowURL),
-		)
-		if err := cmd.Run(); err != nil {
-			return "createFailureIssue error: Failed to update existing issue", err
-		}
-	}
-	return "", err
 }
