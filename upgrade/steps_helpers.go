@@ -583,14 +583,14 @@ var createUpstreamUpgradeIssue = stepv2.Func40E("Ensure Upstream Issue", func(ct
 	upstreamProviderName := GetContext(ctx).UpstreamProviderName
 	upstreamOrg := goMod.UpstreamProviderOrg
 
-	title := fmt.Sprintf("THIS IS ANOTHER TEST Upgrade %s to v%s", upstreamProviderName, version)
+	title := fmt.Sprintf("Upgrade %s to v%s", upstreamProviderName, version)
 
 	getIssues := exec.CommandContext(ctx, "gh", "search", "issues",
 		title,
 		"--repo="+repoOrg+"/"+repoName,
 		"--json=title,number",
 		"--state=open",
-		//"--author=@me",
+		"--author=@me",
 	)
 	ghSearchBytes := new(bytes.Buffer)
 	getIssues.Stdout = ghSearchBytes
@@ -614,6 +614,7 @@ var createUpstreamUpgradeIssue = stepv2.Func40E("Ensure Upstream Issue", func(ct
 			"--repo="+repoOrg+"/"+repoName,
 			"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version,
 			"--title="+title,
+			"--label="+"kind/enhancement",
 		)
 		if err = cmd.Run(); err != nil {
 			return fmt.Errorf("failed to create new issue: %w", err)
