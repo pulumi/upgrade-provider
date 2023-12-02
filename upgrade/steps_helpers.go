@@ -576,3 +576,48 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 		GHIssues: versions,
 	}, nil
 })
+
+// Create an issue in the provider repo that signals an upgrade
+var createUpstreamUpgradeIssue = stepv2.Func40E("Ensure Upstream Issue", func(ctx context.Context,
+	repoOrg, repoName, version string, goMod *GoMod) error {
+	upstreamProviderName := GetContext(ctx).UpstreamProviderName
+	upstreamOrg := goMod.UpstreamProviderOrg
+
+	title := fmt.Sprintf("THIS IS ANOTHER TEST Upgrade %s to v%s", upstreamProviderName, version)
+
+	getIssues := exec.CommandContext(ctx, "gh", "search", "issues",
+		title,
+		"--repo="+repoOrg+"/"+repoName,
+		"--json=title,number",
+		"--state=open",
+		//"--author=@me",
+	)
+	ghSearchBytes := new(bytes.Buffer)
+	getIssues.Stdout = ghSearchBytes
+	err := getIssues.Run()
+	if err != nil {
+		return fmt.Errorf("failed to search existing issues: %w", err)
+	}
+	var titles []struct {
+		Title  string `json:"title"`
+		Number int    `json:"number"`
+	}
+	err = json.Unmarshal(ghSearchBytes.Bytes(), &titles)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal `gh search issues` output: %w", err)
+	}
+
+	// create new issue if none exist
+	if len(titles) == 0 {
+		cmd := exec.Command(
+			"gh", "issue", "create",
+			"--repo="+repoOrg+"/"+repoName,
+			"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version,
+			"--title="+title,
+		)
+		if err = cmd.Run(); err != nil {
+			return fmt.Errorf("failed to create new issue: %w", err)
+		}
+	}
+	return nil
+})

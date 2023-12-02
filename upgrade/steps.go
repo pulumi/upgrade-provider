@@ -915,7 +915,6 @@ var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx conte
 	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo) (*UpstreamUpgradeTarget, error) {
 	upgradeTarget := getExpectedTarget(ctx, repoOrg+"/"+repoName,
 		goMod.UpstreamProviderOrg)
-
 	if upgradeTarget == nil {
 		return nil, fmt.Errorf("could not determine an upstream version")
 	}
@@ -924,7 +923,6 @@ var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx conte
 		GetContext(ctx).UpgradeProviderVersion = false
 		GetContext(ctx).MajorVersionBump = false
 		stepv2.SetLabel(ctx, "Up to date")
-
 		return nil, nil
 	}
 
