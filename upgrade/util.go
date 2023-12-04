@@ -24,9 +24,11 @@ type Context struct {
 	// An optional path to clone the provider repo to
 	repoPath string
 
-	TargetVersion       *semver.Version
-	InferVersion        bool
-	CheckUpstreamLatest bool
+	TargetVersion *semver.Version
+	InferVersion  bool
+	// For CI - check and see if upstream is ahead of this provider.
+	// If so, create a GH issue and exit. Do not attempt to upgrade the provider.
+	OnlyCheckUpstream bool
 
 	UpgradeBridgeVersion bool
 	TargetBridgeRef      Ref

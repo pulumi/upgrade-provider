@@ -479,27 +479,29 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 	name, upstreamOrg string) *UpstreamUpgradeTarget {
 
 	// we do not infer version from pulumi issues, or allow a target version when checking for a new upstream release
-	if !GetContext(ctx).CheckUpstreamLatest {
-		if GetContext(ctx).TargetVersion != nil {
-			target := &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
+	if GetContext(ctx).OnlyCheckUpstream {
+		return getExpectedTargetLatest(ctx, name, upstreamOrg)
+	}
 
-			// If we are also inferring versions, check if this PR will close any
-			// issues.
-			if GetContext(ctx).InferVersion {
-				for _, issue := range getExpectedTargetFromIssues(ctx, name).GHIssues {
-					if issue.Version != nil &&
-						(issue.Version.LessThan(target.Version) ||
-							issue.Version.Equal(target.Version)) {
-						target.GHIssues = append(target.GHIssues, issue)
-					}
+	if GetContext(ctx).TargetVersion != nil {
+		target := &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
+
+		// If we are also inferring versions, check if this PR will close any
+		// issues.
+		if GetContext(ctx).InferVersion {
+			for _, issue := range getExpectedTargetFromIssues(ctx, name).GHIssues {
+				if issue.Version != nil &&
+					(issue.Version.LessThan(target.Version) ||
+						issue.Version.Equal(target.Version)) {
+					target.GHIssues = append(target.GHIssues, issue)
 				}
 			}
-			return target
 		}
-		// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
-		if GetContext(ctx).InferVersion {
-			return getExpectedTargetFromIssues(ctx, name)
-		}
+		return target
+	}
+	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
+	if GetContext(ctx).InferVersion {
+		return getExpectedTargetFromIssues(ctx, name)
 	}
 	return getExpectedTargetLatest(ctx, name, upstreamOrg)
 })
@@ -579,46 +581,43 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 
 // Create an issue in the provider repo that signals an upgrade
 var createUpstreamUpgradeIssue = stepv2.Func40E("Ensure Upstream Issue", func(ctx context.Context,
-	repoOrg, repoName, version string, goMod *GoMod) error {
+	repoOrg, repoName, version, upstreamOrg string) error {
 	upstreamProviderName := GetContext(ctx).UpstreamProviderName
-	upstreamOrg := goMod.UpstreamProviderOrg
-
 	title := fmt.Sprintf("Upgrade %s to v%s", upstreamProviderName, version)
 
-	getIssues := exec.CommandContext(ctx, "gh", "search", "issues",
+	searchIssues := stepv2.Cmd(ctx, "gh", "search", "issues",
 		title,
 		"--repo="+repoOrg+"/"+repoName,
 		"--json=title,number",
 		"--state=open",
 		"--author=@me",
 	)
-	ghSearchBytes := new(bytes.Buffer)
-	getIssues.Stdout = ghSearchBytes
-	err := getIssues.Run()
-	if err != nil {
-		return fmt.Errorf("failed to search existing issues: %w", err)
-	}
-	var titles []struct {
+
+	var issues []struct {
 		Title  string `json:"title"`
 		Number int    `json:"number"`
 	}
-	err = json.Unmarshal(ghSearchBytes.Bytes(), &titles)
+	err := json.Unmarshal([]byte(searchIssues), &issues)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal `gh search issues` output: %w", err)
 	}
-
 	// create new issue if none exist
-	if len(titles) == 0 {
-		cmd := exec.Command(
+	createIssue := true
+	// check for exact title match from search results
+	for _, issue := range issues {
+		if issue.Title == title {
+			createIssue = false
+		}
+	}
+
+	if createIssue {
+		stepv2.Cmd(ctx,
 			"gh", "issue", "create",
 			"--repo="+repoOrg+"/"+repoName,
 			"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version,
 			"--title="+title,
 			"--label="+"kind/enhancement",
 		)
-		if err = cmd.Run(); err != nil {
-			return fmt.Errorf("failed to create new issue: %w", err)
-		}
 	}
 	return nil
 })

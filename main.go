@@ -132,8 +132,14 @@ func cmd() *cobra.Command {
 				case "pf":
 					set(&context.UpgradePfVersion)
 				case "check-upstream-version":
+					if targetVersion != "" {
+						return fmt.Errorf(
+							"--kind check-upstream-version is incompatible with --target-version, cannot set both",
+						)
+					}
 					set(&context.UpgradeProviderVersion)
-					set(&context.CheckUpstreamLatest)
+					set(&context.OnlyCheckUpstream)
+
 				default:
 					return fmt.Errorf(
 						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, `code`, or `sdk`.",

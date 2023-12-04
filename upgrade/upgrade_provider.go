@@ -71,19 +71,22 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	}
 
 	// When we're running a version check, we create the upgrade issue, and then exit.
-	if GetContext(ctx).CheckUpstreamLatest {
+	if GetContext(ctx).OnlyCheckUpstream {
 		// UpgradeProviderVersion may be set to False at this point. We check again.
 		if GetContext(ctx).UpgradeProviderVersion {
-			pipelineName := fmt.Sprintf("New upstream version detected: v%s\n", upgradeTarget.Version.String())
-			err = stepv2.PipelineCtx(ctx, pipelineName, func(ctx context.Context) {
-				createUpstreamUpgradeIssue(ctx, repoOrg, repoName, upgradeTarget.Version.String(), goMod)
+			pipelineName := fmt.Sprintf("New upstream version detected: v%s", upgradeTarget.Version)
+			return stepv2.PipelineCtx(ctx, pipelineName, func(ctx context.Context) {
+				createUpstreamUpgradeIssue(ctx,
+					repoOrg,
+					repoName,
+					upgradeTarget.Version.String(),
+					goMod.UpstreamProviderOrg,
+				)
 			})
-			if err != nil {
-				return err
-			}
-		} else {
-			fmt.Println(colorize.Bold("No new upstream version detected. Everything up to date."))
+
 		}
+		fmt.Println(colorize.Bold("No new upstream version detected. Everything up to date."))
+
 		return nil
 	}
 
