@@ -478,6 +478,12 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 // The second argument represents a message to describe the result. It may be empty.
 var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Context,
 	name, upstreamOrg string) *UpstreamUpgradeTarget {
+
+	// we do not infer version from pulumi issues, or allow a target version when checking for a new upstream release
+	if GetContext(ctx).OnlyCheckUpstream {
+		return getExpectedTargetLatest(ctx, name, upstreamOrg)
+	}
+
 	if GetContext(ctx).TargetVersion != nil {
 		target := &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
 
@@ -492,7 +498,6 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 				}
 			}
 		}
-
 		return target
 	}
 	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
@@ -573,4 +578,47 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 		Version:  versions[0].Version,
 		GHIssues: versions,
 	}, nil
+})
+
+// Create an issue in the provider repo that signals an upgrade
+var createUpstreamUpgradeIssue = stepv2.Func40E("Ensure Upstream Issue", func(ctx context.Context,
+	repoOrg, repoName, version, upstreamOrg string) error {
+	upstreamProviderName := GetContext(ctx).UpstreamProviderName
+	title := fmt.Sprintf("Upgrade %s to v%s", upstreamProviderName, version)
+
+	searchIssues := stepv2.Cmd(ctx, "gh", "search", "issues",
+		title,
+		"--repo="+repoOrg+"/"+repoName,
+		"--json=title,number",
+		"--state=open",
+		"--author=@me",
+	)
+
+	var issues []struct {
+		Title  string `json:"title"`
+		Number int    `json:"number"`
+	}
+	err := json.Unmarshal([]byte(searchIssues), &issues)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal `gh search issues` output: %w", err)
+	}
+	// create new issue if none exist
+	createIssue := true
+	// check for exact title match from search results
+	for _, issue := range issues {
+		if issue.Title == title {
+			createIssue = false
+		}
+	}
+
+	if createIssue {
+		stepv2.Cmd(ctx,
+			"gh", "issue", "create",
+			"--repo="+repoOrg+"/"+repoName,
+			"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version,
+			"--title="+title,
+			"--label="+"kind/enhancement",
+		)
+	}
+	return nil
 })

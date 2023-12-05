@@ -918,7 +918,6 @@ var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx conte
 	if upgradeTarget == nil {
 		return nil, fmt.Errorf("could not determine an upstream version")
 	}
-
 	// If we don't have any upgrades to target, assume that we don't need to upgrade.
 	if upgradeTarget.Version == nil {
 		GetContext(ctx).UpgradeProviderVersion = false
@@ -963,7 +962,7 @@ var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx conte
 			GetContext(ctx).MajorVersionBump = false
 			msg = "Up to date"
 
-		// Target version is greater then the current version, so upgrade
+		// Target version is greater than the current version, so upgrade
 		case -1:
 			msg = fmt.Sprintf("%s -> %s",
 				repo.currentUpstreamVersion,

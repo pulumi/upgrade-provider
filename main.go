@@ -127,6 +127,15 @@ func cmd() *cobra.Command {
 					set(&context.UpgradeCodeMigration)
 				case "pf":
 					set(&context.UpgradePfVersion)
+				case "check-upstream-version":
+					if targetVersion != "" {
+						return fmt.Errorf(
+							"--kind check-upstream-version is incompatible with --target-version, cannot set both",
+						)
+					}
+					set(&context.UpgradeProviderVersion)
+					set(&context.OnlyCheckUpstream)
+
 				default:
 					return fmt.Errorf(
 						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, `code`, or `sdk`.",
@@ -179,7 +188,8 @@ If no version is passed, the pulumi/{pkg,sdk} version will track the bridge`)
 - "provider": Upgrade the upstream provider only.
 - "sdk": Upgrade the Pulumi sdk only.
 - "pf": Upgrade the Plugin Framework only.
-- "code":     Perform some number of code migrations.`)
+- "code":     Perform some number of code migrations.
+- "check-upstream-version": Determine if we need to upgrade the upstream provider. For use in CI only."`)
 
 	cmd.PersistentFlags().BoolVar(&experimental, "experimental", false,
 		`Enable experimental features, such as auto token mapping and auto aliasing`)
