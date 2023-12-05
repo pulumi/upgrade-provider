@@ -428,7 +428,8 @@ func getGitHubPath(repoPath string) (string, error) {
 		name := strings.TrimPrefix(repo, "terraform-provider-")
 		org, ok := ProviderOrgs[name]
 		if !ok {
-			return "", fmt.Errorf("terraform-providers based path: missing remap for '%s'", name)
+			msg := "terraform-providers based path: missing remap for '%s' (full path is %q)"
+			return "", fmt.Errorf(msg, name, repoPath)
 		}
 		repoPath = prefix + "/" + org + "/" + repo
 	}
