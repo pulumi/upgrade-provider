@@ -138,7 +138,7 @@ func cmd() *cobra.Command {
 
 				default:
 					return fmt.Errorf(
-						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, `code`, or `sdk`.",
+						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, `code`, or `pf`",
 						upgradeKind)
 				}
 			}
@@ -186,7 +186,6 @@ If no version is passed, the pulumi/{pkg,sdk} version will track the bridge`)
 - "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code,pf".
 - "bridge":  Upgrade the bridge only.
 - "provider": Upgrade the upstream provider only.
-- "sdk": Upgrade the Pulumi sdk only.
 - "pf": Upgrade the Plugin Framework only.
 - "code":     Perform some number of code migrations.
 - "check-upstream-version": Determine if we need to upgrade the upstream provider. For use in CI only."`)
