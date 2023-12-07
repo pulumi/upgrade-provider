@@ -7,6 +7,7 @@ require (
 	github.com/briandowns/spinner v1.20.0
 	github.com/hexops/autogold/v2 v2.2.1
 	github.com/pulumi/pulumi/sdk/v3 v3.87.0
+	github.com/ryboe/q v1.0.20
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
@@ -21,7 +22,10 @@ require (
 	github.com/hexops/autogold v1.3.1 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/hexops/valast v1.4.4 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/nightlyone/lockfile v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	mvdan.cc/gofumpt v0.5.0 // indirect

@@ -25,6 +25,7 @@ import (
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
+	"github.com/ryboe/q"
 )
 
 // A "git commit" step that is resilient to no changes in the directory.
@@ -157,6 +158,9 @@ func UpgradeProviderVersion(
 	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
 	steps := []step.Step{}
+	q.Q(GetContext(ctx))
+	q.Q(GetContext(ctx).JavaVersion)
+
 	if javaVersion := GetContext(ctx).JavaVersion; javaVersion != "" {
 		var didChange bool
 		steps = append(steps, step.Combined("Update Java Version",
