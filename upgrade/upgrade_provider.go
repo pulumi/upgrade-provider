@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ryboe/q"
 	"io"
 	"os"
 	"sort"
@@ -228,10 +229,64 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			}))
 	}
 
+	if GetContext(ctx).UpgradeJavaVersion {
+
+		discoverSteps = append(discoverSteps, step.Combined("Planning Java Gen Version Update",
+			step.F("Planning Java Gen Version Update", func(ctx context.Context) (string, error) {
+				b, err := os.ReadFile(".pulumi/java-gen-version")
+				if err != nil {
+					return "", err
+				}
+				q.Q(string(b))
+				currentJavaGen := string(b)
+				latestJavaGen, err := latestRelease(ctx, "pulumi/pulumi-java")
+				if err != nil {
+					return "", err
+				}
+				// we do not upgrade Java if the two versions are the same
+				if latestJavaGen.String() == currentJavaGen {
+					GetContext(ctx).UpgradeJavaVersion = false
+					return fmt.Sprintf("Up to date at %s", latestJavaGen.String()), nil
+				}
+				GetContext(ctx).JavaVersion = latestJavaGen.String()
+				return fmt.Sprintf("%s -> %s", currentJavaGen, latestJavaGen.String()), nil
+			}),
+			//step.F("Latest Java Gen Version", func(ctx context.Context) (string, error) {
+			//	latestJavaGen, err := latestRelease(ctx, "pulumi/pulumi-java")
+			//	if err != nil {
+			//		return "", err
+			//	}
+			//	return latestJavaGen.String(), nil
+			//
+			//}),
+			// Compare the two versions
+			//if
+
+			//UpdateFileWithSignal("Update Makefile", "Makefile", &didChange,
+			//	func(b []byte) ([]byte, error) {
+			//		version := javaVersionRegexp.FindSubmatchIndex(b)
+			//		if version == nil {
+			//			return nil, fmt.Errorf("Java version set: could not find JAVA_GEN_VERSION")
+			//		}
+			//		var out bytes.Buffer
+			//		out.Write(b[:version[2]])
+			//		out.WriteString(javaVersion)
+			//		out.Write(b[version[3]:])
+			//		return out.Bytes(), nil
+			//	}),
+			//step.When(&didChange,
+			//	step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-java-gen"))),
+			//step.When(&didChange,
+			//	step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-language-java"))),
+		))
+	}
+
 	ok := step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
 	if !ok {
 		return ErrHandled
 	}
+	q.Q("-----after changes-----")
+	q.Q(GetContext(ctx))
 
 	if GetContext(ctx).UpgradeProviderVersion {
 		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTarget.Version.Major()
@@ -247,7 +302,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion && ctx.TargetPulumiVersion == nil {
+		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion && ctx.TargetPulumiVersion == nil &&
+		!ctx.UpgradeJavaVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -373,6 +429,10 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		// We make sure that TargetPulumiVersion == "", since we cannot discover
 		// the version of a replace statement.
 		steps = append(steps, applyPulumiVersion(ctx, repo))
+	}
+
+	if GetContext(ctx).UpgradeJavaVersion {
+		steps = append(steps, step.Cmd("echo", GetContext(ctx).JavaVersion, ".pulumi/java-gen-version"))
 	}
 
 	if GetContext(ctx).UpgradeCodeMigration {

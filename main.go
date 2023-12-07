@@ -158,6 +158,9 @@ func cmd() *cobra.Command {
 		},
 	}
 
+	cmd.PersistentFlags().BoolVar(&context.UpgradeJavaVersion, "upgrade-java", true,
+		`Upgrade to the latest Java version`)
+
 	cmd.PersistentFlags().StringVar(&repoPath, "repo-path", "",
 		`Clone the provider repo to the specified path.`)
 
