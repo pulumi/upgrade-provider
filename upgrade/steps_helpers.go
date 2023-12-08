@@ -164,7 +164,7 @@ func prBody(ctx context.Context, repo ProviderRepo,
 		if prev := ctx.oldJavaVersion; prev != "" {
 			from = fmt.Sprintf("from %s ", prev)
 		}
-		fmt.Fprintf(b, "- Updating java version %sto %s.\n", from, ctx.JavaVersion)
+		fmt.Fprintf(b, "- Updating Java Gen version %sto %s.\n", from, ctx.JavaVersion)
 	}
 
 	if GetContext(ctx).UpgradeProviderVersion {

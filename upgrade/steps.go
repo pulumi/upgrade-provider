@@ -328,6 +328,8 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		prTitle = "Upgrade pulumi-terraform-bridge/pf to " + targetPfVersion.String()
 	case c.TargetPulumiVersion != nil:
 		prTitle = "Test: Upgrade pulumi/{pkg,sdk} to " + c.TargetPulumiVersion.String()
+	case c.UpgradeJavaVersion:
+		prTitle = "Upgrade pulumi-java to" + c.JavaVersion
 	default:
 		return fmt.Errorf("Unknown action")
 	}
@@ -529,6 +531,8 @@ var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Co
 		return ret("upgrade-pf-version-to-%s", targetPfVersion)
 	case c.TargetPulumiVersion != nil:
 		return ret("upgrade-pulumi-version-to-%s", c.TargetPulumiVersion)
+	case c.UpgradeJavaVersion:
+		return ret("upgrade-java-version-to-%s", c.JavaVersion)
 	default:
 		return "", fmt.Errorf("calculating branch name: unknown action")
 	}
