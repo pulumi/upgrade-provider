@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ryboe/q"
 	"io"
 	"os"
 	"sort"
@@ -230,14 +229,16 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	}
 
 	if GetContext(ctx).UpgradeJavaVersion {
-
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Java Gen Version Update", func(ctx context.Context) (string, error) {
+				if GetContext(ctx).JavaVersion != "" {
+					// we are pinning a java gen version via `--java-version`, so we will not query for latest.
+					return fmt.Sprintf("Pinning Java Gen Version at %s", GetContext(ctx).JavaVersion), nil
+				}
 				b, err := os.ReadFile(".pulumi/java-gen-version")
 				if err != nil {
 					return "", err
 				}
-				q.Q(string(b))
 				currentJavaGen := string(b)
 				latestJavaGen, err := latestRelease(ctx, "pulumi/pulumi-java")
 				if err != nil {
@@ -248,6 +249,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 					GetContext(ctx).UpgradeJavaVersion = false
 					return fmt.Sprintf("Up to date at %s", latestJavaGen.String()), nil
 				}
+				// Set latest Java Gen version in the context
 				GetContext(ctx).JavaVersion = latestJavaGen.String()
 				return fmt.Sprintf("%s -> %s", currentJavaGen, latestJavaGen.String()), nil
 			}),
@@ -258,8 +260,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	if !ok {
 		return ErrHandled
 	}
-	q.Q("-----after changes-----")
-	q.Q(GetContext(ctx))
 
 	if GetContext(ctx).UpgradeProviderVersion {
 		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTarget.Version.Major()
@@ -310,16 +310,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	if err != nil {
 		return err
 	}
-
-	//if GetContext(ctx).UpgradeJavaVersion {
-	//
-	//	err = stepv2.PipelineCtx(ctx, "Write Java Version File", func(ctx context.Context) {
-	//		stepv2.WriteFile(ctx, ".pulumi/java-gen-version", GetContext(ctx).JavaVersion)
-	//	})
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
 
 	var steps []step.Step
 
@@ -474,12 +464,12 @@ func tfgenAndBuildSDKs(
 		if GetContext(ctx).RemovePlugins {
 			stepv2.Cmd(ctx, "pulumi", "plugin", "rm", "--all", "--yes")
 		}
-
-		stepv2.Cmd(ctx, "make", "tfgen")
-
+		// Write Java Gen Version file
 		if GetContext(ctx).UpgradeJavaVersion {
 			stepv2.WriteFile(ctx, ".pulumi/java-gen-version", GetContext(ctx).JavaVersion)
 		}
+
+		stepv2.Cmd(ctx, "make", "tfgen")
 
 		stepv2.Cmd(ctx, "git", "add", "--all")
 		gitCommit(ctx, "make tfgen")
