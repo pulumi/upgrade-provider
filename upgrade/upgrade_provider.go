@@ -245,10 +245,18 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			}
 
 			stepv2.Func00E("Fetching latest Java Gen", func(ctx context.Context) error {
-				currentJavaGen := stepv2.ReadFile(ctx, ".pulumi/java-gen-version")
+
 				latestJavaGen, err := latestRelease(ctx, "pulumi/pulumi-java")
 				if err != nil {
 					return fmt.Errorf("error fetching latest Java release %v", err)
+				}
+				var currentJavaGen string
+				_, exists := stepv2.Stat(ctx, ".pulumi/java-gen-version")
+				if !exists {
+					// use dummy placeholder in lieu of reading from file
+					currentJavaGen = "0.0.0"
+				} else {
+					currentJavaGen = stepv2.ReadFile(ctx, ".pulumi/java-gen-version")
 				}
 				// we do not upgrade Java if the two versions are the same
 				if latestJavaGen.String() == currentJavaGen {
