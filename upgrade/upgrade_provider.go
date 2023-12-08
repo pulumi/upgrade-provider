@@ -228,37 +228,51 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			}))
 	}
 
+	ok := step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
+	if !ok {
+		return ErrHandled
+	}
+
 	if GetContext(ctx).UpgradeJavaVersion {
-		discoverSteps = append(discoverSteps,
-			step.F("Planning Java Gen Version Update", func(ctx context.Context) (string, error) {
-				if GetContext(ctx).JavaVersion != "" {
-					// we are pinning a java gen version via `--java-version`, so we will not query for latest.
-					return fmt.Sprintf("Pinning Java Gen Version at %s", GetContext(ctx).JavaVersion), nil
-				}
-				b, err := os.ReadFile(".pulumi/java-gen-version")
-				if err != nil {
-					return "", err
-				}
-				currentJavaGen := string(b)
+
+		err = stepv2.PipelineCtx(ctx, "Planning Java Gen Version Update", func(ctx context.Context) {
+			if GetContext(ctx).JavaVersion != "" {
+				// we are pinning a java gen version via `--java-version`, so we will not query for latest.
+				stepv2.Func00("Explicit Java Gen Version", func(ctx context.Context) {
+					stepv2.SetLabel(ctx, fmt.Sprintf("Pinning Java Gen Version at %s", GetContext(ctx).JavaVersion))
+				})(ctx)
+				return
+			}
+
+			stepv2.Func00E("Fetching latest Java Gen", func(ctx context.Context) error {
+				currentJavaGen := stepv2.ReadFile(ctx, ".pulumi/java-gen-version")
 				latestJavaGen, err := latestRelease(ctx, "pulumi/pulumi-java")
 				if err != nil {
-					return "", err
+					return fmt.Errorf("error fetching latest Java release %v", err)
 				}
 				// we do not upgrade Java if the two versions are the same
 				if latestJavaGen.String() == currentJavaGen {
 					GetContext(ctx).UpgradeJavaVersion = false
-					return fmt.Sprintf("Up to date at %s", latestJavaGen.String()), nil
+					stepv2.Func00("Up to date at", func(ctx context.Context) {
+						stepv2.SetLabel(ctx, latestJavaGen.String())
+					})(ctx)
+					return nil
 				}
 				// Set latest Java Gen version in the context
 				GetContext(ctx).JavaVersion = latestJavaGen.String()
-				return fmt.Sprintf("%s -> %s", currentJavaGen, latestJavaGen.String()), nil
-			}),
-		)
-	}
-
-	ok := step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
-	if !ok {
-		return ErrHandled
+				// Also set oldJavaVersion so we can report later when opening the PR
+				GetContext(ctx).oldJavaVersion = currentJavaGen
+				stepv2.Func00("Upgrading Java Gen Version", func(ctx context.Context) {
+					upgrades := fmt.Sprintf("%s -> %s", currentJavaGen, latestJavaGen.String())
+					stepv2.SetLabel(ctx, upgrades)
+				})(ctx)
+				stepv2.SetLabel(ctx, latestJavaGen.String())
+				return nil
+			})(ctx)
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	if GetContext(ctx).UpgradeProviderVersion {

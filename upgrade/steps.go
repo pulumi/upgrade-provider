@@ -289,7 +289,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	case c.TargetPulumiVersion != nil:
 		prTitle = "Test: Upgrade pulumi/{pkg,sdk} to " + c.TargetPulumiVersion.String()
 	case c.UpgradeJavaVersion:
-		prTitle = "Upgrade pulumi-java to" + c.JavaVersion
+		prTitle = "Upgrade pulumi-java to " + c.JavaVersion
 	default:
 		return fmt.Errorf("Unknown action")
 	}
