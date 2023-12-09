@@ -97,6 +97,10 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 		return nil
 	}
+	// do not upgrade Java on bridge-only upgrades
+	if GetContext(ctx).UpgradeBridgeVersion && !GetContext(ctx).UpgradeProviderVersion {
+		GetContext(ctx).UpgradeJavaVersion = false
+	}
 
 	discoverSteps := []step.Step{}
 
@@ -234,7 +238,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	}
 
 	if GetContext(ctx).UpgradeJavaVersion {
-
 		err = stepv2.PipelineCtx(ctx, "Planning Java Gen Version Update", func(ctx context.Context) {
 			if GetContext(ctx).JavaVersion != "" {
 				// we are pinning a java gen version via `--java-version`, so we will not query for latest.
