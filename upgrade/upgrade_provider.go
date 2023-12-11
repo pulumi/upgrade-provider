@@ -97,10 +97,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 		return nil
 	}
-	// do not upgrade Java on bridge-only upgrades
-	if GetContext(ctx).UpgradeBridgeVersion && !GetContext(ctx).UpgradeProviderVersion {
-		GetContext(ctx).UpgradeJavaVersion = false
-	}
 
 	discoverSteps := []step.Step{}
 
@@ -254,12 +250,12 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 					return fmt.Errorf("error fetching latest Java release %v", err)
 				}
 				var currentJavaGen string
-				_, exists := stepv2.Stat(ctx, ".pulumi/java-gen-version")
+				_, exists := stepv2.Stat(ctx, ".pulumi-java-gen.version")
 				if !exists {
 					// use dummy placeholder in lieu of reading from file
 					currentJavaGen = "0.0.0"
 				} else {
-					currentJavaGen = stepv2.ReadFile(ctx, ".pulumi/java-gen-version")
+					currentJavaGen = stepv2.ReadFile(ctx, ".pulumi-java-gen.version")
 				}
 				// we do not upgrade Java if the two versions are the same
 				if latestJavaGen.String() == currentJavaGen {
@@ -491,7 +487,7 @@ func tfgenAndBuildSDKs(
 		}
 		// Write Java Gen Version file
 		if GetContext(ctx).UpgradeJavaVersion {
-			stepv2.WriteFile(ctx, ".pulumi/java-gen-version", GetContext(ctx).JavaVersion)
+			stepv2.WriteFile(ctx, ".pulumi-java-gen.version", GetContext(ctx).JavaVersion)
 		}
 
 		stepv2.Cmd(ctx, "make", "tfgen")
