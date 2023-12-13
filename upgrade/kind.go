@@ -185,9 +185,28 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		Bridge:   bridge,
 		Pf:       pf,
 	}
-	// get the org name that hosts the upstream repo
-	tok := strings.Split(modPathWithoutVersion(upstream.Mod.Path), "/")
-	out.UpstreamProviderOrg = tok[len(tok)-2]
+
+	out.UpstreamProviderOrg = stepv2.Func11("Get UpstreamOrg", func(ctx context.Context, path string) string {
+		stepv2.SetLabel(ctx, "From resources.go")
+		resourceFile := filepath.Join(path, "provider", "resources.go")
+		resourceData := stepv2.ReadFile(ctx, resourceFile)
+		resLines := strings.Split(resourceData, "\n")
+		var upstreamOrg string
+		for _, line := range resLines {
+			if strings.Contains(line, "GitHubOrg") {
+				lineSlice := strings.Split(line, "\"")
+				upstreamOrg = lineSlice[1]
+				break
+			}
+		}
+		if upstreamOrg == "" {
+			// fall back to attempting to read from go.mod
+			stepv2.SetLabel(ctx, "Fall back to reading from go.mod")
+			tok := strings.Split(modPathWithoutVersion(upstream.Mod.Path), "/")
+			upstreamOrg = tok[len(tok)-2]
+		}
+		return upstreamOrg
+	})(ctx, path)
 
 	if fork == nil {
 		out.Kind = Plain
