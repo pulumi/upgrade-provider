@@ -185,9 +185,22 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		Bridge:   bridge,
 		Pf:       pf,
 	}
-	// get the org name that hosts the upstream repo
-	tok := strings.Split(modPathWithoutVersion(upstream.Mod.Path), "/")
-	out.UpstreamProviderOrg = tok[len(tok)-2]
+	// get the org name that hosts the upstream repo from the GitHubOrg field in provider/resources.go
+	resourceFile := filepath.Join(path, "provider", "resources.go")
+	resourceData := stepv2.ReadFile(ctx, resourceFile)
+	resLines := strings.Split(resourceData, "\n")
+	var upstreamOrg string
+	for _, line := range resLines {
+		if strings.Contains(line, "GitHubOrg") {
+			lineSlice := strings.Split(line, "\"")
+			upstreamOrg = lineSlice[1]
+			break
+		}
+	}
+	if upstreamOrg == "" {
+		contract.Assertf(upstreamOrg != "nil", "upstreamOrg cannot be empty; set GitHubOrg in ProviderInfo")
+	}
+	out.UpstreamProviderOrg = upstreamOrg
 
 	if fork == nil {
 		out.Kind = Plain
