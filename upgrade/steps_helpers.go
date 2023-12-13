@@ -159,12 +159,12 @@ func prBody(ctx context.Context, repo ProviderRepo,
 	if GetContext(ctx).MajorVersionBump {
 		fmt.Fprintf(b, "- Updating major version from %s to %s.\n", repo.currentVersion, repo.currentVersion.IncMajor())
 	}
-	if ctx := GetContext(ctx); ctx.oldJavaVersion != ctx.JavaVersion && ctx.JavaVersion != "" {
+	if ctx := GetContext(ctx); ctx.UpgradeJavaVersion && ctx.JavaVersion != "" {
 		var from string
 		if prev := ctx.oldJavaVersion; prev != "" {
 			from = fmt.Sprintf("from %s ", prev)
 		}
-		fmt.Fprintf(b, "- Updating java version %sto %s.\n", from, ctx.JavaVersion)
+		fmt.Fprintf(b, "- Updating Java Gen version %sto %s.\n", from, ctx.JavaVersion)
 	}
 
 	if GetContext(ctx).UpgradeProviderVersion {

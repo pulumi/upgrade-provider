@@ -150,47 +150,11 @@ var ensureUpstreamRepo = stepv2.Func11("Ensure Upstream Repo", func(ctx context.
 	return expectedLocation
 })
 
-var javaVersionRegexp *regexp.Regexp = regexp.MustCompile(`JAVA_GEN_VERSION := (v[0-9]+\.[0-9]+\.[0-9]+)`)
-
 func UpgradeProviderVersion(
 	ctx context.Context, goMod *GoMod, target *semver.Version,
 	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
 	steps := []step.Step{}
-	if javaVersion := GetContext(ctx).JavaVersion; javaVersion != "" {
-		var didChange bool
-		steps = append(steps, step.Combined("Update Java Version",
-			step.F("Current Java Version", func(cx context.Context) (string, error) {
-				b, err := baseFileAt(cx, repo, "Makefile")
-				if err != nil {
-					return "", err
-				}
-				found := javaVersionRegexp.FindSubmatch(b)
-				if found == nil {
-					return "not found", nil
-				}
-				oldJavaVersion := string(found[1])
-				GetContext(ctx).oldJavaVersion = oldJavaVersion
-				return oldJavaVersion, nil
-			}),
-			UpdateFileWithSignal("Update Makefile", "Makefile", &didChange,
-				func(b []byte) ([]byte, error) {
-					version := javaVersionRegexp.FindSubmatchIndex(b)
-					if version == nil {
-						return nil, fmt.Errorf("Java version set: could not find JAVA_GEN_VERSION")
-					}
-					var out bytes.Buffer
-					out.Write(b[:version[2]])
-					out.WriteString(javaVersion)
-					out.Write(b[version[3]:])
-					return out.Bytes(), nil
-				}),
-			step.When(&didChange,
-				step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-java-gen"))),
-			step.When(&didChange,
-				step.Cmd("rm", "-f", filepath.Join("bin", "pulumi-language-java"))),
-		))
-	}
 	if goMod.Kind.IsPatched() {
 		// If the provider is patched, we don't use the go module system at all. Instead
 		// we update the module referenced to the new tag.
@@ -324,6 +288,8 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		prTitle = "Upgrade pulumi-terraform-bridge/pf to " + targetPfVersion.String()
 	case c.TargetPulumiVersion != nil:
 		prTitle = "Test: Upgrade pulumi/{pkg,sdk} to " + c.TargetPulumiVersion.String()
+	case c.UpgradeJavaVersion:
+		prTitle = "Upgrade pulumi-java to " + c.JavaVersion
 	default:
 		return fmt.Errorf("Unknown action")
 	}
@@ -525,6 +491,8 @@ var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Co
 		return ret("upgrade-pf-version-to-%s", targetPfVersion)
 	case c.TargetPulumiVersion != nil:
 		return ret("upgrade-pulumi-version-to-%s", c.TargetPulumiVersion)
+	case c.UpgradeJavaVersion:
+		return ret("upgrade-java-version-to-%s", c.JavaVersion)
 	default:
 		return "", fmt.Errorf("calculating branch name: unknown action")
 	}

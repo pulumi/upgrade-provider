@@ -233,6 +233,55 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return ErrHandled
 	}
 
+	if GetContext(ctx).UpgradeJavaVersion {
+		err = stepv2.PipelineCtx(ctx, "Planning Java Gen Version Update", func(ctx context.Context) {
+			if GetContext(ctx).JavaVersion != "" {
+				// we are pinning a java gen version via `--java-version`, so we will not query for latest.
+				stepv2.Func00("Explicit Java Gen Version", func(ctx context.Context) {
+					stepv2.SetLabel(ctx, fmt.Sprintf("Pinning Java Gen Version at %s", GetContext(ctx).JavaVersion))
+				})(ctx)
+				return
+			}
+
+			stepv2.Func00E("Fetching latest Java Gen", func(ctx context.Context) error {
+
+				latestJavaGen, err := latestRelease(ctx, "pulumi/pulumi-java")
+				if err != nil {
+					return fmt.Errorf("error fetching latest Java release %v", err)
+				}
+				var currentJavaGen string
+				_, exists := stepv2.Stat(ctx, ".pulumi-java-gen.version")
+				if !exists {
+					// use dummy placeholder in lieu of reading from file
+					currentJavaGen = "0.0.0"
+				} else {
+					currentJavaGen = stepv2.ReadFile(ctx, ".pulumi-java-gen.version")
+				}
+				// we do not upgrade Java if the two versions are the same
+				if latestJavaGen.String() == currentJavaGen {
+					GetContext(ctx).UpgradeJavaVersion = false
+					stepv2.Func00("Up to date at", func(ctx context.Context) {
+						stepv2.SetLabel(ctx, latestJavaGen.String())
+					})(ctx)
+					return nil
+				}
+				// Set latest Java Gen version in the context
+				GetContext(ctx).JavaVersion = latestJavaGen.String()
+				// Also set oldJavaVersion so we can report later when opening the PR
+				GetContext(ctx).oldJavaVersion = currentJavaGen
+				stepv2.Func00("Upgrading Java Gen Version", func(ctx context.Context) {
+					upgrades := fmt.Sprintf("%s -> %s", currentJavaGen, latestJavaGen.String())
+					stepv2.SetLabel(ctx, upgrades)
+				})(ctx)
+				stepv2.SetLabel(ctx, latestJavaGen.String())
+				return nil
+			})(ctx)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	if GetContext(ctx).UpgradeProviderVersion {
 		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTarget.Version.Major()
 		if GetContext(ctx).MajorVersionBump && !shouldMajorVersionBump {
@@ -247,7 +296,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion && ctx.TargetPulumiVersion == nil {
+		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion && ctx.TargetPulumiVersion == nil &&
+		!ctx.UpgradeJavaVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -434,6 +484,10 @@ func tfgenAndBuildSDKs(
 
 		if GetContext(ctx).RemovePlugins {
 			stepv2.Cmd(ctx, "pulumi", "plugin", "rm", "--all", "--yes")
+		}
+		// Write Java Gen Version file
+		if GetContext(ctx).UpgradeJavaVersion {
+			stepv2.WriteFile(ctx, ".pulumi-java-gen.version", GetContext(ctx).JavaVersion)
 		}
 
 		stepv2.Cmd(ctx, "make", "tfgen")

@@ -158,6 +158,11 @@ func cmd() *cobra.Command {
 		},
 	}
 
+	cmd.PersistentFlags().BoolVar(&context.UpgradeJavaVersion, "upgrade-java", true,
+		`Upgrade to the latest Java version`)
+	err := cmd.PersistentFlags().MarkHidden("upgrade-java")
+	contract.AssertNoErrorf(err, "could not mark `upgrade-java` flag as hidden")
+
 	cmd.PersistentFlags().StringVar(&repoPath, "repo-path", "",
 		`Clone the provider repo to the specified path.`)
 
@@ -175,7 +180,7 @@ If no version is passed, the pulumi/{pkg,sdk} version will track the bridge`)
 		`Use our GH issues to infer the target upgrade version.
 		If both '--target-version' and '--pulumi-infer-version' are passed,
 		we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DEV]`)
-	err := cmd.PersistentFlags().MarkHidden("pulumi-infer-version")
+	err = cmd.PersistentFlags().MarkHidden("pulumi-infer-version")
 	contract.AssertNoErrorf(err, "could not mark `pulumi-infer-version` flag as hidden")
 
 	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
