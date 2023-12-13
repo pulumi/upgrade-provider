@@ -198,7 +198,9 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		}
 	}
 	if upstreamOrg == "" {
-		contract.Assertf(upstreamOrg != "nil", "upstreamOrg cannot be empty; set GitHubOrg in ProviderInfo")
+		// fall back to attempting to read from go.mod
+		tok := strings.Split(modPathWithoutVersion(upstream.Mod.Path), "/")
+		out.UpstreamProviderOrg = tok[len(tok)-2]
 	}
 	out.UpstreamProviderOrg = upstreamOrg
 
