@@ -186,7 +186,7 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		Pf:       pf,
 	}
 
-	upstreamOrg := stepv2.Func11("Get UpstreamOrg", func(ctx context.Context, path string) string {
+	out.UpstreamProviderOrg = stepv2.Func11("Get UpstreamOrg", func(ctx context.Context, path string) string {
 		stepv2.SetLabel(ctx, "From resources.go")
 		resourceFile := filepath.Join(path, "provider", "resources.go")
 		resourceData := stepv2.ReadFile(ctx, resourceFile)
@@ -207,10 +207,6 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		}
 		return upstreamOrg
 	})(ctx, path)
-
-	out.UpstreamProviderOrg = upstreamOrg
-
-	// get the org name that hosts the upstream repo from the GitHubOrg field in provider/resources.go
 
 	if fork == nil {
 		out.Kind = Plain
