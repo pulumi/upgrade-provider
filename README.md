@@ -22,7 +22,9 @@ the rest.
 
 ## Installation
 
-`go install github.com/pulumi/upgrade-provider@main`
+```bash
+$ go install github.com/pulumi/upgrade-provider@main
+```
 
 ## Requirements
 
