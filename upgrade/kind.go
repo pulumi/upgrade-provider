@@ -187,16 +187,20 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 	}
 
 	out.UpstreamProviderOrg = stepv2.Func11("Get UpstreamOrg", func(ctx context.Context, path string) string {
-		stepv2.SetLabel(ctx, "From resources.go")
 		resourceFile := filepath.Join(path, "provider", "resources.go")
-		resourceData := stepv2.ReadFile(ctx, resourceFile)
-		resLines := strings.Split(resourceData, "\n")
+		_, found := stepv2.Stat(ctx, resourceFile)
 		var upstreamOrg string
-		for _, line := range resLines {
-			if strings.Contains(line, "GitHubOrg") {
-				lineSlice := strings.Split(line, "\"")
-				upstreamOrg = lineSlice[1]
-				break
+		if found {
+			stepv2.SetLabel(ctx, "From resources.go")
+			resourceData := stepv2.ReadFile(ctx, resourceFile)
+			resLines := strings.Split(resourceData, "\n")
+
+			for _, line := range resLines {
+				if strings.Contains(line, "GitHubOrg") {
+					lineSlice := strings.Split(line, "\"")
+					upstreamOrg = lineSlice[1]
+					break
+				}
 			}
 		}
 		if upstreamOrg == "" {
