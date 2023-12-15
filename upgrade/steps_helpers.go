@@ -490,11 +490,13 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 		// If we are also inferring versions, check if this PR will close any
 		// issues.
 		if GetContext(ctx).InferVersion {
-			for _, issue := range getExpectedTargetFromIssues(ctx, name).GHIssues {
-				if issue.Version != nil &&
-					(issue.Version.LessThan(target.Version) ||
-						issue.Version.Equal(target.Version)) {
-					target.GHIssues = append(target.GHIssues, issue)
+			if fromIssues := getExpectedTargetFromIssues(ctx, name); fromIssues != nil {
+				for _, issue := range fromIssues.GHIssues {
+					if issue.Version != nil &&
+						(issue.Version.LessThan(target.Version) ||
+							issue.Version.Equal(target.Version)) {
+						target.GHIssues = append(target.GHIssues, issue)
+					}
 				}
 			}
 		}
