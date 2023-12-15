@@ -84,7 +84,7 @@ func call(w io.Writer, in, out int) error {
 
 	retValuesArr := make([]string, out)
 	for i := 0; i < out; i++ {
-		retValuesArr[i] = fmt.Sprintf("outputs[%d].(O%d)", i, i+1)
+		retValuesArr[i] = fmt.Sprintf("cast[O%d](outputs[%d])", i+1, i)
 	}
 	retValues := strings.Join(retValuesArr, ", ")
 	if out > 0 {

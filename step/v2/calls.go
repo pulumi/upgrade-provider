@@ -39,7 +39,7 @@ func Func01E[O1 any](name string, f func(context.Context) (O1, error)) func(cont
 		inputs := []any{}
 		outputs := make([]any, 2)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1)
+		return cast[O1](outputs[0])
 	}
 }
 
@@ -55,7 +55,7 @@ func Func02E[O1 any, O2 any](name string, f func(context.Context) (O1, O2, error
 		inputs := []any{}
 		outputs := make([]any, 3)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2)
+		return cast[O1](outputs[0]), cast[O2](outputs[1])
 	}
 }
 
@@ -71,7 +71,7 @@ func Func03E[O1 any, O2 any, O3 any](name string, f func(context.Context) (O1, O
 		inputs := []any{}
 		outputs := make([]any, 4)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2])
 	}
 }
 
@@ -87,7 +87,7 @@ func Func04E[O1 any, O2 any, O3 any, O4 any](name string, f func(context.Context
 		inputs := []any{}
 		outputs := make([]any, 5)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3])
 	}
 }
 
@@ -103,7 +103,7 @@ func Func05E[O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func(context
 		inputs := []any{}
 		outputs := make([]any, 6)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4])
 	}
 }
 
@@ -119,7 +119,7 @@ func Func06E[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string, f func
 		inputs := []any{}
 		outputs := make([]any, 7)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5])
 	}
 }
 
@@ -135,7 +135,7 @@ func Func07E[O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](name string
 		inputs := []any{}
 		outputs := make([]any, 8)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5]), cast[O7](outputs[6])
 	}
 }
 
@@ -167,7 +167,7 @@ func Func11E[I1 any, O1 any](name string, f func(context.Context, I1) (O1, error
 		inputs := []any{i1}
 		outputs := make([]any, 2)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1)
+		return cast[O1](outputs[0])
 	}
 }
 
@@ -183,7 +183,7 @@ func Func12E[I1 any, O1 any, O2 any](name string, f func(context.Context, I1) (O
 		inputs := []any{i1}
 		outputs := make([]any, 3)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2)
+		return cast[O1](outputs[0]), cast[O2](outputs[1])
 	}
 }
 
@@ -199,7 +199,7 @@ func Func13E[I1 any, O1 any, O2 any, O3 any](name string, f func(context.Context
 		inputs := []any{i1}
 		outputs := make([]any, 4)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2])
 	}
 }
 
@@ -215,7 +215,7 @@ func Func14E[I1 any, O1 any, O2 any, O3 any, O4 any](name string, f func(context
 		inputs := []any{i1}
 		outputs := make([]any, 5)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3])
 	}
 }
 
@@ -231,7 +231,7 @@ func Func15E[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string, f func
 		inputs := []any{i1}
 		outputs := make([]any, 6)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4])
 	}
 }
 
@@ -247,7 +247,7 @@ func Func16E[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](name string
 		inputs := []any{i1}
 		outputs := make([]any, 7)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5])
 	}
 }
 
@@ -263,7 +263,7 @@ func Func17E[I1 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 any](nam
 		inputs := []any{i1}
 		outputs := make([]any, 8)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5]), cast[O7](outputs[6])
 	}
 }
 
@@ -295,7 +295,7 @@ func Func21E[I1 any, I2 any, O1 any](name string, f func(context.Context, I1, I2
 		inputs := []any{i1, i2}
 		outputs := make([]any, 2)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1)
+		return cast[O1](outputs[0])
 	}
 }
 
@@ -311,7 +311,7 @@ func Func22E[I1 any, I2 any, O1 any, O2 any](name string, f func(context.Context
 		inputs := []any{i1, i2}
 		outputs := make([]any, 3)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2)
+		return cast[O1](outputs[0]), cast[O2](outputs[1])
 	}
 }
 
@@ -327,7 +327,7 @@ func Func23E[I1 any, I2 any, O1 any, O2 any, O3 any](name string, f func(context
 		inputs := []any{i1, i2}
 		outputs := make([]any, 4)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2])
 	}
 }
 
@@ -343,7 +343,7 @@ func Func24E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any](name string, f func
 		inputs := []any{i1, i2}
 		outputs := make([]any, 5)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3])
 	}
 }
 
@@ -359,7 +359,7 @@ func Func25E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any](name string
 		inputs := []any{i1, i2}
 		outputs := make([]any, 6)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4])
 	}
 }
 
@@ -375,7 +375,7 @@ func Func26E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any](nam
 		inputs := []any{i1, i2}
 		outputs := make([]any, 7)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5])
 	}
 }
 
@@ -391,7 +391,7 @@ func Func27E[I1 any, I2 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 any, O7 
 		inputs := []any{i1, i2}
 		outputs := make([]any, 8)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5]), cast[O7](outputs[6])
 	}
 }
 
@@ -423,7 +423,7 @@ func Func31E[I1 any, I2 any, I3 any, O1 any](name string, f func(context.Context
 		inputs := []any{i1, i2, i3}
 		outputs := make([]any, 2)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1)
+		return cast[O1](outputs[0])
 	}
 }
 
@@ -439,7 +439,7 @@ func Func32E[I1 any, I2 any, I3 any, O1 any, O2 any](name string, f func(context
 		inputs := []any{i1, i2, i3}
 		outputs := make([]any, 3)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2)
+		return cast[O1](outputs[0]), cast[O2](outputs[1])
 	}
 }
 
@@ -455,7 +455,7 @@ func Func33E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any](name string, f func
 		inputs := []any{i1, i2, i3}
 		outputs := make([]any, 4)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2])
 	}
 }
 
@@ -471,7 +471,7 @@ func Func34E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any](name string
 		inputs := []any{i1, i2, i3}
 		outputs := make([]any, 5)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3])
 	}
 }
 
@@ -487,7 +487,7 @@ func Func35E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any](nam
 		inputs := []any{i1, i2, i3}
 		outputs := make([]any, 6)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4])
 	}
 }
 
@@ -503,7 +503,7 @@ func Func36E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 
 		inputs := []any{i1, i2, i3}
 		outputs := make([]any, 7)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5])
 	}
 }
 
@@ -519,7 +519,7 @@ func Func37E[I1 any, I2 any, I3 any, O1 any, O2 any, O3 any, O4 any, O5 any, O6 
 		inputs := []any{i1, i2, i3}
 		outputs := make([]any, 8)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5]), cast[O7](outputs[6])
 	}
 }
 
@@ -551,7 +551,7 @@ func Func41E[I1 any, I2 any, I3 any, I4 any, O1 any](name string, f func(context
 		inputs := []any{i1, i2, i3, i4}
 		outputs := make([]any, 2)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1)
+		return cast[O1](outputs[0])
 	}
 }
 
@@ -567,7 +567,7 @@ func Func42E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any](name string, f func
 		inputs := []any{i1, i2, i3, i4}
 		outputs := make([]any, 3)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2)
+		return cast[O1](outputs[0]), cast[O2](outputs[1])
 	}
 }
 
@@ -583,7 +583,7 @@ func Func43E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any](name string
 		inputs := []any{i1, i2, i3, i4}
 		outputs := make([]any, 4)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2])
 	}
 }
 
@@ -599,7 +599,7 @@ func Func44E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any](nam
 		inputs := []any{i1, i2, i3, i4}
 		outputs := make([]any, 5)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3])
 	}
 }
 
@@ -615,7 +615,7 @@ func Func45E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 
 		inputs := []any{i1, i2, i3, i4}
 		outputs := make([]any, 6)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4])
 	}
 }
 
@@ -631,7 +631,7 @@ func Func46E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 
 		inputs := []any{i1, i2, i3, i4}
 		outputs := make([]any, 7)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5])
 	}
 }
 
@@ -647,7 +647,7 @@ func Func47E[I1 any, I2 any, I3 any, I4 any, O1 any, O2 any, O3 any, O4 any, O5 
 		inputs := []any{i1, i2, i3, i4}
 		outputs := make([]any, 8)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5]), cast[O7](outputs[6])
 	}
 }
 
@@ -679,7 +679,7 @@ func Func51E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any](name string, f func
 		inputs := []any{i1, i2, i3, i4, i5}
 		outputs := make([]any, 2)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1)
+		return cast[O1](outputs[0])
 	}
 }
 
@@ -695,7 +695,7 @@ func Func52E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any](name string
 		inputs := []any{i1, i2, i3, i4, i5}
 		outputs := make([]any, 3)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2)
+		return cast[O1](outputs[0]), cast[O2](outputs[1])
 	}
 }
 
@@ -711,7 +711,7 @@ func Func53E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any](nam
 		inputs := []any{i1, i2, i3, i4, i5}
 		outputs := make([]any, 4)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2])
 	}
 }
 
@@ -727,7 +727,7 @@ func Func54E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 
 		inputs := []any{i1, i2, i3, i4, i5}
 		outputs := make([]any, 5)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3])
 	}
 }
 
@@ -743,7 +743,7 @@ func Func55E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 
 		inputs := []any{i1, i2, i3, i4, i5}
 		outputs := make([]any, 6)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4])
 	}
 }
 
@@ -759,7 +759,7 @@ func Func56E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 
 		inputs := []any{i1, i2, i3, i4, i5}
 		outputs := make([]any, 7)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5])
 	}
 }
 
@@ -775,7 +775,7 @@ func Func57E[I1 any, I2 any, I3 any, I4 any, I5 any, O1 any, O2 any, O3 any, O4 
 		inputs := []any{i1, i2, i3, i4, i5}
 		outputs := make([]any, 8)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5]), cast[O7](outputs[6])
 	}
 }
 
@@ -807,7 +807,7 @@ func Func61E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any](name string
 		inputs := []any{i1, i2, i3, i4, i5, i6}
 		outputs := make([]any, 2)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1)
+		return cast[O1](outputs[0])
 	}
 }
 
@@ -823,7 +823,7 @@ func Func62E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any](nam
 		inputs := []any{i1, i2, i3, i4, i5, i6}
 		outputs := make([]any, 3)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2)
+		return cast[O1](outputs[0]), cast[O2](outputs[1])
 	}
 }
 
@@ -839,7 +839,7 @@ func Func63E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 
 		inputs := []any{i1, i2, i3, i4, i5, i6}
 		outputs := make([]any, 4)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2])
 	}
 }
 
@@ -855,7 +855,7 @@ func Func64E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 
 		inputs := []any{i1, i2, i3, i4, i5, i6}
 		outputs := make([]any, 5)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3])
 	}
 }
 
@@ -871,7 +871,7 @@ func Func65E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 
 		inputs := []any{i1, i2, i3, i4, i5, i6}
 		outputs := make([]any, 6)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4])
 	}
 }
 
@@ -887,7 +887,7 @@ func Func66E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 
 		inputs := []any{i1, i2, i3, i4, i5, i6}
 		outputs := make([]any, 7)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5])
 	}
 }
 
@@ -903,7 +903,7 @@ func Func67E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, O1 any, O2 any, O3 
 		inputs := []any{i1, i2, i3, i4, i5, i6}
 		outputs := make([]any, 8)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5]), cast[O7](outputs[6])
 	}
 }
 
@@ -935,7 +935,7 @@ func Func71E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any](nam
 		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
 		outputs := make([]any, 2)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1)
+		return cast[O1](outputs[0])
 	}
 }
 
@@ -951,7 +951,7 @@ func Func72E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 
 		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
 		outputs := make([]any, 3)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2)
+		return cast[O1](outputs[0]), cast[O2](outputs[1])
 	}
 }
 
@@ -967,7 +967,7 @@ func Func73E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 
 		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
 		outputs := make([]any, 4)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2])
 	}
 }
 
@@ -983,7 +983,7 @@ func Func74E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 
 		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
 		outputs := make([]any, 5)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3])
 	}
 }
 
@@ -999,7 +999,7 @@ func Func75E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 
 		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
 		outputs := make([]any, 6)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4])
 	}
 }
 
@@ -1015,7 +1015,7 @@ func Func76E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 
 		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
 		outputs := make([]any, 7)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5])
 	}
 }
 
@@ -1031,7 +1031,7 @@ func Func77E[I1 any, I2 any, I3 any, I4 any, I5 any, I6 any, I7 any, O1 any, O2 
 		inputs := []any{i1, i2, i3, i4, i5, i6, i7}
 		outputs := make([]any, 8)
 		run(ctx, name, f, inputs, outputs)
-		return outputs[0].(O1), outputs[1].(O2), outputs[2].(O3), outputs[3].(O4), outputs[4].(O5), outputs[5].(O6), outputs[6].(O7)
+		return cast[O1](outputs[0]), cast[O2](outputs[1]), cast[O3](outputs[2]), cast[O4](outputs[3]), cast[O5](outputs[4]), cast[O6](outputs[5]), cast[O7](outputs[6])
 	}
 }
 
