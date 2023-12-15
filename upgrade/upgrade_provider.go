@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/module"
 
@@ -97,8 +98,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return nil
 	}
 
-	discoverSteps := []step.Step{}
-
 	err = stepv2.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
 		if GetContext(ctx).UpgradeBridgeVersion {
 			targetBridgeVersion = stepv2.Func01E("Planning Bridge Upgrade", func(ctx context.Context) (Ref, error) {
@@ -137,6 +136,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				}
 			})(ctx)
 		}
+
 		if GetContext(ctx).UpgradeBridgeVersion {
 			tfSDKUpgrade = stepv2.Func01E("Planning Plugin SDK Upgrade", func(ctx context.Context) (ret string, _ error) {
 				defer func() { stepv2.SetLabel(ctx, ret) }()
@@ -185,61 +185,56 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				return fmt.Sprintf("%s -> %s", currentBranch, latest), nil
 			})(ctx)
 		}
-	})
-	if err != nil {
-		return err
-	}
 
-	if GetContext(ctx).UpgradePfVersion {
-		discoverSteps = append(discoverSteps,
-			step.F("Planning Plugin Framework Update", func(context.Context) (string, error) {
+		if GetContext(ctx).UpgradePfVersion {
+			targetPfVersion = stepv2.Func01E("Planning Plugin Framework Upgrade", func(context.Context) (Ref, error) {
+				found := func(r Ref) (Ref, error) {
+					stepv2.SetLabelf(ctx, "%s -> %s", goMod.Pf.Version, r)
+					return r, nil
+				}
 				if goMod.Pf.Version == "" {
 					// PF is not used on this provider, so we disable
 					// the upgrade attempt and move on.
 					GetContext(ctx).UpgradePfVersion = false
-					return "Unused", nil
+					stepv2.SetLabel(ctx, "Unused")
+					return nil, nil
 				}
 				switch GetContext(ctx).TargetBridgeRef.(type) {
 				case *HashReference:
 					// if --target-bridge-version has specified a hash
 					// reference, use that reference for pf code as well
-					targetPfVersion = GetContext(ctx).TargetBridgeRef
+					return found(GetContext(ctx).TargetBridgeRef)
 				default:
 					// in all other cases, compute the latest pf tag
-					refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
+					refs := gitRefsOfV2(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
 						"tags")
-					if err != nil {
-						return "", err
-					}
 					targetVersion := latestSemverTag("pf/", refs)
 
 					// If our target upgrade version is the same as our current version, we skip the update.
 					if targetVersion.Original() == goMod.Pf.Version {
 						GetContext(ctx).UpgradePfVersion = false
-						return fmt.Sprintf("Up to date at %s", targetVersion.String()), nil
+						stepv2.SetLabelf(ctx, "Up to date at %s", targetVersion)
+						return nil, nil
 					}
 
-					targetPfVersion = &Version{targetVersion}
+					return found(&Version{targetVersion})
 				}
-				return fmt.Sprintf("%s -> %s", goMod.Pf.Version, targetPfVersion), nil
-			}))
-	}
+			})(ctx)
+		}
 
-	if GetContext(ctx).MajorVersionBump {
-		discoverSteps = append(discoverSteps,
-			step.F("Current Major Version", func(context.Context) (string, error) {
-				var err error
-				repo.currentVersion, err = latestRelease(ctx, repoOrg+"/"+repoName)
-				if err != nil {
-					return "", err
+		if GetContext(ctx).MajorVersionBump {
+			repo.currentVersion = stepv2.Func21E("Current Major Version", func(ctx context.Context, repoOrg, repoName string) (*semver.Version, error) {
+				repoCurrentVersion, err := latestRelease(ctx, repoOrg+"/"+repoName)
+				if err == nil {
+					stepv2.SetLabelf(ctx, "%d", repo.currentVersion.Major())
 				}
-				return fmt.Sprintf("%d", repo.currentVersion.Major()), nil
-			}))
-	}
+				return repoCurrentVersion, err
+			})(ctx, repoOrg, repoName)
+		}
 
-	ok := step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
-	if !ok {
-		return ErrHandled
+	})
+	if err != nil {
+		return err
 	}
 
 	if GetContext(ctx).UpgradeJavaVersion {
@@ -462,7 +457,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		}
 	}
 
-	ok = step.Run(ctx, step.Combined("Update Repository", steps...))
+	ok := step.Run(ctx, step.Combined("Update Repository", steps...))
 	if !ok {
 		return ErrHandled
 	}

@@ -403,17 +403,14 @@ func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
 }
 
 func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
-	resultBytes, err := exec.CommandContext(ctx, "gh", "repo", "view",
-		repo, "--json=latestRelease").Output()
-	if err != nil {
-		return nil, err
-	}
+	resultString := stepv2.Cmd(ctx, "gh", "repo", "view",
+		repo, "--json=latestRelease")
 	var result struct {
 		Latest struct {
 			TagName string `json:"tagName"`
 		} `json:"latestRelease"`
 	}
-	err = json.Unmarshal(resultBytes, &result)
+	err := json.Unmarshal([]byte(resultString), &result)
 	if err != nil {
 		return nil, err
 	}
