@@ -137,27 +137,16 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				}
 			})(ctx)
 		}
-	})
-	if err != nil {
-		return err
-	}
-
-	if GetContext(ctx).UpgradeBridgeVersion {
-		discoverSteps = append(discoverSteps,
-			step.F("Planning Plugin SDK Update", func(context.Context) (string, error) {
-				current, ok, err := originalGoVersionOf(ctx, repo, "provider/go.mod",
+		if GetContext(ctx).UpgradeBridgeVersion {
+			tfSDKUpgrade = stepv2.Func01E("Planning Plugin SDK Upgrade", func(ctx context.Context) (ret string, _ error) {
+				defer func() { stepv2.SetLabel(ctx, ret) }()
+				current, ok := originalGoVersionOfV2(ctx, repo, "provider/go.mod",
 					"github.com/pulumi/terraform-plugin-sdk/v2")
-				if err != nil {
-					return "", err
-				}
 				if !ok {
 					return "not found", nil
 				}
-				refs, err := gitRefsOf(ctx,
+				refs := gitRefsOfV2(ctx,
 					"https://github.com/pulumi/terraform-plugin-sdk.git", "heads")
-				if err != nil {
-					return "", err
-				}
 				currentRef, err := module.PseudoVersionRev(current.Version)
 				if err != nil {
 					return "", fmt.Errorf("unable to parse PseudoVersionRef %q: %w",
@@ -186,11 +175,21 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				latestSha, ok := refs.shaOf(latestTag)
 				contract.Assertf(ok, "Failed to lookup sha of known tag: %q not in %#v",
 					latestTag, refs.labelToRef)
+
+				// Assign out of planning function here.
+				//
+				// This is effectively the "return" part of the function.
+				//
+				// TODO: Separate display from the derived value (latestSha)
 				tfSDKTargetSHA = latestSha
 				return fmt.Sprintf("%s -> %s", currentBranch, latest), nil
-			}).AssignTo(&tfSDKUpgrade),
-		)
+			})(ctx)
+		}
+	})
+	if err != nil {
+		return err
 	}
+
 	if GetContext(ctx).UpgradePfVersion {
 		discoverSteps = append(discoverSteps,
 			step.F("Planning Plugin Framework Update", func(context.Context) (string, error) {
