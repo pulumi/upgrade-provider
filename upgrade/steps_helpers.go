@@ -1,7 +1,6 @@
 package upgrade
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -345,16 +344,18 @@ func setUpstreamFromRemoteRepo(
 	return fmt.Errorf("no tag commit that matched '%s' in '%s'", rev, url)
 }
 
-func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
-	args := []string{"ls-remote", "--" + kind, url}
-	cmd := exec.CommandContext(ctx, "git", args...)
-	out := new(bytes.Buffer)
-	cmd.Stdout = out
-	if err := cmd.Run(); err != nil {
-		return gitRepoRefs{}, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
-	}
+func gitRefsOf(ctx context.Context, url, kind string) (refs gitRepoRefs, err error) {
+	err = stepv2.PipelineCtx(ctx, "shim", func(ctx context.Context) {
+		refs = gitRefsOfV2(ctx, url, kind)
+	})
+	return
+}
+
+var gitRefsOfV2 = stepv2.Func21("git refs of", func(ctx context.Context, url, kind string) gitRepoRefs {
+	out := stepv2.Cmd(ctx, "git", "ls-remote", "--"+kind, url)
+
 	branchesToRefs := map[string]string{}
-	for i, line := range strings.Split(out.String(), "\n") {
+	for i, line := range strings.Split(out, "\n") {
 		if line == "" {
 			continue
 		}
@@ -364,9 +365,8 @@ func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
 			i, line)
 		branchesToRefs[parts[1]] = parts[0]
 	}
-	return gitRepoRefs{branchesToRefs, kind}, nil
-
-}
+	return gitRepoRefs{branchesToRefs, kind}
+})
 
 type gitRepoRefs struct {
 	labelToRef map[string]string

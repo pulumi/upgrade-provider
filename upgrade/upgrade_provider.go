@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/module"
 
@@ -100,40 +99,51 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	discoverSteps := []step.Step{}
 
-	if GetContext(ctx).UpgradeBridgeVersion {
-		discoverSteps = append(discoverSteps,
-			step.F("Planning Bridge Update", func(context.Context) (string, error) {
+	err = stepv2.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
+		if GetContext(ctx).UpgradeBridgeVersion {
+			targetBridgeVersion = stepv2.Func01E("Planning Bridge Upgrade", func(ctx context.Context) (Ref, error) {
+				found := func(r Ref) (Ref, error) {
+					stepv2.SetLabelf(ctx, "%s -> %v", goMod.Bridge.Version, r)
+					return r, nil
+				}
 				switch v := GetContext(ctx).TargetBridgeRef.(type) {
 				case nil:
-					return "", fmt.Errorf("--target-bridge-version is required here")
+					return nil, fmt.Errorf("--target-bridge-version is required here")
 				case *HashReference:
-					targetBridgeVersion = v
+					return found(v)
 				case *Version:
 					// If our target upgrade version is the same as our
 					// current version, we skip the update.
 					if v.String() == goMod.Bridge.Version {
 						GetContext(ctx).UpgradeBridgeVersion = false
-						return fmt.Sprintf("Up to date at %s", v.String()), nil
+						stepv2.SetLabelf(ctx, "Up to date at %s", v.String())
+						return nil, nil
 					}
 
-					targetBridgeVersion = v
+					return found(v)
 				case *Latest:
-					refs, err := gitRefsOf(ctx,
-						"https://github.com/pulumi/pulumi-terraform-bridge.git", "tags")
-					if err != nil {
-						return "", err
-					}
+					refs := gitRefsOfV2(ctx, "https://github.com/pulumi/pulumi-terraform-bridge.git", "tags")
 					latest := latestSemverTag("", refs)
 					// If our target upgrade version is the same as our
 					// current version, we skip the update.
 					if latest.Original() == goMod.Bridge.Version {
 						GetContext(ctx).UpgradeBridgeVersion = false
-						return fmt.Sprintf("Up to date at %s", latest.Original()), nil
+						stepv2.SetLabelf(ctx, "Up to date at %s", latest.Original())
+						return nil, nil
 					}
-					targetBridgeVersion = &Version{semver.MustParse(latest.Original())}
+					return found(&Version{latest})
+				default:
+					panic(fmt.Sprintf("Unknown type of ref: %s (%[1]T)", v))
 				}
-				return fmt.Sprintf("%s -> %v", goMod.Bridge.Version, targetBridgeVersion), nil
-			}),
+			})(ctx)
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	if GetContext(ctx).UpgradeBridgeVersion {
+		discoverSteps = append(discoverSteps,
 			step.F("Planning Plugin SDK Update", func(context.Context) (string, error) {
 				current, ok, err := originalGoVersionOf(ctx, repo, "provider/go.mod",
 					"github.com/pulumi/terraform-plugin-sdk/v2")
