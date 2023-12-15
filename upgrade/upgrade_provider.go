@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/module"
 
@@ -223,13 +222,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		}
 
 		if GetContext(ctx).MajorVersionBump {
-			repo.currentVersion = stepv2.Func21E("Current Major Version", func(ctx context.Context, repoOrg, repoName string) (*semver.Version, error) {
-				repoCurrentVersion, err := latestRelease(ctx, repoOrg+"/"+repoName)
-				if err == nil {
-					stepv2.SetLabelf(ctx, "%d", repo.currentVersion.Major())
-				}
-				return repoCurrentVersion, err
-			})(ctx, repoOrg, repoName)
+			repo.currentVersion = findCurrentMajorVersion(ctx, repoOrg, repoName)
 		}
 
 	})
@@ -248,11 +241,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			}
 
 			stepv2.Func00E("Fetching latest Java Gen", func(ctx context.Context) error {
+				latestJavaGen := latestRelease(ctx, "pulumi/pulumi-java")
 
-				latestJavaGen, err := latestRelease(ctx, "pulumi/pulumi-java")
-				if err != nil {
-					return fmt.Errorf("error fetching latest Java release %v", err)
-				}
 				var currentJavaGen string
 				_, exists := stepv2.Stat(ctx, ".pulumi-java-gen.version")
 				if !exists {

@@ -402,7 +402,15 @@ func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
 	return labels
 }
 
-func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
+var findCurrentMajorVersion = stepv2.Func21("Find Current Major Version",
+	func(ctx context.Context, repoOrg, repoName string) *semver.Version {
+		repoCurrentVersion := latestRelease(ctx, repoOrg+"/"+repoName)
+		stepv2.SetLabelf(ctx, "%d", repoCurrentVersion.Major())
+		return repoCurrentVersion
+	})
+
+var latestRelease = stepv2.Func11E("Latest Release", func(ctx context.Context, repo string) (*semver.Version, error) {
+	stepv2.SetLabelf(ctx, "of %s", repo)
 	resultString := stepv2.Cmd(ctx, "gh", "repo", "view",
 		repo, "--json=latestRelease")
 	var result struct {
@@ -415,8 +423,13 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 		return nil, err
 	}
 
-	return semver.NewVersion(result.Latest.TagName)
-}
+	v, err := semver.NewVersion(result.Latest.TagName)
+	if err == nil {
+		stepv2.SetLabelf(ctx, "of %s: %s", repo, v)
+	}
+
+	return v, err
+})
 
 func getGitHubPath(repoPath string) (string, error) {
 	if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
