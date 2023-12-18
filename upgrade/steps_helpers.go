@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -20,11 +19,10 @@ import (
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
-var versionSuffix = regexp.MustCompile("/v[2-9][0-9]*$")
-
 func modPathWithoutVersion(path string) string {
-	if match := versionSuffix.FindStringIndex(path); match != nil {
-		return path[:match[0]]
+	withoutVersion, _, ok := module.SplitPathVersion(path)
+	if ok {
+		return withoutVersion
 	}
 	return path
 }
@@ -448,9 +446,7 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 	}
 
 	// Strip version
-	if match := versionSuffix.FindStringIndex(repoPath); match != nil {
-		repoPath = repoPath[:match[0]]
-	}
+	repoPath = modPathWithoutVersion(repoPath)
 
 	repoPath, err := getGitHubPath(repoPath)
 	if err != nil {

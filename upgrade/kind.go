@@ -8,6 +8,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
@@ -159,8 +160,12 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		if replace.Old.Path != upstream.Mod.Path {
 			continue
 		}
+		hasMajorVersion := func(path string) bool {
+			_, major, ok := module.SplitPathVersion(path)
+			return ok && major != ""
+		}
 		before, after, found := strings.Cut(replace.New.Path, "/"+tfProviderRepoName)
-		if !found || (after != "" && !versionSuffix.MatchString(after)) {
+		if !found || (after != "" && !hasMajorVersion(after)) {
 			if replace.New.Path == "../upstream" {
 				// We have found a patched provider, so we can just exit here.
 				break

@@ -15,6 +15,37 @@ import (
 	"golang.org/x/mod/module"
 )
 
+func TestRemoveVersionPrefix(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ input, expected string }{
+		{ // No mod path
+			"github.com/jfrog/terraform-provider-artifactory",
+			"github.com/jfrog/terraform-provider-artifactory",
+		},
+		{ // Single digit mod path
+			"github.com/jfrog/terraform-provider-artifactory/v4",
+			"github.com/jfrog/terraform-provider-artifactory",
+		},
+		{ // Multi-digit mod path (10)
+			"github.com/jfrog/terraform-provider-artifactory/v10",
+			"github.com/jfrog/terraform-provider-artifactory",
+		},
+		{ // Multi-digit mod path
+			"github.com/jfrog/terraform-provider-artifactory/v33",
+			"github.com/jfrog/terraform-provider-artifactory",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.input, func(t *testing.T) {
+			actual := modPathWithoutVersion(tt.input)
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
+
+}
+
 func TestGetRepoExpectedLocation(t *testing.T) {
 	ctx := &Context{
 		GoPath: "/Users/myuser/go",
