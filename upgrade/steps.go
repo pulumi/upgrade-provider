@@ -19,6 +19,7 @@ import (
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 	goSemver "golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 
@@ -222,12 +223,11 @@ func UpgradeProviderVersion(
 			upstreamPath := goMod.Upstream.Path
 			// We do this only when we already have a version suffix, since
 			// that confirms that we have a correctly versioned provider.
-			if indx := versionSuffix.FindStringIndex(upstreamPath); indx != nil {
+			if prefix, major, ok := module.SplitPathVersion(upstreamPath); ok && major != "" {
 				// If we have a version suffix, and we are doing a major
 				// version bump, we need to apply the new suffix.
 				upstreamPath = fmt.Sprintf("%s/v%d",
-					upstreamPath[:indx[0]],
-					target.Major())
+					prefix, target.Major())
 			}
 
 			return step.Cmd("go", "get", upstreamPath+"@"+targetV)
@@ -601,15 +601,13 @@ func MajorVersionBump(ctx context.Context, goMod *GoMod, target *UpstreamUpgrade
 				)
 
 				if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
-					if idx := versionSuffix.FindStringIndex(goMod.Upstream.Path); idx != nil {
+					if prefix, major, ok := module.SplitPathVersion(
+						goMod.Upstream.Path); ok && major != "" {
 						newUpstream := fmt.Sprintf("%s/v%d",
-							goMod.Upstream.Path[:idx[0]],
-							target.Version.Major(),
-						)
+							prefix, target.Version.Major())
 						new = bytes.ReplaceAll(data,
 							[]byte(goMod.Upstream.Path),
-							[]byte(newUpstream),
-						)
+							[]byte(newUpstream))
 					}
 				}
 
