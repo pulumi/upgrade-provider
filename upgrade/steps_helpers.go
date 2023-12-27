@@ -529,7 +529,8 @@ var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx 
 		}
 		return &UpstreamUpgradeTarget{Version: v}, nil
 	}
-	return nil, errors.New("no releases found")
+	return nil, fmt.Errorf("no non-beta releases found in %s/%s",
+	upstreamOrg, GetContext(ctx).UpstreamProviderName)
 })
 
 // Figure out what version of upstream to target by looking at specific pulumi-bot
