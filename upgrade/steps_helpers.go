@@ -509,6 +509,7 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 // release.
 var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx context.Context,
 	name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
+	// TODO: use --json once https://github.com/cli/cli/issues/4572 is fixed
 	latest := stepv2.Cmd(ctx, "gh", "release", "list",
 		"--repo="+upstreamOrg+"/"+GetContext(ctx).UpstreamProviderName,
 		"--exclude-drafts",
