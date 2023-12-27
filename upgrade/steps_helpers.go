@@ -518,8 +518,8 @@ var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx 
 	versions := strings.Split(latest, "\n")
 	for _, ver := range versions {
 		tok := strings.Fields(ver)
-		contract.Assertf(len(tok) > 0, fmt.Sprintf("no releases found in %s/%s",
-			upstreamOrg, GetContext(ctx).UpstreamProviderName))
+		contract.Assertf(len(tok) > 0, "no releases found in %s/%s",
+			upstreamOrg, GetContext(ctx).UpstreamProviderName)
 		v, err := semver.NewVersion(tok[0])
 		if err != nil {
 			return nil, err
