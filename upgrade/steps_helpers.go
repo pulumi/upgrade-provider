@@ -509,20 +509,28 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 // release.
 var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx context.Context,
 	name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
+	// TODO: use --json once https://github.com/cli/cli/issues/4572 is fixed
 	latest := stepv2.Cmd(ctx, "gh", "release", "list",
 		"--repo="+upstreamOrg+"/"+GetContext(ctx).UpstreamProviderName,
-		"--limit=1",
 		"--exclude-drafts",
 		"--exclude-pre-releases")
-
-	tok := strings.Fields(latest)
-	contract.Assertf(len(tok) > 0, fmt.Sprintf("no releases found in %s/%s",
-		upstreamOrg, GetContext(ctx).UpstreamProviderName))
-	v, err := semver.NewVersion(tok[0])
-	if err != nil {
-		return nil, err
+	
+	versions := strings.Split(latest, "\n")
+	for _, ver := range versions {
+		tok := strings.Fields(ver)
+		contract.Assertf(len(tok) > 0, "no releases found in %s/%s",
+			upstreamOrg, GetContext(ctx).UpstreamProviderName)
+		v, err := semver.NewVersion(tok[0])
+		if err != nil {
+			return nil, err
+		}
+		if v.Prerelease() != "" {
+			continue
+		}
+		return &UpstreamUpgradeTarget{Version: v}, nil
 	}
-	return &UpstreamUpgradeTarget{Version: v}, nil
+	return nil, fmt.Errorf("no non-beta releases found in %s/%s",
+	upstreamOrg, GetContext(ctx).UpstreamProviderName)
 })
 
 // Figure out what version of upstream to target by looking at specific pulumi-bot

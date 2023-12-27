@@ -43,7 +43,6 @@ func TestRemoveVersionPrefix(t *testing.T) {
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
-
 }
 
 func TestGetRepoExpectedLocation(t *testing.T) {
@@ -155,7 +154,6 @@ func TestGetExpectedTargetFromUpstream(t *testing.T) {
         "release",
         "list",
         "--repo=cloudflare/terraform-provider-cloudflare",
-        "--limit=1",
         "--exclude-drafts",
         "--exclude-pre-releases"
       ]
@@ -291,4 +289,51 @@ func TestGetExpectedTargetFromTarget(t *testing.T) {
   "Version": "2.30.0",
   "GHIssues": null
 }`))
+}
+
+func TestFromUpstreamReleasesBetaIgnored(t *testing.T) {
+	repo, name := "pulumi/pulumi-cloudflare", "cloudflare"
+
+	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
+  {
+    "name": "From Upstream Releases",
+    "inputs": [
+      "pulumi/pulumi-cloudflare",
+      "cloudflare"
+    ],
+    "outputs": [
+      {
+        "Version": "4.19.0",
+        "GHIssues": null
+      },
+      null
+    ]
+  },
+  {
+    "name": "gh",
+    "inputs": [
+      "gh",
+      [
+        "release",
+        "list",
+        "--repo=cloudflare/terraform-provider-cloudflare",
+        "--exclude-drafts",
+        "--exclude-pre-releases"
+      ]
+    ],
+    "outputs": [
+      "v4.19.0-beta1\tLatest\tv4.19.0-beta1\t2023-11-14T23:37:22Z\nv4.19.0\tv4.19.0\t2023-11-14T23:36:22Z\n",
+      null
+    ],
+    "impure": true
+  }
+]`), func(ctx context.Context) {
+		context := &Context{
+			GoPath:               "/Users/myuser/go",
+			UpstreamProviderName: "terraform-provider-cloudflare",
+		}
+		result := getExpectedTargetLatest(context.Wrap(ctx),
+			repo, name)
+		assert.NotNil(t, result)
+	})
 }
