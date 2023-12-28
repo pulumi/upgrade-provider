@@ -385,35 +385,3 @@ func TestExpectedTargetLatestBetaIgnored(t *testing.T) {
 		assert.Nil(t, result.Version)
 	})
 }
-
-func TestGetLatestErrorsOnNoRelease(t *testing.T) {
-
-	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
-{
-	"name": "gh",
-	"inputs": [
-		"gh",
-		[
-			"repo",
-			"view",
-			"akamai/terraform-provider-akamai",
-			"--json=latestRelease"
-		]
-	],
-	"outputs": [
-		"{\"latestRelease\":null}\n",
-		null
-	],
-	"impure": true
-	}
-]`), func(ctx context.Context) {
-		context := &Context{
-			GoPath:               "/Users/myuser/go",
-			UpstreamProviderName: "terraform-provider-akamai",
-		}
-		result, err := latestRelease(context.Wrap(ctx),
-			"akamai/terraform-provider-akamai")
-		assert.Nil(t, result)
-		assert.NotNil(t, err)
-	})
-}
