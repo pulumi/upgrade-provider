@@ -115,14 +115,14 @@ func TestPullRequestBody(t *testing.T) {
 }
 
 func TestGetExpectedTargetFromUpstream(t *testing.T) {
-	repo, name := "pulumi/pulumi-cloudflare", "cloudflare"
+	repo, upstreamOrg := "pulumi/pulumi-cloudflare", "cloudflare"
 
 	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
   {
     "name": "Get Expected Target",
     "inputs": [
       "`+repo+`",
-      "`+name+`"
+      "`+upstreamOrg+`"
     ],
     "outputs": [
       {
@@ -135,8 +135,7 @@ func TestGetExpectedTargetFromUpstream(t *testing.T) {
   {
     "name": "From Upstream Releases",
     "inputs": [
-      "pulumi/pulumi-cloudflare",
-      "cloudflare"
+      "`+upstreamOrg+`"
     ],
     "outputs": [
       {
@@ -170,7 +169,7 @@ func TestGetExpectedTargetFromUpstream(t *testing.T) {
 			UpstreamProviderName: "terraform-provider-cloudflare",
 		}
 		result := getExpectedTarget(context.Wrap(ctx),
-			repo, name)
+			repo, upstreamOrg)
 		assert.NotNil(t, result)
 	})
 }
