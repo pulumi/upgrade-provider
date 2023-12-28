@@ -403,21 +403,16 @@ func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
 }
 
 func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
-	resultBytes, err := exec.CommandContext(ctx, "gh", "repo", "view",
-		repo, "--json=latestRelease").Output()
-	if err != nil {
-		return nil, err
-	}
+	resultBytes := stepv2.CmdOutput(ctx, "gh", "repo", "view", repo, "--json=latestRelease")
 	var result struct {
 		Latest struct {
 			TagName string `json:"tagName"`
 		} `json:"latestRelease"`
 	}
-	err = json.Unmarshal(resultBytes, &result)
+	err := json.Unmarshal(resultBytes, &result)
 	if err != nil {
 		return nil, err
 	}
-
 	return semver.NewVersion(result.Latest.TagName)
 }
 
@@ -510,35 +505,19 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx context.Context,
 	name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
 
-	//// TODO: use --json once https://github.com/cli/cli/issues/4572 is fixed
-	//latest := stepv2.Cmd(ctx, "gh", "release", "list",
-	//	"--repo="+upstreamOrg+"/"+GetContext(ctx).UpstreamProviderName,
-	//	"--exclude-drafts",
-	//	"--exclude-pre-releases")
-	//
-	//versions := strings.Split(latest, "\n")
-	//for _, ver := range versions {
-	//	tok := strings.Fields(ver)
-	//	contract.Assertf(len(tok) > 0, "no releases found in %s/%s",
-	//		upstreamOrg, GetContext(ctx).UpstreamProviderName)
-	//	v, err := semver.NewVersion(tok[0])
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	if v.Prerelease() != "" {
-	//		continue
-	//	}
-	//	return &UpstreamUpgradeTarget{Version: v}, nil
-	//}
-	//return nil, fmt.Errorf("no non-beta releases found in %s/%s",
-	//upstreamOrg, GetContext(ctx).UpstreamProviderName)
-
 	upstreamRepo := upstreamOrg + "/" + GetContext(ctx).UpstreamProviderName
-	latest, err := latestRelease(ctx, upstreamRepo)
+
+	version, err := latestRelease(ctx, upstreamRepo)
 	if err != nil {
 		return nil, err
 	}
-	return &UpstreamUpgradeTarget{Version: latest}, nil
+	// In some cases, upstream marks non-stable releases as `latest`.
+	// Because we do not upgrade on those, we return an empty upstream target.
+	if version.Prerelease() != "" {
+		stepv2.SetLabel(ctx, "HITTINGG THIS ISSUE")
+		return &UpstreamUpgradeTarget{}, nil
+	}
+	return &UpstreamUpgradeTarget{Version: version}, nil
 })
 
 // Figure out what version of upstream to target by looking at specific pulumi-bot
