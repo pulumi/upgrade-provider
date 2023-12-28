@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,4 +71,57 @@ func TestEnv(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "result\n", result)
+}
+
+func TestCast(t *testing.T) {
+	t.Parallel()
+	type Foo struct {
+		Fizz int
+		Buzz string
+	}
+
+	t.Run("nil", func(t *testing.T) {
+		testCastNil[*Foo](t)
+		testCastNil[*int](t)
+		testCastNil[Foo](t)
+		testCastNil[[]string](t)
+		testCastNil[float64](t)
+		testCastNil[int](t)
+		testCastNil[map[int]float64](t)
+		testCastNil[string](t)
+	})
+
+	t.Run("some", func(t *testing.T) {
+		testCastNonNil(t, &Foo{Buzz: "bzzz"})
+		testCastNonNil(t, ref(3))
+		testCastNonNil(t, Foo{Fizz: 3})
+		testCastNonNil(t, []string{"a", "b"})
+		testCastNonNil(t, 2.0)
+		testCastNonNil(t, 7)
+		testCastNonNil(t, map[string]*int{"three": ref(3)})
+		testCastNonNil(t, "fizzbuzz")
+	})
+}
+
+func ref[T any](t T) *T { return &t }
+
+func testCastNil[T any](t *testing.T) {
+	var zero T
+	var untyped any
+	t.Run(reflect.TypeOf(zero).String(), func(t *testing.T) {
+		t.Parallel()
+		var actual T
+		assert.NotPanics(t, func() { actual = cast[T](untyped) })
+		assert.Equal(t, zero, actual)
+	})
+}
+
+func testCastNonNil[T any](t *testing.T, expected T) {
+	var untyped any = expected
+	t.Run(reflect.TypeOf(expected).String(), func(t *testing.T) {
+		t.Parallel()
+		var actual T
+		assert.NotPanics(t, func() { actual = cast[T](untyped) })
+		assert.Equal(t, expected, actual)
+	})
 }

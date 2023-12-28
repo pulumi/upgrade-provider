@@ -256,20 +256,10 @@ func (p *pipeline) errExit(err error) {
 
 // cast performs a type cast from src to T.
 //
-// Unlike src.(T), this cast is valid when casting from an untyped nil to a typed nil.
-func cast[T any](src any) T {
+// Unlike src.(T), this cast is valid when casting from an untyped nil.
+func cast[T any](src any) (t T) {
 	if src != nil {
-		return src.(T)
+		t = src.(T)
 	}
-	var t T
-	typ := reflect.TypeOf(t)
-	if typ == nil {
-		return t
-	}
-	switch typ.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.Slice:
-		return t
-	default:
-		return src.(T)
-	}
+	return t
 }
