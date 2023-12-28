@@ -291,49 +291,129 @@ func TestGetExpectedTargetFromTarget(t *testing.T) {
 }`))
 }
 
-func TestFromUpstreamReleasesBetaIgnored(t *testing.T) {
-	repo, name := "pulumi/pulumi-cloudflare", "cloudflare"
+func TestExpectedTargetLatest(t *testing.T) {
+	repo, name := "pulumi/pulumi-akamai", "akamai"
+	expectedVersion := "5.3.0"
 
 	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
-  {
-    "name": "From Upstream Releases",
-    "inputs": [
-      "pulumi/pulumi-cloudflare",
-      "cloudflare"
-    ],
-    "outputs": [
-      {
-        "Version": "4.19.0",
-        "GHIssues": null
-      },
-      null
-    ]
-  },
-  {
-    "name": "gh",
-    "inputs": [
-      "gh",
-      [
-        "release",
-        "list",
-        "--repo=cloudflare/terraform-provider-cloudflare",
-        "--exclude-drafts",
-        "--exclude-pre-releases"
-      ]
-    ],
-    "outputs": [
-      "v4.19.0-beta1\tLatest\tv4.19.0-beta1\t2023-11-14T23:37:22Z\nv4.19.0\tv4.19.0\t2023-11-14T23:36:22Z\n",
-      null
-    ],
-    "impure": true
-  }
+{
+	"name": "From Upstream Releases",
+	"inputs": [
+		"pulumi/pulumi-akamai",
+		"akamai"
+	],
+	"outputs": [
+		{
+		  "Version": "5.3.0",
+		  "GHIssues": null
+		},
+		null
+	]
+},
+{
+	"name": "gh",
+	"inputs": [
+		"gh",
+		[
+			"repo",
+			"view",
+			"akamai/terraform-provider-akamai",
+			"--json=latestRelease"
+		]
+	],
+	"outputs": [
+		"{\"latestRelease\":{\"name\":\"v5.3.0\",\"tagName\":\"v5.3.0\",\"url\":\"https://github.com/akamai/terraform-provider-akamai/releases/tag/v5.3.0\",\"publishedAt\":\"2023-12-07T15:22:04Z\"}}\n",
+		null
+	],
+	"impure": true
+	}
 ]`), func(ctx context.Context) {
 		context := &Context{
 			GoPath:               "/Users/myuser/go",
-			UpstreamProviderName: "terraform-provider-cloudflare",
+			UpstreamProviderName: "terraform-provider-akamai",
 		}
 		result := getExpectedTargetLatest(context.Wrap(ctx),
 			repo, name)
 		assert.NotNil(t, result)
+		assert.Equal(t, expectedVersion, result.Version)
+	})
+}
+
+func TestExpectedTargetLatestBetaIgnored(t *testing.T) {
+	repo, name := "pulumi/pulumi-akamai", "akamai"
+
+	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
+{
+	"name": "From Upstream Releases",
+	"inputs": [
+		"pulumi/pulumi-akamai",
+		"akamai"
+	],
+	"outputs": [
+		{
+		  "Version": null,
+		  "GHIssues": null
+		},
+		null
+	]
+},
+{
+	"name": "gh",
+	"inputs": [
+		"gh",
+		[
+			"repo",
+			"view",
+			"akamai/terraform-provider-akamai",
+			"--json=latestRelease"
+		]
+	],
+	"outputs": [
+		"{\"latestRelease\":{\"name\":\"v5.5.0-beta.1\",\"tagName\":\"v5.5.0-beta.1\",\"url\":\"https://github.com/akamai/terraform-provider-akamai/releases/tag/v5.5.0-beta.1\",\"publishedAt\":\"2023-12-07T15:22:04Z\"}}\n",
+		null
+	],
+	"impure": true
+	}
+]`), func(ctx context.Context) {
+		context := &Context{
+			GoPath:               "/Users/myuser/go",
+			UpstreamProviderName: "terraform-provider-akamai",
+		}
+		result := getExpectedTargetLatest(context.Wrap(ctx),
+			repo, name)
+		assert.NotNil(t, result)
+		assert.Nil(t, result.Version)
+	})
+}
+
+func TestGetLatestErrorsOnNoRelease(t *testing.T) {
+
+	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
+{
+	"name": "gh",
+	"inputs": [
+		"gh",
+		[
+			"repo",
+			"view",
+			"akamai/terraform-provider-akamai",
+			"--json=latestRelease"
+		]
+	],
+	"outputs": [
+		"{\"latestRelease\":null}\n",
+		null
+	],
+	"impure": true
+	}
+]`), func(ctx context.Context) {
+		context := &Context{
+			GoPath:               "/Users/myuser/go",
+			UpstreamProviderName: "terraform-provider-akamai",
+		}
+		result, err := latestRelease(context.Wrap(ctx),
+			"akamai/terraform-provider-akamai")
+		assert.Nil(t, result)
+		assert.NotNil(t, err)
 	})
 }

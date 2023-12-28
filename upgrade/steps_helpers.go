@@ -403,13 +403,13 @@ func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
 }
 
 func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
-	resultBytes := stepv2.CmdOutput(ctx, "gh", "repo", "view", repo, "--json=latestRelease")
+	latestInfo := stepv2.Cmd(ctx, "gh", "repo", "view", repo, "--json=latestRelease")
 	var result struct {
 		Latest struct {
 			TagName string `json:"tagName"`
 		} `json:"latestRelease"`
 	}
-	err := json.Unmarshal(resultBytes, &result)
+	err := json.Unmarshal([]byte(latestInfo), &result)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +514,6 @@ var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx 
 	// In some cases, upstream marks non-stable releases as `latest`.
 	// Because we do not upgrade on those, we return an empty upstream target.
 	if version.Prerelease() != "" {
-		stepv2.SetLabel(ctx, "HITTINGG THIS ISSUE")
 		return &UpstreamUpgradeTarget{}, nil
 	}
 	return &UpstreamUpgradeTarget{Version: version}, nil
