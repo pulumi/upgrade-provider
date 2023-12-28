@@ -477,7 +477,7 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 
 	// we do not infer version from pulumi issues, or allow a target version when checking for a new upstream release
 	if GetContext(ctx).OnlyCheckUpstream {
-		return getExpectedTargetLatest(ctx, name, upstreamOrg)
+		return getExpectedTargetLatest(ctx, upstreamOrg)
 	}
 
 	if GetContext(ctx).TargetVersion != nil {
@@ -502,17 +502,18 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 	if GetContext(ctx).InferVersion {
 		return getExpectedTargetFromIssues(ctx, name)
 	}
-	return getExpectedTargetLatest(ctx, name, upstreamOrg)
+	return getExpectedTargetLatest(ctx, upstreamOrg)
 })
 
 // getExpectedTargetLatest discovers the latest stable release and sets it on UpstreamUpgradeTarget.Version.
 // There is a lot of human error and differing conventions when discovering and defining the "latest" upstream version.
-// For our purposes, we always want to discover the highest, stable, valid Semver version of the upstream provider.
+// For our purposes, we always want to discover the highest, stable, valid semver, version of the upstream provider.
 // We do so by listing the last 30 GitHub releases, extracting the tags from the output result (we eagerly await being
 // able to get this result in json), parsing the tags into versions (filtering out any invalid or non-stable tags),
 // and sorting them.
-var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx context.Context,
-	name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
+// This is a best-effort approach. There may be edge cases in which these steps do not yield the correct latest release.
+var getExpectedTargetLatest = stepv2.Func11E("From Upstream Releases", func(ctx context.Context,
+	upstreamOrg string) (*UpstreamUpgradeTarget, error) {
 
 	upstreamRepo := upstreamOrg + "/" + GetContext(ctx).UpstreamProviderName
 	// TODO: use --json once https://github.com/cli/cli/issues/4572 is fixed
