@@ -137,25 +137,25 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		}
 
 		if GetContext(ctx).UpgradeBridgeVersion {
-			tfSDKUpgrade = stepv2.Func01E("Planning Plugin SDK Upgrade", func(ctx context.Context) (ret string, _ error) {
-				defer func() { stepv2.SetLabel(ctx, ret) }()
+			planPluginSDKUpgrade := func(ctx context.Context) (_, display string, _ error) {
+				defer func() { stepv2.SetLabel(ctx, display) }()
 				current, ok := originalGoVersionOfV2(ctx, repo, "provider/go.mod",
 					"github.com/pulumi/terraform-plugin-sdk/v2")
 				if !ok {
-					return "not found", nil
+					return "", "not found", nil
 				}
 				refs := gitRefsOfV2(ctx,
 					"https://github.com/pulumi/terraform-plugin-sdk.git", "heads")
 				currentRef, err := module.PseudoVersionRev(current.Version)
 				if err != nil {
-					return "", fmt.Errorf("unable to parse PseudoVersionRef %q: %w",
+					return "", "", fmt.Errorf("unable to parse PseudoVersionRef %q: %w",
 						current.Version, err)
 				}
 				latest := latestSemverTag("upstream-", refs)
 				currentBranch, ok := refs.labelOf(currentRef)
 				if !ok {
 					// use latest versioned branch
-					return fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
+					return "", fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
 						"latest branch at %s instead.", currentRef, latest), nil
 				}
 
@@ -168,21 +168,17 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				// We are guaranteed to get a non-nil result because there
 				// are semver tags released tags with this prefix.
 				if latest.Original() == currentBranch {
-					return fmt.Sprintf("Up to date at %s", latest), nil
+					return "", fmt.Sprintf("Up to date at %s", latest), nil
 				}
 				latestTag := fmt.Sprintf("refs/heads/upstream-%s", latest.Original())
 				latestSha, ok := refs.shaOf(latestTag)
 				contract.Assertf(ok, "Failed to lookup sha of known tag: %q not in %#v",
 					latestTag, refs.labelToRef)
 
-				// Assign out of planning function here.
-				//
-				// This is effectively the "return" part of the function.
-				//
-				// TODO: Separate display from the derived value (latestSha)
-				tfSDKTargetSHA = latestSha
-				return fmt.Sprintf("%s -> %s", currentBranch, latest), nil
-			})(ctx)
+				return latestSha, fmt.Sprintf("%s -> %s", currentBranch, latest), nil
+			}
+
+			tfSDKTargetSHA, tfSDKUpgrade = stepv2.Func02E("Planning Plugin SDK Upgrade", planPluginSDKUpgrade)(ctx)
 		}
 
 		if GetContext(ctx).UpgradePfVersion {

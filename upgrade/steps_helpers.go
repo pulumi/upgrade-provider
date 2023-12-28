@@ -407,7 +407,8 @@ var findCurrentMajorVersion = stepv2.Func21("Find Current Major Version",
 		repoCurrentVersion := latestRelease(ctx, repoOrg+"/"+repoName)
 		stepv2.SetLabelf(ctx, "%d", repoCurrentVersion.Major())
 		return repoCurrentVersion
-	})
+	},
+)
 
 var latestRelease = stepv2.Func11E("Latest Release", func(ctx context.Context, repo string) (*semver.Version, error) {
 	stepv2.SetLabelf(ctx, "of %s", repo)
