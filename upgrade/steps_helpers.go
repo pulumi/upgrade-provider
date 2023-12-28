@@ -526,18 +526,14 @@ var getExpectedTargetLatest = stepv2.Func11E("From Upstream Releases", func(ctx 
 	// Get version tags. This will become much less laborious once we can use json.
 	var tags []string
 	for _, line := range resultLines {
-		// split the result line by whitespace
-		fields := strings.Fields(line)
-		// handle empty newlines
-		if len(fields) == 0 {
+		// split the result line by tabs - there are four fields
+		fields := strings.Split(line, "\t")
+		// handle empty newlines and other nonstandard output
+		if len(fields) != 4 {
 			continue
 		}
-		// the tag name for the release is the second field of the result line.
-		tag := fields[1]
-		// except when the release is marked as Latest, then it's the third field.
-		if tag == "Latest" {
-			tag = fields[2]
-		}
+		// the tag name for the release is the third field of the result line.
+		tag := fields[2]
 		tags = append(tags, tag)
 	}
 
