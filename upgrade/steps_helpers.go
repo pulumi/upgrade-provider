@@ -505,23 +505,69 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 	return getExpectedTargetLatest(ctx, name, upstreamOrg)
 })
 
-// Figure out what version of upstream to target by searching for the latest GitHub
-// release.
+// getExpectedTargetLatest discovers the latest stable release and sets it on UpstreamUpgradeTarget.Version.
+// There is a lot of human error and differing conventions when discovering and defining the "latest" upstream version.
+// For our purposes, we always want to discover the highest, stable, valid Semver version of the upstream provider.
+// We do so by listing the last 30 GitHub releases, extracting the tags from the output result (we eagerly await being
+// able to get this result in json), parsing the tags into versions (filtering out any invalid or non-stable tags),
+// and sorting them.
 var getExpectedTargetLatest = stepv2.Func21E("From Upstream Releases", func(ctx context.Context,
 	name, upstreamOrg string) (*UpstreamUpgradeTarget, error) {
 
 	upstreamRepo := upstreamOrg + "/" + GetContext(ctx).UpstreamProviderName
+	// TODO: use --json once https://github.com/cli/cli/issues/4572 is fixed
+	releases := stepv2.Cmd(ctx, "gh", "release", "list",
+		"--repo="+upstreamRepo,
+		"--exclude-drafts",
+		"--exclude-pre-releases")
 
-	version, err := latestRelease(ctx, upstreamRepo)
-	if err != nil {
-		return nil, err
+	resultLines := strings.Split(releases, "\n")
+	// Get version tags. This will become much less laborious once we can use json.
+	var tags []string
+	for _, line := range resultLines {
+		// split the result line by whitespace
+		fields := strings.Fields(line)
+		// handle empty newlines
+		if len(fields) == 0 {
+			continue
+		}
+		// the tag name for the release is the second field of the result line.
+		tag := fields[1]
+		// except when the release is marked as Latest, then it's the third field.
+		if tag == "Latest" {
+			tag = fields[2]
+		}
+		tags = append(tags, tag)
 	}
-	// In some cases, upstream marks non-stable releases as `latest`.
-	// Because we do not upgrade on those, we return an empty upstream target.
-	if version.Prerelease() != "" {
-		return &UpstreamUpgradeTarget{}, nil
+
+	// Parse tags into versions
+	var versions []*semver.Version
+
+	for _, tag := range tags {
+		version, err := semver.NewVersion(tag)
+		if err != nil {
+			// if the version is invalid semver, we do not add it to the versions.
+			// But we also do not error, because we do not want to hard-fail if there's an unusual tag lying around.
+			continue
+		}
+		if version.Prerelease() != "" || version.Metadata() != "" {
+			// we do not consider any non-stable versions.
+			continue
+		}
+		versions = append(versions, version)
 	}
-	return &UpstreamUpgradeTarget{Version: version}, nil
+	// if we did not find any valid versions, we return.
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("no valid stable versions found in %s", upstreamRepo)
+	}
+	// Sort the versions.
+	// Documentation here: https://pkg.go.dev/github.com/Masterminds/semver/v3#readme-sorting-semantic-versions
+	sort.Sort(semver.Collection(versions))
+
+	// our target version is the last entry in the sorted versions slice
+	latestVersion := versions[len(versions)-1]
+	return &UpstreamUpgradeTarget{Version: latestVersion}, nil
+
 })
 
 // Figure out what version of upstream to target by looking at specific pulumi-bot
