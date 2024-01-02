@@ -422,15 +422,16 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 }
 
 func getGitHubPath(repoPath string) (string, error) {
-	if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
-		name := strings.TrimPrefix(repo, "terraform-provider-")
-		org, ok := ProviderOrgs[name]
-		if !ok {
-			msg := "terraform-providers based path: missing remap for '%s' (full path is %q)"
-			return "", fmt.Errorf(msg, name, repoPath)
-		}
-		repoPath = prefix + "/" + org + "/" + repo
-	}
+	//if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
+	//	name := strings.TrimPrefix(repo, "terraform-provider-")
+	//	org, ok := ProviderOrgs[name]
+	//	if !ok {
+	//		msg := "terraform-providers based path: missing remap for '%s' (full path is %q)"
+	//		return "", fmt.Errorf(msg, name, repoPath)
+	//	}
+	//	repoPath = prefix + "/" + org + "/" + repo
+	//}
+
 	return repoPath, nil
 }
 
@@ -447,11 +448,6 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 
 	// Strip version
 	repoPath = modPathWithoutVersion(repoPath)
-
-	repoPath, err := getGitHubPath(repoPath)
-	if err != nil {
-		return "", fmt.Errorf("repo location: %w", err)
-	}
 
 	// from github.com/org/repo to $GOPATH/src/github.com/org
 	expectedLocation := filepath.Join(strings.Split(repoPath, "/")...)
