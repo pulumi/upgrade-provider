@@ -182,11 +182,16 @@ func UpgradeProviderVersion(
 		// If they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func(context.Context) (string, error) {
-				path, err := getGitHostPath(ctx, goMod.Upstream.Path)
-				if err != nil {
-					return "", err
+				upstreamOrg := GetContext(ctx).UpstreamProviderOrg
+				upstreamRepo := GetContext(ctx).UpstreamProviderName
+				gitHostPath := "https://github.com/" + upstreamOrg + "/" + upstreamRepo
+
+				// special case: we need to use the GitLab url for getting git refs.
+				if upstreamOrg == "terraform-provider-gitlab" {
+					gitHostPath = "https://gitlab.com/gitlab-org/terraform-provider-gitlab"
 				}
-				refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(path),
+
+				refs, err := gitRefsOf(ctx, gitHostPath,
 					"tags")
 				if err != nil {
 					return "", err

@@ -421,17 +421,6 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 	return semver.NewVersion(result.Latest.TagName)
 }
 
-func getGitHostPath(ctx context.Context, modulePath string) (string, error) {
-	hostPath := modulePath
-	// This logic assumes that any hostpath remappings are a result of providers moving out ot the "terraform-providers"
-	// GitHub org. This holds true today but we may need to revisit in the future.
-	if prefix, repo, found := strings.Cut(modulePath, "/terraform-providers/"); found {
-		org := GetContext(ctx).UpstreamProviderOrg
-		hostPath = prefix + "/" + org + "/" + repo
-	}
-	return hostPath, nil
-}
-
 // getRepoExpectedLocation will return one of the following:
 // 1) --repo-path: if set, returns the specified repo path
 // 2) current working directory: returns the path to the cwd if it is a provider directory
