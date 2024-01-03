@@ -26,7 +26,6 @@ import (
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
-	"github.com/ryboe/q"
 )
 
 // A "git commit" step that is resilient to no changes in the directory.
@@ -51,9 +50,6 @@ var upgradeUpstreamFork = stepv2.Func31("Upgrade Forked Provider", func(ctx cont
 	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: upstreamPath})
 
 	remoteName := strings.TrimPrefix(name, "pulumi-")
-	if s, ok := ProviderName[remoteName]; ok {
-		remoteName = s
-	}
 	ensurePulumiRemote(ctx, remoteName)
 
 	stepv2.Cmd(ctx, "git", "fetch", "pulumi")
@@ -156,7 +152,6 @@ func UpgradeProviderVersion(
 	ctx context.Context, goMod *GoMod, target *semver.Version,
 	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
-	q.Q(goMod)
 	steps := []step.Step{}
 	if goMod.Kind.IsPatched() {
 		// If the provider is patched, we don't use the go module system at all. Instead
