@@ -47,6 +47,7 @@ type Context struct {
 	//	pulumi-aws
 	//
 	UpstreamProviderName string
+	UpstreamProviderOrg  string
 
 	// The desired version of pulumi/{pkg,sdk} to link to.
 	//

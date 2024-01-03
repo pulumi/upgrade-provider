@@ -192,28 +192,19 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 	}
 
 	out.UpstreamProviderOrg = stepv2.Func11("Get UpstreamOrg", func(ctx context.Context, path string) string {
-		resourceFile := filepath.Join(path, "provider", "resources.go")
-		_, found := stepv2.Stat(ctx, resourceFile)
+		//resourceFile := filepath.Join(path, "provider", "resources.go")
+		//_, found := stepv2.Stat(ctx, resourceFile)
 		var upstreamOrg string
-		if found {
-			stepv2.SetLabel(ctx, "From resources.go")
-			resourceData := stepv2.ReadFile(ctx, resourceFile)
-			resLines := strings.Split(resourceData, "\n")
+		upstreamOrg = GetContext(ctx).UpstreamProviderOrg
+		if upstreamOrg != "" {
+			stepv2.SetLabel(ctx, "From Upgrade Config")
+			return upstreamOrg
+		}
+		// fall back to attempting to read from go.mod
+		stepv2.SetLabel(ctx, "Fall back to reading from go.mod")
+		tok := strings.Split(modPathWithoutVersion(upstream.Mod.Path), "/")
+		upstreamOrg = tok[len(tok)-2]
 
-			for _, line := range resLines {
-				if strings.Contains(line, "GitHubOrg") {
-					lineSlice := strings.Split(line, "\"")
-					upstreamOrg = lineSlice[1]
-					break
-				}
-			}
-		}
-		if upstreamOrg == "" {
-			// fall back to attempting to read from go.mod
-			stepv2.SetLabel(ctx, "Fall back to reading from go.mod")
-			tok := strings.Split(modPathWithoutVersion(upstream.Mod.Path), "/")
-			upstreamOrg = tok[len(tok)-2]
-		}
 		return upstreamOrg
 	})(ctx, path)
 
