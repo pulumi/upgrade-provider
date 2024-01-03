@@ -421,18 +421,15 @@ func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
 	return semver.NewVersion(result.Latest.TagName)
 }
 
-func getGitHubPath(repoPath string) (string, error) {
-	//if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
-	//	name := strings.TrimPrefix(repo, "terraform-provider-")
-	//	org, ok := ProviderOrgs[name]
-	//	if !ok {
-	//		msg := "terraform-providers based path: missing remap for '%s' (full path is %q)"
-	//		return "", fmt.Errorf(msg, name, repoPath)
-	//	}
-	//	repoPath = prefix + "/" + org + "/" + repo
-	//}
-
-	return repoPath, nil
+func getGitHostPath(ctx context.Context, modulePath string) (string, error) {
+	hostPath := modulePath
+	// This logic assumes that any hostpath remappings are a result of providers moving out ot the "terraform-providers"
+	// GitHub org. This holds true today but we may need to revisit in the future.
+	if prefix, repo, found := strings.Cut(modulePath, "/terraform-providers/"); found {
+		org := GetContext(ctx).UpstreamProviderOrg
+		hostPath = prefix + "/" + org + "/" + repo
+	}
+	return hostPath, nil
 }
 
 // getRepoExpectedLocation will return one of the following:

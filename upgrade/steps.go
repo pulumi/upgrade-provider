@@ -26,6 +26,7 @@ import (
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
+	"github.com/ryboe/q"
 )
 
 // A "git commit" step that is resilient to no changes in the directory.
@@ -155,6 +156,7 @@ func UpgradeProviderVersion(
 	ctx context.Context, goMod *GoMod, target *semver.Version,
 	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
 ) step.Step {
+	q.Q(goMod)
 	steps := []step.Step{}
 	if goMod.Kind.IsPatched() {
 		// If the provider is patched, we don't use the go module system at all. Instead
@@ -182,10 +184,10 @@ func UpgradeProviderVersion(
 		// instead of using version tags because we can't ensure that the upstream is
 		// versioning their go modules correctly.
 		//
-		// It they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
+		// If they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func(context.Context) (string, error) {
-				path, err := getGitHubPath(goMod.Upstream.Path)
+				path, err := getGitHostPath(ctx, goMod.Upstream.Path)
 				if err != nil {
 					return "", err
 				}
