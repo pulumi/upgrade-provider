@@ -134,7 +134,7 @@ func SetLabel(ctx context.Context, label string) {
 	p.handleError([]any{err})
 }
 
-// SetLabel displays the formatted label next to the currently running step.
+// SetLabelf displays the formatted label next to the currently running step.
 //
 // The current label is transient and should be used only to inform the user.
 func SetLabelf(ctx context.Context, format string, a ...any) {

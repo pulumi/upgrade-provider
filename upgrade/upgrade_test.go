@@ -89,6 +89,37 @@ func TestInformGithubExistingPR(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestBridgeUpgradeNoop(t *testing.T) {
+	ctx := newReplay(t, "gcp_noop_bridge_update")
+	ctx = (&Context{
+		GoPath:               "/goPath",
+		UpgradeBridgeVersion: true,
+		TargetBridgeRef:      &Latest{},
+	}).Wrap(ctx)
+
+	err := step.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
+		planBridgeUpgrade(ctx, &GoMod{
+			UpstreamProviderOrg: "hashicorp",
+			Kind:                Patched,
+			Pf: module.Version{
+				Path:    "github.com/pulumi/pulumi-terraform-bridge/pf",
+				Version: "v0.23.0",
+			},
+			Bridge: module.Version{
+				Path:    "github.com/pulumi/pulumi-terraform-bridge/v3",
+				Version: "v3.70.0",
+			},
+			Upstream: module.Version{
+				Path:    "github.com/hashicorp/terraform-provider-google-beta",
+				Version: "v0.0.0",
+			},
+		})
+	})
+	require.NoError(t, err)
+
+	assert.False(t, GetContext(ctx).UpgradeBridgeVersion)
+}
+
 func newReplay(t *testing.T, name string) context.Context {
 	ctx := context.Background()
 	path := filepath.Join("testdata", "replay", name+".json")
