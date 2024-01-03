@@ -9,10 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
-	"golang.org/x/mod/module"
-
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
@@ -98,139 +94,23 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return nil
 	}
 
-	discoverSteps := []step.Step{}
+	err = stepv2.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
+		if GetContext(ctx).UpgradeBridgeVersion {
+			targetBridgeVersion = planBridgeUpgrade(ctx, goMod)
+			tfSDKTargetSHA, tfSDKUpgrade = planPluginSDKUpgrade(ctx, repo)
+		}
 
-	if GetContext(ctx).UpgradeBridgeVersion {
-		discoverSteps = append(discoverSteps,
-			step.F("Planning Bridge Update", func(context.Context) (string, error) {
-				switch v := GetContext(ctx).TargetBridgeRef.(type) {
-				case nil:
-					return "", fmt.Errorf("--target-bridge-version is required here")
-				case *HashReference:
-					targetBridgeVersion = v
-				case *Version:
-					// If our target upgrade version is the same as our
-					// current version, we skip the update.
-					if v.String() == goMod.Bridge.Version {
-						GetContext(ctx).UpgradeBridgeVersion = false
-						return fmt.Sprintf("Up to date at %s", v.String()), nil
-					}
+		if GetContext(ctx).UpgradePfVersion {
+			targetPfVersion = plantPfUpgrade(ctx, goMod)
+		}
 
-					targetBridgeVersion = v
-				case *Latest:
-					refs, err := gitRefsOf(ctx,
-						"https://github.com/pulumi/pulumi-terraform-bridge.git", "tags")
-					if err != nil {
-						return "", err
-					}
-					latest := latestSemverTag("", refs)
-					// If our target upgrade version is the same as our
-					// current version, we skip the update.
-					if latest.Original() == goMod.Bridge.Version {
-						GetContext(ctx).UpgradeBridgeVersion = false
-						return fmt.Sprintf("Up to date at %s", latest.Original()), nil
-					}
-					targetBridgeVersion = &Version{semver.MustParse(latest.Original())}
-				}
-				return fmt.Sprintf("%s -> %v", goMod.Bridge.Version, targetBridgeVersion), nil
-			}),
-			step.F("Planning Plugin SDK Update", func(context.Context) (string, error) {
-				current, ok, err := originalGoVersionOf(ctx, repo, "provider/go.mod",
-					"github.com/pulumi/terraform-plugin-sdk/v2")
-				if err != nil {
-					return "", err
-				}
-				if !ok {
-					return "not found", nil
-				}
-				refs, err := gitRefsOf(ctx,
-					"https://github.com/pulumi/terraform-plugin-sdk.git", "heads")
-				if err != nil {
-					return "", err
-				}
-				currentRef, err := module.PseudoVersionRev(current.Version)
-				if err != nil {
-					return "", fmt.Errorf("unable to parse PseudoVersionRef %q: %w",
-						current.Version, err)
-				}
-				latest := latestSemverTag("upstream-", refs)
-				currentBranch, ok := refs.labelOf(currentRef)
-				if !ok {
-					// use latest versioned branch
-					return fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
-						"latest branch at %s instead.", currentRef, latest), nil
-				}
+		if GetContext(ctx).MajorVersionBump {
+			repo.currentVersion = findCurrentMajorVersion(ctx, repoOrg, repoName)
+		}
 
-				trim := func(branch string) string {
-					const p = "refs/heads/upstream-"
-					return strings.TrimPrefix(branch, p)
-				}
-				currentBranch = trim(currentBranch)
-
-				// We are guaranteed to get a non-nil result because there
-				// are semver tags released tags with this prefix.
-				if latest.Original() == currentBranch {
-					return fmt.Sprintf("Up to date at %s", latest), nil
-				}
-				latestTag := fmt.Sprintf("refs/heads/upstream-%s", latest.Original())
-				latestSha, ok := refs.shaOf(latestTag)
-				contract.Assertf(ok, "Failed to lookup sha of known tag: %q not in %#v",
-					latestTag, refs.labelToRef)
-				tfSDKTargetSHA = latestSha
-				return fmt.Sprintf("%s -> %s", currentBranch, latest), nil
-			}).AssignTo(&tfSDKUpgrade),
-		)
-	}
-	if GetContext(ctx).UpgradePfVersion {
-		discoverSteps = append(discoverSteps,
-			step.F("Planning Plugin Framework Update", func(context.Context) (string, error) {
-				if goMod.Pf.Version == "" {
-					// PF is not used on this provider, so we disable
-					// the upgrade attempt and move on.
-					GetContext(ctx).UpgradePfVersion = false
-					return "Unused", nil
-				}
-				switch GetContext(ctx).TargetBridgeRef.(type) {
-				case *HashReference:
-					// if --target-bridge-version has specified a hash
-					// reference, use that reference for pf code as well
-					targetPfVersion = GetContext(ctx).TargetBridgeRef
-				default:
-					// in all other cases, compute the latest pf tag
-					refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
-						"tags")
-					if err != nil {
-						return "", err
-					}
-					targetVersion := latestSemverTag("pf/", refs)
-
-					// If our target upgrade version is the same as our current version, we skip the update.
-					if targetVersion.Original() == goMod.Pf.Version {
-						GetContext(ctx).UpgradePfVersion = false
-						return fmt.Sprintf("Up to date at %s", targetVersion.String()), nil
-					}
-
-					targetPfVersion = &Version{targetVersion}
-				}
-				return fmt.Sprintf("%s -> %s", goMod.Pf.Version, targetPfVersion), nil
-			}))
-	}
-
-	if GetContext(ctx).MajorVersionBump {
-		discoverSteps = append(discoverSteps,
-			step.F("Current Major Version", func(context.Context) (string, error) {
-				var err error
-				repo.currentVersion, err = latestRelease(ctx, repoOrg+"/"+repoName)
-				if err != nil {
-					return "", err
-				}
-				return fmt.Sprintf("%d", repo.currentVersion.Major()), nil
-			}))
-	}
-
-	ok := step.Run(ctx, step.Combined("Discovering Repository", discoverSteps...))
-	if !ok {
-		return ErrHandled
+	})
+	if err != nil {
+		return err
 	}
 
 	if GetContext(ctx).UpgradeJavaVersion {
@@ -243,39 +123,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				return
 			}
 
-			stepv2.Func00E("Fetching latest Java Gen", func(ctx context.Context) error {
-
-				latestJavaGen, err := latestRelease(ctx, "pulumi/pulumi-java")
-				if err != nil {
-					return fmt.Errorf("error fetching latest Java release %v", err)
-				}
-				var currentJavaGen string
-				_, exists := stepv2.Stat(ctx, ".pulumi-java-gen.version")
-				if !exists {
-					// use dummy placeholder in lieu of reading from file
-					currentJavaGen = "0.0.0"
-				} else {
-					currentJavaGen = stepv2.ReadFile(ctx, ".pulumi-java-gen.version")
-				}
-				// we do not upgrade Java if the two versions are the same
-				if latestJavaGen.String() == currentJavaGen {
-					GetContext(ctx).UpgradeJavaVersion = false
-					stepv2.Func00("Up to date at", func(ctx context.Context) {
-						stepv2.SetLabel(ctx, latestJavaGen.String())
-					})(ctx)
-					return nil
-				}
-				// Set latest Java Gen version in the context
-				GetContext(ctx).JavaVersion = latestJavaGen.String()
-				// Also set oldJavaVersion so we can report later when opening the PR
-				GetContext(ctx).oldJavaVersion = currentJavaGen
-				stepv2.Func00("Upgrading Java Gen Version", func(ctx context.Context) {
-					upgrades := fmt.Sprintf("%s -> %s", currentJavaGen, latestJavaGen.String())
-					stepv2.SetLabel(ctx, upgrades)
-				})(ctx)
-				stepv2.SetLabel(ctx, latestJavaGen.String())
-				return nil
-			})(ctx)
+			c := GetContext(ctx)
+			c.oldJavaVersion, c.JavaVersion, c.UpgradeJavaVersion = fetchLatestJavaGen(ctx)
 		})
 		if err != nil {
 			return err
@@ -453,7 +302,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		}
 	}
 
-	ok = step.Run(ctx, step.Combined("Update Repository", steps...))
+	ok := step.Run(ctx, step.Combined("Update Repository", steps...))
 	if !ok {
 		return ErrHandled
 	}

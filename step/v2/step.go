@@ -119,6 +119,9 @@ func mustGetPipeline(ctx context.Context, name string) *pipeline {
 	return p
 }
 
+// SetLabel displays label next to the currently running step.
+//
+// The current label is transient and should be used only to inform the user.
 func SetLabel(ctx context.Context, label string) {
 	p := getPipeline(ctx)
 	if p == nil {
@@ -129,6 +132,13 @@ func SetLabel(ctx context.Context, label string) {
 
 	err = p.getDisplay().Refresh(ctx, getEnvs(ctx))
 	p.handleError([]any{err})
+}
+
+// SetLabelf displays the formatted label next to the currently running step.
+//
+// The current label is transient and should be used only to inform the user.
+func SetLabelf(ctx context.Context, format string, a ...any) {
+	SetLabel(ctx, fmt.Sprintf(format, a...))
 }
 
 // Run a function against arguments and set outputs.
@@ -242,4 +252,14 @@ func (p *pipeline) handleError(outputs []any) {
 func (p *pipeline) errExit(err error) {
 	p.failed = err
 	runtime.Goexit()
+}
+
+// cast performs a type cast from src to T.
+//
+// Unlike src.(T), this cast is valid when casting from an untyped nil.
+func cast[T any](src any) (t T) {
+	if src != nil {
+		t = src.(T)
+	}
+	return t
 }

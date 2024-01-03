@@ -1,7 +1,6 @@
 package upgrade
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -345,16 +344,18 @@ func setUpstreamFromRemoteRepo(
 	return fmt.Errorf("no tag commit that matched '%s' in '%s'", rev, url)
 }
 
-func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
-	args := []string{"ls-remote", "--" + kind, url}
-	cmd := exec.CommandContext(ctx, "git", args...)
-	out := new(bytes.Buffer)
-	cmd.Stdout = out
-	if err := cmd.Run(); err != nil {
-		return gitRepoRefs{}, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
-	}
+func gitRefsOf(ctx context.Context, url, kind string) (refs gitRepoRefs, err error) {
+	err = stepv2.PipelineCtx(ctx, "shim", func(ctx context.Context) {
+		refs = gitRefsOfV2(ctx, url, kind)
+	})
+	return
+}
+
+var gitRefsOfV2 = stepv2.Func21("git refs of", func(ctx context.Context, url, kind string) gitRepoRefs {
+	out := stepv2.Cmd(ctx, "git", "ls-remote", "--"+kind, url)
+
 	branchesToRefs := map[string]string{}
-	for i, line := range strings.Split(out.String(), "\n") {
+	for i, line := range strings.Split(out, "\n") {
 		if line == "" {
 			continue
 		}
@@ -364,9 +365,8 @@ func gitRefsOf(ctx context.Context, url, kind string) (gitRepoRefs, error) {
 			i, line)
 		branchesToRefs[parts[1]] = parts[0]
 	}
-	return gitRepoRefs{branchesToRefs, kind}, nil
-
-}
+	return gitRepoRefs{branchesToRefs, kind}
+})
 
 type gitRepoRefs struct {
 	labelToRef map[string]string
@@ -402,24 +402,35 @@ func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
 	return labels
 }
 
-func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
-	resultBytes, err := exec.CommandContext(ctx, "gh", "repo", "view",
-		repo, "--json=latestRelease").Output()
-	if err != nil {
-		return nil, err
-	}
+var findCurrentMajorVersion = stepv2.Func21("Find Current Major Version",
+	func(ctx context.Context, repoOrg, repoName string) *semver.Version {
+		repoCurrentVersion := latestRelease(ctx, repoOrg+"/"+repoName)
+		stepv2.SetLabelf(ctx, "%d", repoCurrentVersion.Major())
+		return repoCurrentVersion
+	},
+)
+
+var latestRelease = stepv2.Func11E("Latest Release", func(ctx context.Context, repo string) (*semver.Version, error) {
+	stepv2.SetLabelf(ctx, "of %s", repo)
+	resultString := stepv2.Cmd(ctx, "gh", "repo", "view",
+		repo, "--json=latestRelease")
 	var result struct {
 		Latest struct {
 			TagName string `json:"tagName"`
 		} `json:"latestRelease"`
 	}
-	err = json.Unmarshal(resultBytes, &result)
+	err := json.Unmarshal([]byte(resultString), &result)
 	if err != nil {
 		return nil, err
 	}
 
-	return semver.NewVersion(result.Latest.TagName)
-}
+	v, err := semver.NewVersion(result.Latest.TagName)
+	if err == nil {
+		stepv2.SetLabelf(ctx, "of %s: %s", repo, v)
+	}
+
+	return v, err
+})
 
 func getGitHubPath(repoPath string) (string, error) {
 	if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
