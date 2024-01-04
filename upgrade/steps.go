@@ -191,8 +191,7 @@ func UpgradeProviderVersion(
 					gitHostPath = "https://gitlab.com/gitlab-org/terraform-provider-gitlab"
 				}
 
-				refs, err := gitRefsOf(ctx, gitHostPath,
-					"tags")
+				refs, err := gitRefsOf(ctx, gitHostPath, "tags")
 				if err != nil {
 					return "", err
 				}
