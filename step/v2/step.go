@@ -202,30 +202,10 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 				outputs[i] = v.Interface()
 			}
 		} else {
-			// Hydrate complex objects by round-tripping them through JSON.
 			fType := reflect.TypeOf(f)
-			for i := 0; i < fType.NumOut(); i++ {
-				t := fType.Out(i)
-				v := reflect.New(t)
-				v.Elem().Set(reflect.Zero(t))
-
-				if retImmediatly.Out[i] == nil {
-					outputs[i] = v.Elem().Interface()
-					continue
-				}
-				b, err := json.Marshal(retImmediatly.Out[i])
-				if err != nil {
-					panic(err)
-				}
-
-				p.handleError([]any{err})
-				err = json.Unmarshal(b, v.Interface())
-				if err != nil {
-					panic(err)
-				}
-				p.handleError([]any{err})
-				outputs[i] = v.Elem().Interface()
-			}
+			// Hydrate the saved outputs back from JSON.
+			err := hydrateTo(retImmediatly.Out, outputs, fType.Out)
+			p.handleError([]any{err})
 			// This call is mocked, so just set the output
 			// copy(outputs, retImmediatly.Out)
 		}
@@ -239,6 +219,51 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	if p.failed != nil {
 		runtime.Goexit()
 	}
+}
+
+// Hydrate dst with the values from src, type-correcting as necessary.
+//
+// The primary type correction performed is converting map[string]any to `struct SomeValue {...}`.
+//
+// It is legal for src to equal dst.
+func hydrateTo(src []any, dst []any, typ func(int) reflect.Type) error {
+	contract.Assertf(len(src) == len(dst),
+		"src must have same length as dst")
+	for i := 0; i < len(src); i++ {
+		t := typ(i)
+
+		// If the src is nil, construct a valid empty value and set that.
+		if src[i] == nil {
+			v := reflect.New(t)
+			dst[i] = v.Elem().Interface()
+			continue
+		}
+
+		// If a trivial assignment is ok, then do that.
+		if reflect.TypeOf(src[i]).AssignableTo(t) {
+			dst[i] = src[i]
+			continue
+		}
+
+		// A trivial assignment is not ok, so we need to round-trip through a type
+		// aware format. For example, this allows converting a map[string]any to a
+		// matching struct.
+		v := reflect.New(t)
+		v.Elem().Set(reflect.Zero(t))
+
+		b, err := json.Marshal(src[i])
+		if err != nil {
+			return err
+		}
+
+		err = json.Unmarshal(b, v.Interface())
+		if err != nil {
+			return err
+		}
+
+		dst[i] = v.Elem().Interface()
+	}
+	return nil
 }
 
 func (p *pipeline) handleError(outputs []any) {

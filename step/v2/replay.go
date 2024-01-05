@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -315,10 +316,69 @@ func MarkImpure(ctx context.Context) {
 }
 
 func IsReplay(ctx context.Context) bool {
+	return getReplay(ctx) != nil
+}
+
+func getReplay(ctx context.Context) *Replay {
 	for _, v := range getEnvs(ctx) {
-		if _, ok := v.(*Replay); ok {
-			return true
+		if r, ok := v.(*Replay); ok {
+			return r
 		}
 	}
-	return false
+	return nil
+}
+
+// Call the function f (named name) that was created with step.FuncXY on the arguments
+// that the replay associated with ctx has recorded.
+//
+// This function will panic if f cannot be called. This may be because:
+//
+// - f is impure.
+// - name could not be found in the current replay.
+// - CallWithReplay could not fit the found arguments from name to f.
+//
+// It is expected that this function is used only in tests.
+func CallWithReplay(ctx context.Context, pipeline, fnName string, f any) error {
+	r := *getReplay(ctx) // Don't mutate the replay
+
+	r.setPipeline(pipeline)
+
+	fType := reflect.TypeOf(f)
+	if fType.Kind() != reflect.Func {
+		r.t.Fatalf("f must be a func")
+	}
+
+	stepN := r.findNextStep(fnName)
+	if stepN == -1 {
+		r.t.Fatalf("Could not find replay for %q to call", fnName)
+	}
+	step := r.steps[stepN]
+	if step.Impure {
+		r.t.Fatalf("Cannot call %q for replay: %[1]q is impure", fnName)
+	}
+
+	inputs := make([]any, fType.NumIn()-1) // Excluding the mandatory context.Context
+
+	err := json.Unmarshal(step.Inputs, &inputs)
+	if err != nil {
+		r.t.Fatalf("Failed to unmarshal step %q args: %s", fnName, err.Error())
+	}
+
+	// Perform a type-correcting unmarshal from inputs to inputs.
+	//
+	// inputs[1:] since we want to skip the initial context.Context.
+	err = hydrateTo(inputs, inputs,
+		func(i int) reflect.Type { return fType.In(i + 1) })
+	if err != nil {
+		r.t.Fatalf("Failed to hydrate step %s args: %s", fnName, err.Error())
+	}
+
+	return PipelineCtx(ctx, pipeline, func(ctx context.Context) {
+		callValues := make([]reflect.Value, fType.NumIn())
+		callValues[0] = reflect.ValueOf(ctx)
+		for i := 0; i < len(inputs); i++ {
+			callValues[i+1] = reflect.ValueOf(inputs[i])
+		}
+		reflect.ValueOf(f).Call(callValues)
+	})
 }
