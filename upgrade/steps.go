@@ -50,9 +50,6 @@ var upgradeUpstreamFork = stepv2.Func31("Upgrade Forked Provider", func(ctx cont
 	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: upstreamPath})
 
 	remoteName := strings.TrimPrefix(name, "pulumi-")
-	if s, ok := ProviderName[remoteName]; ok {
-		remoteName = s
-	}
 	ensurePulumiRemote(ctx, remoteName)
 
 	stepv2.Cmd(ctx, "git", "fetch", "pulumi")
@@ -182,15 +179,19 @@ func UpgradeProviderVersion(
 		// instead of using version tags because we can't ensure that the upstream is
 		// versioning their go modules correctly.
 		//
-		// It they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
+		// If they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func(context.Context) (string, error) {
-				path, err := getGitHubPath(goMod.Upstream.Path)
-				if err != nil {
-					return "", err
+				upstreamOrg := GetContext(ctx).UpstreamProviderOrg
+				upstreamRepo := GetContext(ctx).UpstreamProviderName
+				gitHostPath := "https://github.com/" + upstreamOrg + "/" + upstreamRepo
+
+				// special case: we need to use the GitLab url for getting git refs.
+				if upstreamOrg == "terraform-provider-gitlab" {
+					gitHostPath = "https://gitlab.com/gitlab-org/terraform-provider-gitlab"
 				}
-				refs, err := gitRefsOf(ctx, "https://"+modPathWithoutVersion(path),
-					"tags")
+
+				refs, err := gitRefsOf(ctx, gitHostPath, "tags")
 				if err != nil {
 					return "", err
 				}

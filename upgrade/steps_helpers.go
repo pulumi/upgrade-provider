@@ -432,19 +432,6 @@ var latestRelease = stepv2.Func11E("Latest Release", func(ctx context.Context, r
 	return v, err
 })
 
-func getGitHubPath(repoPath string) (string, error) {
-	if prefix, repo, found := strings.Cut(repoPath, "/terraform-providers/"); found {
-		name := strings.TrimPrefix(repo, "terraform-provider-")
-		org, ok := ProviderOrgs[name]
-		if !ok {
-			msg := "terraform-providers based path: missing remap for '%s' (full path is %q)"
-			return "", fmt.Errorf(msg, name, repoPath)
-		}
-		repoPath = prefix + "/" + org + "/" + repo
-	}
-	return repoPath, nil
-}
-
 // getRepoExpectedLocation will return one of the following:
 // 1) --repo-path: if set, returns the specified repo path
 // 2) current working directory: returns the path to the cwd if it is a provider directory
@@ -458,11 +445,6 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 
 	// Strip version
 	repoPath = modPathWithoutVersion(repoPath)
-
-	repoPath, err := getGitHubPath(repoPath)
-	if err != nil {
-		return "", fmt.Errorf("repo location: %w", err)
-	}
 
 	// from github.com/org/repo to $GOPATH/src/github.com/org
 	expectedLocation := filepath.Join(strings.Split(repoPath, "/")...)
