@@ -99,23 +99,8 @@ func TestBridgeUpgradeNoop(t *testing.T) {
 		UpstreamProviderOrg:  "hashicorp",
 	}).Wrap(ctx)
 
-	err := step.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
-		planBridgeUpgrade(ctx, &GoMod{
-			Kind: Patched,
-			Pf: module.Version{
-				Path:    "github.com/pulumi/pulumi-terraform-bridge/pf",
-				Version: "v0.23.0",
-			},
-			Bridge: module.Version{
-				Path:    "github.com/pulumi/pulumi-terraform-bridge/v3",
-				Version: "v3.70.0",
-			},
-			Upstream: module.Version{
-				Path:    "github.com/hashicorp/terraform-provider-google-beta",
-				Version: "v0.0.0",
-			},
-		})
-	})
+	err := step.CallWithReplay(ctx, "Plan Upgrade",
+		"Planning Bridge Upgrade", planBridgeUpgrade)
 	require.NoError(t, err)
 
 	assert.False(t, GetContext(ctx).UpgradeBridgeVersion)
