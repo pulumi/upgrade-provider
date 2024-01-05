@@ -357,8 +357,7 @@ func CallWithReplay(ctx context.Context, pipeline, fnName string, f any) error {
 		r.t.Fatalf("Cannot call %q for replay: %[1]q is impure", fnName)
 	}
 
-	inputs := make([]any, fType.NumIn()-1) // Excluding the mandatory context.Context
-
+	var inputs []any
 	err := json.Unmarshal(step.Inputs, &inputs)
 	if err != nil {
 		r.t.Fatalf("Failed to unmarshal step %q args: %s", fnName, err.Error())
