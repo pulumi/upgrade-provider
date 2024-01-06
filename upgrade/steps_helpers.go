@@ -4,20 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
-
-	"github.com/Masterminds/semver/v3"
-	"golang.org/x/mod/modfile"
-	"golang.org/x/mod/module"
-
-	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
-
-	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
 func modPathWithoutVersion(path string) string {
@@ -440,21 +436,6 @@ var latestReleaseVersion = stepv2.Func11E("Latest Release Version",
 			stepv2.SetLabelf(ctx, "of %s: %s", repo, v)
 		}
 		return v, err
-	})
-
-var latestReleaseDate = stepv2.Func11E("Latest Release Date",
-	func(ctx context.Context, repo string) (time.Time, error) {
-		stepv2.SetLabelf(ctx, "of %s", repo)
-		rel, err := latestReleaseInfo(ctx, repo)
-		if err != nil {
-			return time.Time{}, err //TODO": make this better
-		}
-		stepv2.SetLabelf(ctx, "%s published at %s", repo, rel.Latest.PublishedAt)
-		date, err := time.Parse(time.RFC3339, rel.Latest.PublishedAt)
-		if err == nil {
-			stepv2.SetLabelf(ctx, "of %s: %s", repo, date)
-		}
-		return time.Parse(time.RFC3339, rel.Latest.PublishedAt)
 	})
 
 // getRepoExpectedLocation will return one of the following:

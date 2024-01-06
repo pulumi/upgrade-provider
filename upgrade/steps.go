@@ -268,18 +268,31 @@ var maintenanceRelease = stepv2.Func10E("Check if we should release a maintenanc
 	repo ProviderRepo,
 ) error {
 	repoWithOrg := repo.org + "/" + repo.name
-	// there are 24 * 7 * 8 = 1344 hours in 8 weeks.
+	// We ensure a release at least every 8-9 weeks, concurrent with a bridge update.
+	// There are 24 * 7 * 8 = 1344 hours in 8 weeks.
 	releaseCadence, err := time.ParseDuration("1344h")
 	if err != nil {
 		return err
 	}
-	releaseDate := latestReleaseDate(ctx, repoWithOrg)
+
+	relInfo, err := latestReleaseInfo(ctx, repoWithOrg)
+	if err != nil {
+		return err
+	}
+
+	releaseDate, err := time.Parse(time.RFC3339, relInfo.Latest.PublishedAt)
+	if err != nil {
+		return err
+	}
+
+	stepv2.SetLabelf(ctx, "Last provider release date: %s", relInfo.Latest.PublishedAt)
 	ago := time.Since(releaseDate).Abs()
 	if ago > releaseCadence {
-		stepv2.SetLabel(ctx, "Last provider release was more than 8 weeks ago - marking upgrade for patch release.")
+		stepv2.SetLabelf(
+			ctx, "Last provider release date: %s. Marking for patch release.", relInfo.Latest.PublishedAt,
+		)
 		GetContext(ctx).MaintenancePatch = true
 	}
-	stepv2.SetLabel(ctx, "Last provider release was within 8 weeks. No upgrade patch needed.")
 	return nil
 })
 
