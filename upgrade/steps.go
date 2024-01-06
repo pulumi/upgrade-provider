@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	semver "github.com/Masterminds/semver/v3"
 	"golang.org/x/mod/modfile"
@@ -262,6 +263,26 @@ func UpgradeProviderVersion(
 	return step.Combined("Update TF Provider", steps...)
 }
 
+var maintenanceRelease = stepv2.Func10E("Check if we should release a maintenance patch", func(
+	ctx context.Context,
+	repo ProviderRepo,
+) error {
+	repoWithOrg := repo.org + "/" + repo.name
+	// there are 24 * 7 * 8 = 1344 hours in 8 weeks.
+	releaseCadence, err := time.ParseDuration("1344h")
+	if err != nil {
+		return err
+	}
+	releaseDate := latestReleaseDate(ctx, repoWithOrg)
+	ago := time.Since(releaseDate).Abs()
+	if ago > releaseCadence {
+		stepv2.SetLabel(ctx, "Last provider release was more than 8 weeks ago - marking upgrade for patch release.")
+		GetContext(ctx).MaintenancePatch = true
+	}
+	stepv2.SetLabel(ctx, "Last provider release was within 8 weeks. No upgrade patch needed.")
+	return nil
+})
+
 var InformGitHub = stepv2.Func70E("Inform Github", func(
 	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
@@ -306,7 +327,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 			"--body", prBody)
 	} else {
 		addLabels := []string{}
-		// We only create release labels when we are running the full pulumi
+		// We create release labels when we are running the full pulumi
 		// providers process: i.e. when we discovered issues to close at the
 		// beginning of the pipeline.
 		if c.UpgradeProviderVersion && len(target.GHIssues) > 0 {
@@ -314,6 +335,12 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 			if label != "" {
 				addLabels = []string{"--label", label}
 			}
+		}
+
+		// On non-upstream upgrades, we will create a patch release label
+		// if the provider hasn't been released in 8 weeks.
+		if c.MaintenancePatch && !c.UpgradeProviderVersion {
+			addLabels = []string{"--label", "needs-release/patch"}
 		}
 
 		stepv2.Cmd(ctx, "gh",
@@ -327,7 +354,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 				addLabels...)...)
 	}
 
-	// If we are only upgrading the bridge, we wont have a list of issues.
+	// If we are only upgrading the bridge, we won't have a list of issues.
 	if !c.UpgradeProviderVersion {
 		return nil
 	}
@@ -1063,8 +1090,7 @@ var plantPfUpgrade = stepv2.Func11E("Planning Plugin Framework Upgrade", func(
 })
 
 var fetchLatestJavaGen = stepv2.Func03("Fetching latest Java Gen", func(ctx context.Context) (string, string, bool) {
-	latestJavaGen := latestRelease(ctx, "pulumi/pulumi-java")
-
+	latestJavaGen := latestReleaseVersion(ctx, "pulumi/pulumi-java")
 	var currentJavaGen string
 	_, exists := stepv2.Stat(ctx, ".pulumi-java-gen.version")
 	if !exists {

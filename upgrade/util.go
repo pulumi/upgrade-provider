@@ -40,6 +40,12 @@ type Context struct {
 
 	UpgradeJavaVersion bool
 
+	// We want to regularly patch a provider with bridge and vulnerability updates, even if there is no upstream release.
+	// During a bridge upgrade, which happens at least weekly,  if it has been more than 8 weeks since the latest
+	// release of this provider, this field will be set to True and a patch release will be triggered.
+	// patch release will be triggered on the
+	MaintenancePatch bool
+
 	// The unqualified name of the upstream provider.
 	//
 	// As an example, Pulumi's AWS provider has:

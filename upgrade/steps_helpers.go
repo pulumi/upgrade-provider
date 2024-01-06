@@ -406,7 +406,7 @@ func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
 
 var findCurrentMajorVersion = stepv2.Func21("Find Current Major Version",
 	func(ctx context.Context, repoOrg, repoName string) *semver.Version {
-		repoCurrentVersion := latestRelease(ctx, repoOrg+"/"+repoName)
+		repoCurrentVersion := latestReleaseVersion(ctx, repoOrg+"/"+repoName)
 		stepv2.SetLabelf(ctx, "%d", repoCurrentVersion.Major())
 		return repoCurrentVersion
 	},
@@ -419,46 +419,43 @@ type releaseInfo struct {
 	} `json:"latestRelease"`
 }
 
-var latestReleaseWithInfo = stepv2.Func11E("Latest Release Info", func(ctx context.Context, repo string) (releaseInfo, error) {
-	stepv2.SetLabelf(ctx, "for %s", repo)
+func latestReleaseInfo(ctx context.Context, repo string) (releaseInfo, error) {
 	var info releaseInfo
 	resultString := stepv2.Cmd(ctx, "gh", "repo", "view",
 		repo, "--json=latestRelease")
 	err := json.Unmarshal([]byte(resultString), &info)
+
 	return info, err
-})
-
-func latestRelease(ctx context.Context, repo string) (*semver.Version, error) {
-	rel := latestReleaseWithInfo(ctx, repo)
-	return semver.NewVersion(rel.Latest.TagName)
 }
 
-func latestReleaseDate(ctx context.Context, repo string) (time.Time, error) {
-	rel := latestReleaseWithInfo(ctx, repo)
-	return time.Parse(time.RFC3339, rel.Latest.PublishedAt)
-}
+var latestReleaseVersion = stepv2.Func11E("Latest Release Version",
+	func(ctx context.Context, repo string) (*semver.Version, error) {
+		stepv2.SetLabelf(ctx, "of %s", repo)
+		rel, err := latestReleaseInfo(ctx, repo)
+		if err != nil {
+			return nil, err
+		}
+		v, err := semver.NewVersion(rel.Latest.TagName)
+		if err == nil {
+			stepv2.SetLabelf(ctx, "of %s: %s", repo, v)
+		}
+		return v, err
+	})
 
-//var latestRelease = stepv2.Func11E("Latest Release", func(ctx context.Context, repo string) (*semver.Version, error) {
-//	stepv2.SetLabelf(ctx, "of %s", repo)
-//	resultString := stepv2.Cmd(ctx, "gh", "repo", "view",
-//		repo, "--json=latestRelease")
-//	var result struct {
-//		Latest struct {
-//			TagName string `json:"tagName"`
-//		} `json:"latestRelease"`
-//	}
-//	err := json.Unmarshal([]byte(resultString), &result)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	v, err := semver.NewVersion(result.Latest.TagName)
-//	if err == nil {
-//		stepv2.SetLabelf(ctx, "of %s: %s", repo, v)
-//	}
-//
-//	return v, err
-//})
+var latestReleaseDate = stepv2.Func11E("Latest Release Date",
+	func(ctx context.Context, repo string) (time.Time, error) {
+		stepv2.SetLabelf(ctx, "of %s", repo)
+		rel, err := latestReleaseInfo(ctx, repo)
+		if err != nil {
+			return time.Time{}, err //TODO": make this better
+		}
+		stepv2.SetLabelf(ctx, "%s published at %s", repo, rel.Latest.PublishedAt)
+		date, err := time.Parse(time.RFC3339, rel.Latest.PublishedAt)
+		if err == nil {
+			stepv2.SetLabelf(ctx, "of %s: %s", repo, date)
+		}
+		return time.Parse(time.RFC3339, rel.Latest.PublishedAt)
+	})
 
 // getRepoExpectedLocation will return one of the following:
 // 1) --repo-path: if set, returns the specified repo path
