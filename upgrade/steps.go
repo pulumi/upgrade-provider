@@ -263,10 +263,10 @@ func UpgradeProviderVersion(
 	return step.Combined("Update TF Provider", steps...)
 }
 
-var maintenanceRelease = stepv2.Func10E("Check if we should release a maintenance patch", func(
+var maintenanceRelease = stepv2.Func11E("Check if we should release a maintenance patch", func(
 	ctx context.Context,
 	repo ProviderRepo,
-) error {
+) (bool, error) {
 	repoWithOrg := repo.org + "/" + repo.name
 	// We ensure a release at least every 8-9 weeks, concurrent with a bridge update.
 	// There are 24 * 7 * 8 = 1344 hours in 8 weeks.
@@ -274,12 +274,12 @@ var maintenanceRelease = stepv2.Func10E("Check if we should release a maintenanc
 
 	relInfo, err := latestReleaseInfo(ctx, repoWithOrg)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	releaseDate, err := time.Parse(time.RFC3339, relInfo.Latest.PublishedAt)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	stepv2.SetLabelf(ctx, "Last provider release date: %s", relInfo.Latest.PublishedAt)
@@ -289,9 +289,9 @@ var maintenanceRelease = stepv2.Func10E("Check if we should release a maintenanc
 		stepv2.SetLabelf(
 			ctx, "Last provider release date: %s. Marking for patch release.", relInfo.Latest.PublishedAt,
 		)
-		GetContext(ctx).MaintenancePatch = true
+		return true, nil
 	}
-	return nil
+	return false, nil
 })
 
 var InformGitHub = stepv2.Func70E("Inform Github", func(

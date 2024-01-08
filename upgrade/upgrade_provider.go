@@ -102,8 +102,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		if GetContext(ctx).UpgradeBridgeVersion {
 			targetBridgeVersion = planBridgeUpgrade(ctx, goMod)
 			tfSDKTargetSHA, tfSDKUpgrade = planPluginSDKUpgrade(ctx, repo)
-			// Check if we need to release a maintenance patch
-			maintenanceRelease(ctx, repo)
+			// Check if we need to release a maintenance patch and set context if so
+			GetContext(ctx).MaintenancePatch = maintenanceRelease(ctx, repo)
 		}
 
 		if GetContext(ctx).UpgradePfVersion {
