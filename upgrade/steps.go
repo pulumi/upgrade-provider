@@ -182,7 +182,7 @@ func UpgradeProviderVersion(
 		// If they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func(context.Context) (string, error) {
-				upstreamOrg := GetContext(ctx).UpstreamProviderOrg
+				upstreamOrg := goMod.UpstreamProviderOrg
 				upstreamRepo := GetContext(ctx).UpstreamProviderName
 				gitHostPath := "https://github.com/" + upstreamOrg + "/" + upstreamRepo
 
