@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ryboe/q"
 	"io"
 	"os"
 	"sort"
@@ -67,14 +66,11 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		repo.root = OrgProviderRepos(ctx, repoOrg, repoName)
 		repo.defaultBranch = pullDefaultBranch(ctx, "origin")
 		goMod = getRepoKind(ctx, repo)
-		q.Q(goMod)
-		q.Q(GetContext(ctx).UpstreamProviderOrg)
 
+		// If we do not have the upstream provider org set in the .upgrade-config.yml, we infer it from the go mod path.
 		if GetContext(ctx).UpstreamProviderOrg == "" {
 			GetContext(ctx).UpstreamProviderOrg = getUpstreamProviderOrg(ctx, goMod.Upstream)
 		}
-		q.Q(GetContext(ctx).UpstreamProviderOrg)
-
 		if GetContext(ctx).UpgradeProviderVersion {
 			upgradeTarget = planProviderUpgrade(ctx, repoOrg, repoName, goMod, &repo)
 		}

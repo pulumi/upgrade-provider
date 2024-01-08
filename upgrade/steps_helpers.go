@@ -471,7 +471,7 @@ var getExpectedTarget = stepv2.Func11("Get Expected Target", func(ctx context.Co
 
 	// we do not infer version from pulumi issues, or allow a target version when checking for a new upstream release
 	if GetContext(ctx).OnlyCheckUpstream {
-		return getExpectedTargetLatest(ctx) //TODO: remove: note that this is using the GH REPO ORG, not a go module org
+		return getExpectedTargetLatest(ctx)
 	}
 
 	if GetContext(ctx).TargetVersion != nil {

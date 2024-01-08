@@ -1092,3 +1092,13 @@ var fetchLatestJavaGen = stepv2.Func03("Fetching latest Java Gen", func(ctx cont
 	stepv2.SetLabel(ctx, latestJavaGen.String())
 	return currentJavaGen, latestJavaGen.String(), true
 })
+
+var getUpstreamProviderOrg = stepv2.Func11("Get UpstreamOrg from go.mod", func(ctx context.Context, upstreamMod module.Version) string {
+	// We expect tokens to be of the form:
+	//
+	//	github.com/${org}/${repo}/${path}
+	//
+	// The second chunk is the org name.
+	tok := strings.Split(modPathWithoutVersion(upstreamMod.Path), "/")
+	return tok[1]
+})

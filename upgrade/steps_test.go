@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/mod/module"
 	"os"
 	"testing"
 
@@ -266,4 +267,34 @@ func TestReleaseLabel(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
+}
+
+func TestGetUpstreamProviderOrgFromModfile(t *testing.T) {
+
+	upstreamVersion := module.Version{Path: "github.com/testing-org/terraform-provider-datadog", Version: "v0.0.0"}
+
+	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
+	{
+          "name": "Get UpstreamOrg from go.mod",
+          "inputs": [
+            {
+              "Path": "github.com/testing-org/terraform-provider-datadog",
+              "Version": "v0.0.0"
+            }
+          ],
+          "outputs": [
+            "testing-org",
+            null
+          ]
+        }
+]`), func(ctx context.Context) {
+		context := &Context{
+			GoPath:               "/Users/myuser/go",
+			UpstreamProviderName: "terraform-provider-datadog",
+			UpstreamProviderOrg:  "",
+		}
+		result := getUpstreamProviderOrg(context.Wrap(ctx), upstreamVersion)
+		assert.NotNil(t, result)
+		assert.Equal(t, result, "testing-org")
+	})
 }
