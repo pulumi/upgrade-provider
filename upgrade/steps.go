@@ -338,19 +338,19 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 			"--body", prBody)
 	} else {
 		addLabels := []string{}
+
+		switch {
 		// We create release labels when we are running the full pulumi
 		// providers process: i.e. when we discovered issues to close at the
 		// beginning of the pipeline.
-		if c.UpgradeProviderVersion && len(target.GHIssues) > 0 {
+		case c.UpgradeProviderVersion && len(target.GHIssues) > 0:
 			label := upgradeLabel(ctx, repo.currentUpstreamVersion, target.Version)
 			if label != "" {
 				addLabels = []string{"--label", label}
 			}
-		}
-
 		// On non-upstream upgrades, we will create a patch release label
 		// if the provider hasn't been released in 8 weeks.
-		if c.MaintenancePatch && !c.UpgradeProviderVersion {
+		case c.MaintenancePatch && !c.UpgradeProviderVersion:
 			addLabels = []string{"--label", "needs-release/patch"}
 		}
 
