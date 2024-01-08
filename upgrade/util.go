@@ -48,9 +48,9 @@ type Context struct {
 	//
 	UpstreamProviderName string
 	// The org component in the upstream provider's repo path.
-	// 
-	// This must be provided when upstream is hosted at a repo that does 
-	// not match the Go Module path it is declared as. Otherwise it can 
+	//
+	// This must be provided when upstream is hosted at a repo that does
+	// not match the Go Module path it is declared as. Otherwise it can
 	// be inferred.
 	//
 	// For example, if we have an upstream provider with import path:
@@ -62,7 +62,7 @@ type Context struct {
 	//	github.com/my-org/terraform-provider-my-provider
 	//
 	// Then UpstreamProviderOrg should be `my-org`.
-	UpstreamProviderOrg  string
+	UpstreamProviderOrg string
 
 	// The desired version of pulumi/{pkg,sdk} to link to.
 	//

@@ -18,14 +18,13 @@ import (
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/upgrade-provider/colorize"
+	"github.com/pulumi/upgrade-provider/step"
+	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 	goSemver "golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
-
-	"github.com/pulumi/upgrade-provider/colorize"
-	"github.com/pulumi/upgrade-provider/step"
-	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
 // A "git commit" step that is resilient to no changes in the directory.
