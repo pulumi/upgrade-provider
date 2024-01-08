@@ -53,20 +53,38 @@ Usage:
   upgrade-provider <provider> [flags]
 
 Flags:
+      --allow-missing-docs              If true, don't error on missing docs during tfgen.
+                                        This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.
       --experimental                    Enable experimental features, such as auto token mapping and auto aliasing
   -h, --help                            help for upgrade-provider
+      --java-version string             The version of pulumi-java-gen to target.
       --kind strings                    The kind of upgrade to perform:
-                                        - "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code".
+                                        - "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code,pf".
                                         - "bridge":  Upgrade the bridge only.
                                         - "provider": Upgrade the upstream provider only.
-                                        - "sdk": Upgrade the Pulumi sdk only.
-                                        - "code":     Perform some number of code migrations. (default [all])
+                                        - "pf": Upgrade the Plugin Framework only.
+                                        - "code":     Perform some number of code migrations.
+                                        - "check-upstream-version": Determine if we need to upgrade the upstream provider. For use in CI only." (default [all])
       --major                           Upgrade the provider to a new major version.
+      --migration-opts strings          A comma separated list of code migration to perform:
+                                        - "autoalias": Apply auto aliasing to the provider.
+      --pr-assign string                A user to assign the upgrade PR to. (default "@me")
+      --pr-description string           Extra text to insert in the generated pull request description.
+      --pr-reviewers string             A comma separated list of reviewers to assign the upgrade PR to.
+      --remove-plugins                  Remove all pulumi plugins from cache before running the upgrade.
+                                                        It is possible that the generated examples may be non-deterministic depending on which
+                                                        plugins are used if existing versions are present in the cache.
+      --repo-path string                Clone the provider repo to the specified path.
+      --target-bridge-version ref       The desired bridge version to upgrade to. Git hash references permitted. (default <latest>)
+      --target-pulumi-version ref       Upgrade the provider to the passed pulumi/{pkg,sdk} version.
+                                        
+                                        If no version is passed, the pulumi/{pkg,sdk} version will track the bridge
       --target-version string           Upgrade the provider to the passed version.
-
+                                        
                                         If the passed version does not exist, an error is signaled.
       --upstream-provider-name string   The name of the upstream provider.
                                         Required unless running from provider root and set in upgrade-config.yml.
+      --upstream-provider-org string    The name of the upstream provider's GitHub organization'.
 ```
 
 A typical run for a patched provider with an upgrade configuration file will look like this:
@@ -133,6 +151,7 @@ Repeat as necessary for a working upgrade.
 
    ```yaml---
      upstream-provider-name: terraform-provider-snowflake
+     upstream-provider-org: Snowflake-Labs
    ```
 
 2. Add the [Pulumi Upgrade Provider Action](https://github.com/pulumi/pulumi-upgrade-provider-action)
