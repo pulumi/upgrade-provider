@@ -9,6 +9,7 @@ import (
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
+
 	"os"
 	"os/exec"
 	"path/filepath"
