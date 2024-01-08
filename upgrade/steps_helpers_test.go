@@ -116,14 +116,13 @@ func TestPullRequestBody(t *testing.T) {
 }
 
 func TestGetExpectedTargetFromUpstream(t *testing.T) {
-	repo, upstreamOrg := "pulumi/pulumi-cloudflare", "cloudflare"
+	repo := "pulumi/pulumi-cloudflare"
 
 	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
   {
     "name": "Get Expected Target",
     "inputs": [
-      "`+repo+`",
-      "`+upstreamOrg+`"
+      "`+repo+`"
     ],
     "outputs": [
       {
@@ -135,9 +134,7 @@ func TestGetExpectedTargetFromUpstream(t *testing.T) {
   },
   {
     "name": "From Upstream Releases",
-    "inputs": [
-      "`+upstreamOrg+`"
-    ],
+	"inputs": [],
     "outputs": [
       {
         "Version": "4.19.0",
@@ -168,15 +165,16 @@ func TestGetExpectedTargetFromUpstream(t *testing.T) {
 		context := &Context{
 			GoPath:               "/Users/myuser/go",
 			UpstreamProviderName: "terraform-provider-cloudflare",
+			UpstreamProviderOrg:  "cloudflare",
 		}
 		result := getExpectedTarget(context.Wrap(ctx),
-			repo, upstreamOrg)
+			repo)
 		assert.NotNil(t, result)
 	})
 }
 
 func TestGetExpectedTargetFromTarget(t *testing.T) {
-	repo, name := "pulumi/pulumi-cloudflare", "cloudflare"
+	repo := "pulumi/pulumi-cloudflare"
 	test := func(testName string, inferVersion bool, targetVersion, expected string) {
 		t.Run(testName, func(t *testing.T) {
 			expectedSteps := jsonMarshal[[]*step.Step](t, expected)
@@ -184,11 +182,12 @@ func TestGetExpectedTargetFromTarget(t *testing.T) {
 				context := &Context{
 					GoPath:               "/Users/myuser/go",
 					UpstreamProviderName: "terraform-provider-cloudflare",
+					UpstreamProviderOrg:  "cloudflare",
 					InferVersion:         inferVersion,
 					TargetVersion:        semver.MustParse(targetVersion),
 				}
 				result := getExpectedTarget(context.Wrap(ctx),
-					repo, name)
+					repo)
 				assert.NotNil(t, result)
 			})
 		})
@@ -198,8 +197,7 @@ func TestGetExpectedTargetFromTarget(t *testing.T) {
   {
     "name": "Get Expected Target",
     "inputs": [
-      "`+repo+`",
-      "`+name+`"
+      "`+repo+`"
     ],
     "outputs": [
       {
@@ -218,8 +216,7 @@ func TestGetExpectedTargetFromTarget(t *testing.T) {
   {
     "name": "Get Expected Target",
     "inputs": [
-      "` + repo + `",
-      "` + name + `"
+      "` + repo + `"
     ],
     "outputs": [
       ` + output + `,
@@ -292,15 +289,12 @@ func TestGetExpectedTargetFromTarget(t *testing.T) {
 }
 
 func TestExpectedTargetLatest(t *testing.T) {
-	upstreamOrg := "akamai"
 	expectedVersion := "5.5.0"
 
 	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
 	{
 	  "name": "From Upstream Releases",
-	  "inputs": [
-		"akamai"
-	  ],
+	  "inputs": [],
 	  "outputs": [
 		{
 		  "Version": "5.5.0",
@@ -331,23 +325,20 @@ func TestExpectedTargetLatest(t *testing.T) {
 		context := &Context{
 			GoPath:               "/Users/myuser/go",
 			UpstreamProviderName: "terraform-provider-akamai",
+			UpstreamProviderOrg:  "akamai",
 		}
-		result := getExpectedTargetLatest(context.Wrap(ctx),
-			upstreamOrg)
+		result := getExpectedTargetLatest(context.Wrap(ctx))
 		assert.NotNil(t, result)
 		assert.Equal(t, expectedVersion, result.Version.String())
 	})
 }
 
 func TestFromUpstreamReleasesBetaIgnored(t *testing.T) {
-	upstreamOrg := "cyrilgdn"
 
 	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
 	{
 	  "name": "From Upstream Releases",
-	  "inputs": [
-		"cyrilgdn"
-	  ],
+	  "inputs": [],
 	  "outputs": [
 		{
 		  "Version": "1.21.0",
@@ -378,9 +369,9 @@ func TestFromUpstreamReleasesBetaIgnored(t *testing.T) {
 		context := &Context{
 			GoPath:               "/Users/myuser/go",
 			UpstreamProviderName: "terraform-provider-postgresql",
+			UpstreamProviderOrg:  "cyrilgdn",
 		}
-		result := getExpectedTargetLatest(context.Wrap(ctx),
-			upstreamOrg)
+		result := getExpectedTargetLatest(context.Wrap(ctx))
 		assert.NotNil(t, result)
 
 	})
