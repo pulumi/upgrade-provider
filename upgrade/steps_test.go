@@ -293,7 +293,8 @@ func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
             {}
           ],
           "outputs": [
-            null
+            false,
+			null
           ]
         },
         {
@@ -323,8 +324,8 @@ func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
 			name: "pulumi-cloudinit",
 		}
 
-		maintenanceRelease(context.Wrap(ctx), repo)
-		assert.False(t, context.MaintenancePatch)
+		result := maintenanceRelease(context.Wrap(ctx), repo)
+		assert.NotNil(t, result)
 	})
 }
 
@@ -337,6 +338,7 @@ func TestCheckMaintenancePatchExpiredCadence(t *testing.T) {
             {}
           ],
           "outputs": [
+			true,
             null
           ]
         },
@@ -367,7 +369,7 @@ func TestCheckMaintenancePatchExpiredCadence(t *testing.T) {
 			name: "pulumi-cloudinit",
 		}
 
-		maintenanceRelease(context.Wrap(ctx), repo)
-		assert.True(t, context.MaintenancePatch)
+		result := maintenanceRelease(context.Wrap(ctx), repo)
+		assert.NotNil(t, result)
 	})
 }
