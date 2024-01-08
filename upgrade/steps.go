@@ -183,7 +183,7 @@ func UpgradeProviderVersion(
 		// If they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func(context.Context) (string, error) {
-				upstreamOrg := goMod.UpstreamProviderOrg
+				upstreamOrg := GetContext(ctx).UpstreamProviderOrg
 				upstreamRepo := GetContext(ctx).UpstreamProviderName
 				gitHostPath := "https://github.com/" + upstreamOrg + "/" + upstreamRepo
 
@@ -881,8 +881,7 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 // UpstreamUpgradeTarget.
 var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx context.Context,
 	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo) (*UpstreamUpgradeTarget, error) {
-	upgradeTarget := getExpectedTarget(ctx, repoOrg+"/"+repoName,
-		goMod.UpstreamProviderOrg)
+	upgradeTarget := getExpectedTarget(ctx, repoOrg+"/"+repoName)
 	if upgradeTarget == nil {
 		return nil, fmt.Errorf("could not determine an upstream version")
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
+	"github.com/ryboe/q"
 )
 
 type RepoKind string
@@ -192,8 +193,6 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		Pf:       pf,
 	}
 
-	out.UpstreamProviderOrg = getUpstreamProviderOrg(ctx, upstream)
-
 	if fork == nil {
 		out.Kind = Plain
 	} else {
@@ -210,19 +209,21 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 	return &out, nil
 })
 
-var getUpstreamProviderOrg = stepv2.Func11("Get UpstreamOrg", func(ctx context.Context, upstream *modfile.Require) string {
-	upstreamOrg := GetContext(ctx).UpstreamProviderOrg
-	if upstreamOrg != "" {
-		stepv2.SetLabel(ctx, "From Upgrade Config")
-		return upstreamOrg
-	}
+var getUpstreamProviderOrg = stepv2.Func11("Get UpstreamOrg", func(ctx context.Context, upstream module.Version) string {
+	//upstreamOrg := GetContext(ctx).UpstreamProviderOrg
+	//if upstreamOrg != "" {
+	//	stepv2.SetLabel(ctx, "From Upgrade Config")
+	//	return upstreamOrg
+	//}
 	// fall back to attempting to read from go.mod
-	stepv2.SetLabel(ctx, "Fall back to reading from go.mod")
+	stepv2.SetLabel(ctx, "Get Upstream Org from go.mod")
 	// We expect tokens to be of the form:
 	//
 	//	github.com/${org}/${repo}/${path}
 	//
 	// The second chunk is the org name.
-	tok := strings.Split(modPathWithoutVersion(upstream.Mod.Path), "/")
+	tok := strings.Split(modPathWithoutVersion(upstream.Path), "/")
+	q.Q(upstream.Path)
+	q.Q(tok)
 	return tok[1]
 })
