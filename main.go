@@ -159,6 +159,8 @@ func cmd() *cobra.Command {
 		},
 	}
 
+	pulumiDev, _ := strconv.ParseBool(os.Getenv("PULUMI_DEV"))
+
 	cmd.PersistentFlags().BoolVar(&context.UpgradeJavaVersion, "upgrade-java", true,
 		`Upgrade to the latest Java version`)
 	err := cmd.PersistentFlags().MarkHidden("upgrade-java")
@@ -181,8 +183,11 @@ If no version is passed, the pulumi/{pkg,sdk} version will track the bridge`)
 		`Use our GH issues to infer the target upgrade version.
 If both '--target-version' and '--pulumi-infer-version' are passed,
 we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DEV]`)
-	err = cmd.PersistentFlags().MarkHidden("pulumi-infer-version")
-	contract.AssertNoErrorf(err, "could not mark `pulumi-infer-version` flag as hidden")
+
+	if !pulumiDev {
+		err = cmd.PersistentFlags().MarkHidden("pulumi-infer-version")
+		contract.AssertNoErrorf(err, "could not mark `pulumi-infer-version` flag as hidden")
+	}
 
 	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
 		`Upgrade the provider to a new major version.`)
@@ -194,7 +199,7 @@ we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DE
 - "provider": Upgrade the upstream provider only.
 - "pf": Upgrade the Plugin Framework only.
 - "code": Perform some number of code migrations.`
-	if b, _ := strconv.ParseBool(os.Getenv("PULUMI_DEV")); b {
+	if pulumiDev {
 		kindMsg += `
 - "check-upstream-version": Determine if we need to upgrade the upstream provider. For use in CI only."`
 	}
