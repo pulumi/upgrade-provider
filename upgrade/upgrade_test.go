@@ -120,7 +120,7 @@ func readFile(t *testing.T, path string) []byte {
 	return bytes
 }
 
-func simpleReplay(ctx context.Context, t *testing.T, stepReplay []*step.Step, fName string, f any) {
+func testReplay(ctx context.Context, t *testing.T, stepReplay []*step.Step, fName string, f any) {
 	bytes, err := json.Marshal(step.ReplayV1{
 		Pipelines: []step.RecordV1{{
 			Name:  t.Name(),

@@ -118,7 +118,7 @@ func TestPullRequestBody(t *testing.T) {
 func TestGetExpectedTargetFromUpstream(t *testing.T) {
 	repo := "pulumi/pulumi-cloudflare"
 
-	simpleReplay((&Context{
+	testReplay((&Context{
 		GoPath:               "/Users/myuser/go",
 		UpstreamProviderName: "terraform-provider-cloudflare",
 		UpstreamProviderOrg:  "cloudflare",
@@ -180,7 +180,7 @@ func TestGetExpectedTargetFromTarget(t *testing.T) {
 				InferVersion:         inferVersion,
 				TargetVersion:        semver.MustParse(targetVersion),
 			}).Wrap(context.Background())
-			simpleReplay(ctx, t, expectedSteps,
+			testReplay(ctx, t, expectedSteps,
 				"Get Expected Target", getExpectedTarget)
 		})
 	}
@@ -287,7 +287,7 @@ func TestExpectedTargetLatest(t *testing.T) {
 		UpstreamProviderOrg:  "akamai",
 	}).Wrap(context.Background())
 
-	simpleReplay(ctx, t, jsonMarshal[[]*step.Step](t, `[
+	testReplay(ctx, t, jsonMarshal[[]*step.Step](t, `[
 	{
 	  "name": "From Upstream Releases",
 	  "inputs": [],
@@ -327,7 +327,7 @@ func TestFromUpstreamReleasesBetaIgnored(t *testing.T) {
 		UpstreamProviderOrg:  "cyrilgdn",
 	}).Wrap(context.Background())
 
-	simpleReplay(ctx, t, jsonMarshal[[]*step.Step](t, `[
+	testReplay(ctx, t, jsonMarshal[[]*step.Step](t, `[
 	{
 	  "name": "From Upstream Releases",
 	  "inputs": [],

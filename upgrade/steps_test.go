@@ -112,7 +112,7 @@ func TestHasRemoteBranch(t *testing.T) {
 				return json.RawMessage(b)
 			}
 
-			simpleReplay(context.Background(), t, []*step.Step{
+			testReplay(context.Background(), t, []*step.Step{
 				{
 					Name:    "Has Remote Branch",
 					Inputs:  encode([]string{tt.branchName}),
@@ -203,7 +203,7 @@ func TestEnsureBranchCheckedOut(t *testing.T) {
 				replay = replay[:len(replay)-1]
 			}
 
-			simpleReplay(context.Background(), t, replay,
+			testReplay(context.Background(), t, replay,
 				"Ensure Branch", ensureBranchCheckedOut)
 		})
 	}
