@@ -9,12 +9,14 @@ import (
 	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
-	"github.com/pulumi/upgrade-provider/colorize"
-	"github.com/pulumi/upgrade-provider/upgrade"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+
+	"github.com/pulumi/upgrade-provider/colorize"
+	"github.com/pulumi/upgrade-provider/upgrade"
 )
 
 const (

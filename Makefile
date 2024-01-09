@@ -11,7 +11,10 @@ install:
 	go install github.com/pulumi/upgrade-provider
 
 lint:
-	golangci-lint run -E gci --fix
+	golangci-lint run
+
+lint.fix:
+	golangci-lint run --fix
 
 test:
 	go test -v ./...

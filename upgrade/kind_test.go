@@ -4,10 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pulumi/upgrade-provider/step/v2"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
+
+	"github.com/pulumi/upgrade-provider/step/v2"
 )
 
 func TestGetUpstreamProviderOrgFromConfig(t *testing.T) {

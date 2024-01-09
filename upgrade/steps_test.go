@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/pulumi/upgrade-provider/step/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/pulumi/upgrade-provider/step/v2"
 )
 
 func TestGetWorkingBranch(t *testing.T) {

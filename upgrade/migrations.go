@@ -11,8 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/tools/go/ast/astutil"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 const (
