@@ -3,15 +3,15 @@ package upgrade
 import (
 	"context"
 	"encoding/json"
-	"github.com/Masterminds/semver/v3"
-	"golang.org/x/mod/module"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/pulumi/upgrade-provider/step/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/module"
 )
 
 func TestInformGithub(t *testing.T) {

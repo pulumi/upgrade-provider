@@ -69,7 +69,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 		// If we do not have the upstream provider org set in the .upgrade-config.yml, we infer it from the go mod path.
 		if GetContext(ctx).UpstreamProviderOrg == "" {
-			GetContext(ctx).UpstreamProviderOrg = getUpstreamProviderOrg(ctx, goMod.Upstream)
+			GetContext(ctx).UpstreamProviderOrg = parseUpstreamProviderOrg(ctx, goMod.Upstream)
 		}
 		if GetContext(ctx).UpgradeProviderVersion {
 			upgradeTarget = planProviderUpgrade(ctx, repoOrg, repoName, goMod, &repo)

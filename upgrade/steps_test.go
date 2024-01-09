@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/mod/module"
 	"os"
 	"testing"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pulumi/upgrade-provider/step/v2"
+	"golang.org/x/mod/module"
 )
 
 func TestGetWorkingBranch(t *testing.T) {
@@ -269,13 +269,13 @@ func TestReleaseLabel(t *testing.T) {
 	}
 }
 
-func TestGetUpstreamProviderOrgFromModfile(t *testing.T) {
+func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
 
 	upstreamVersion := module.Version{Path: "github.com/testing-org/terraform-provider-datadog", Version: "v0.0.0"}
 
 	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
 	{
-          "name": "Get UpstreamOrg from go.mod",
+          "name": "Get UpstreamOrg from module version",
           "inputs": [
             {
               "Path": "github.com/testing-org/terraform-provider-datadog",
@@ -293,8 +293,6 @@ func TestGetUpstreamProviderOrgFromModfile(t *testing.T) {
 			UpstreamProviderName: "terraform-provider-datadog",
 			UpstreamProviderOrg:  "",
 		}
-		result := getUpstreamProviderOrg(context.Wrap(ctx), upstreamVersion)
-		assert.NotNil(t, result)
-		assert.Equal(t, result, "testing-org")
+		parseUpstreamProviderOrg(context.Wrap(ctx), upstreamVersion)
 	})
 }
