@@ -10,9 +10,9 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/module"
 
 	"github.com/pulumi/upgrade-provider/step/v2"
-	"golang.org/x/mod/module"
 )
 
 func TestGetWorkingBranch(t *testing.T) {
