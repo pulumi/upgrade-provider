@@ -99,23 +99,8 @@ func TestBridgeUpgradeNoop(t *testing.T) {
 		UpstreamProviderOrg:  "hashicorp",
 	}).Wrap(ctx)
 
-	err := step.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
-		planBridgeUpgrade(ctx, &GoMod{
-			Kind: Patched,
-			Pf: module.Version{
-				Path:    "github.com/pulumi/pulumi-terraform-bridge/pf",
-				Version: "v0.23.0",
-			},
-			Bridge: module.Version{
-				Path:    "github.com/pulumi/pulumi-terraform-bridge/v3",
-				Version: "v3.70.0",
-			},
-			Upstream: module.Version{
-				Path:    "github.com/hashicorp/terraform-provider-google-beta",
-				Version: "v0.0.0",
-			},
-		})
-	})
+	err := step.CallWithReplay(ctx, "Plan Upgrade",
+		"Planning Bridge Upgrade", planBridgeUpgrade)
 	require.NoError(t, err)
 
 	assert.False(t, GetContext(ctx).UpgradeBridgeVersion)
@@ -135,7 +120,7 @@ func readFile(t *testing.T, path string) []byte {
 	return bytes
 }
 
-func simpleReplay(t *testing.T, stepReplay []*step.Step, f func(context.Context)) {
+func testReplay(ctx context.Context, t *testing.T, stepReplay []*step.Step, fName string, f any) {
 	bytes, err := json.Marshal(step.ReplayV1{
 		Pipelines: []step.RecordV1{{
 			Name:  t.Name(),
@@ -145,9 +130,9 @@ func simpleReplay(t *testing.T, stepReplay []*step.Step, f func(context.Context)
 	require.NoError(t, err)
 
 	r := step.NewReplay(t, bytes)
-	ctx := step.WithEnv(context.Background(), r)
+	ctx = step.WithEnv(ctx, r)
 
-	err = step.PipelineCtx(ctx, t.Name(), f)
+	err = step.CallWithReplay(ctx, t.Name(), fName, f)
 	assert.NoError(t, err)
 }
 

@@ -202,32 +202,12 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 				outputs[i] = v.Interface()
 			}
 		} else {
-			// Hydrate complex objects by round-tripping them through JSON.
 			fType := reflect.TypeOf(f)
-			for i := 0; i < fType.NumOut(); i++ {
-				t := fType.Out(i)
-				v := reflect.New(t)
-				v.Elem().Set(reflect.Zero(t))
-
-				if retImmediatly.Out[i] == nil {
-					outputs[i] = v.Elem().Interface()
-					continue
-				}
-				b, err := json.Marshal(retImmediatly.Out[i])
-				if err != nil {
-					panic(err)
-				}
-
-				p.handleError([]any{err})
-				err = json.Unmarshal(b, v.Interface())
-				if err != nil {
-					panic(err)
-				}
-				p.handleError([]any{err})
-				outputs[i] = v.Elem().Interface()
-			}
+			// Hydrate the saved outputs back from JSON.
+			o, err := hydrateTo(retImmediatly.Out, fType.Out)
+			p.handleError([]any{err})
 			// This call is mocked, so just set the output
-			// copy(outputs, retImmediatly.Out)
+			copy(outputs, o)
 		}
 
 		p.handleError(outputs)
@@ -239,6 +219,56 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	if p.failed != nil {
 		runtime.Goexit()
 	}
+}
+
+// Hydrate dst with the values from src, type-correcting as necessary.
+//
+// The primary type correction performed is converting map[string]any to `struct SomeValue {...}`.
+//
+// It is legal for src to equal dst.
+func hydrateTo(src []any, typ func(int) reflect.Type) ([]any, error) {
+	dst := make([]any, len(src))
+	var err error
+	for i := 0; i < len(src); i++ {
+		dst[i], err = hydrateValueTo(src[i], typ(i))
+		if err != nil {
+			return dst, err
+		}
+	}
+	return dst, nil
+}
+
+// hydrateValueTo takes a value src and a type typ and attempts to return a version of src
+// that is assignable to typ.
+func hydrateValueTo(src any, typ reflect.Type) (any, error) {
+	// If the src is nil, construct a valid empty value and set that.
+	if src == nil {
+		v := reflect.New(typ)
+		return v.Elem().Interface(), nil
+	}
+
+	// If a trivial assignment is ok, then do that.
+	if reflect.TypeOf(src).AssignableTo(typ) {
+		return src, nil
+	}
+
+	// A trivial assignment is not ok, so we need to round-trip through a type
+	// aware format. For example, this allows converting a map[string]any to a
+	// matching struct.
+	v := reflect.New(typ)
+	v.Elem().Set(reflect.Zero(typ))
+
+	b, err := json.Marshal(src)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(b, v.Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	return v.Elem().Interface(), nil
 }
 
 func (p *pipeline) handleError(outputs []any) {

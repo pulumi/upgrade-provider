@@ -10,7 +10,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/mod/module"
 
 	"github.com/pulumi/upgrade-provider/step/v2"
 )
@@ -113,7 +112,7 @@ func TestHasRemoteBranch(t *testing.T) {
 				return json.RawMessage(b)
 			}
 
-			simpleReplay(t, []*step.Step{
+			testReplay(context.Background(), t, []*step.Step{
 				{
 					Name:    "Has Remote Branch",
 					Inputs:  encode([]string{tt.branchName}),
@@ -127,7 +126,7 @@ func TestHasRemoteBranch(t *testing.T) {
 					Outputs: encode([]any{tt.response, nil}),
 					Impure:  true,
 				},
-			}, func(ctx context.Context) { hasRemoteBranch(ctx, tt.branchName) })
+			}, "Has Remote Branch", hasRemoteBranch)
 		})
 	}
 }
@@ -204,21 +203,16 @@ func TestEnsureBranchCheckedOut(t *testing.T) {
 				replay = replay[:len(replay)-1]
 			}
 
-			simpleReplay(t, replay, func(ctx context.Context) {
-				ensureBranchCheckedOut(ctx, tt.branchName)
-			})
+			testReplay(context.Background(), t, replay,
+				"Ensure Branch", ensureBranchCheckedOut)
 		})
 	}
 }
 
 func TestEnsureUpstreamRepo(t *testing.T) {
 	ctx := newReplay(t, "download_aiven")
-	err := step.PipelineCtx(ctx, "Discover Provider", func(ctx context.Context) {
-		ctx = (&Context{
-			GoPath: "/goPath",
-		}).Wrap(ctx)
-		ensureUpstreamRepo(ctx, "github.com/pulumi/pulumi-aiven")
-	})
+	err := step.CallWithReplay((&Context{GoPath: "/goPath"}).Wrap(ctx), "Discover Provider",
+		"Ensure Upstream Repo", ensureUpstreamRepo)
 	require.NoError(t, err)
 }
 
@@ -270,10 +264,11 @@ func TestReleaseLabel(t *testing.T) {
 }
 
 func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
-
-	upstreamVersion := module.Version{Path: "github.com/testing-org/terraform-provider-datadog", Version: "v0.0.0"}
-
-	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
+	testReplay((&Context{
+		GoPath:               "/Users/myuser/go",
+		UpstreamProviderName: "terraform-provider-datadog",
+		UpstreamProviderOrg:  "",
+	}).Wrap(context.Background()), t, jsonMarshal[[]*step.Step](t, `[
 	{
           "name": "Get UpstreamOrg from module version",
           "inputs": [
@@ -287,12 +282,5 @@ func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
             null
           ]
         }
-]`), func(ctx context.Context) {
-		context := &Context{
-			GoPath:               "/Users/myuser/go",
-			UpstreamProviderName: "terraform-provider-datadog",
-			UpstreamProviderOrg:  "",
-		}
-		parseUpstreamProviderOrg(context.Wrap(ctx), upstreamVersion)
-	})
+]`), "Get UpstreamOrg from module version", parseUpstreamProviderOrg)
 }
