@@ -204,10 +204,10 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 		} else {
 			fType := reflect.TypeOf(f)
 			// Hydrate the saved outputs back from JSON.
-			err := hydrateTo(retImmediatly.Out, outputs, fType.Out)
+			o, err := hydrateTo(retImmediatly.Out, fType.Out)
 			p.handleError([]any{err})
 			// This call is mocked, so just set the output
-			// copy(outputs, retImmediatly.Out)
+			copy(outputs, o)
 		}
 
 		p.handleError(outputs)
@@ -226,44 +226,49 @@ func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 // The primary type correction performed is converting map[string]any to `struct SomeValue {...}`.
 //
 // It is legal for src to equal dst.
-func hydrateTo(src []any, dst []any, typ func(int) reflect.Type) error {
-	contract.Assertf(len(src) == len(dst),
-		"src must have same length as dst")
+func hydrateTo(src []any, typ func(int) reflect.Type) ([]any, error) {
+	dst := make([]any, len(src))
+	var err error
 	for i := 0; i < len(src); i++ {
-		t := typ(i)
-
-		// If the src is nil, construct a valid empty value and set that.
-		if src[i] == nil {
-			v := reflect.New(t)
-			dst[i] = v.Elem().Interface()
-			continue
-		}
-
-		// If a trivial assignment is ok, then do that.
-		if reflect.TypeOf(src[i]).AssignableTo(t) {
-			dst[i] = src[i]
-			continue
-		}
-
-		// A trivial assignment is not ok, so we need to round-trip through a type
-		// aware format. For example, this allows converting a map[string]any to a
-		// matching struct.
-		v := reflect.New(t)
-		v.Elem().Set(reflect.Zero(t))
-
-		b, err := json.Marshal(src[i])
+		dst[i], err = hydrateValueTo(src[i], typ(i))
 		if err != nil {
-			return err
+			return dst, err
 		}
-
-		err = json.Unmarshal(b, v.Interface())
-		if err != nil {
-			return err
-		}
-
-		dst[i] = v.Elem().Interface()
 	}
-	return nil
+	return dst, nil
+}
+
+// hydrateValueTo takes a value src and a type typ and attempts to return a version of src
+// that is assignable to typ.
+func hydrateValueTo(src any, typ reflect.Type) (any, error) {
+	// If the src is nil, construct a valid empty value and set that.
+	if src == nil {
+		v := reflect.New(typ)
+		return v.Elem().Interface(), nil
+	}
+
+	// If a trivial assignment is ok, then do that.
+	if reflect.TypeOf(src).AssignableTo(typ) {
+		return src, nil
+	}
+
+	// A trivial assignment is not ok, so we need to round-trip through a type
+	// aware format. For example, this allows converting a map[string]any to a
+	// matching struct.
+	v := reflect.New(typ)
+	v.Elem().Set(reflect.Zero(typ))
+
+	b, err := json.Marshal(src)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(b, v.Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	return v.Elem().Interface(), nil
 }
 
 func (p *pipeline) handleError(outputs []any) {

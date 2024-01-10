@@ -373,7 +373,7 @@ func CallWithReplay(ctx context.Context, pipeline, stepName string, f any) error
 	// Perform a type-correcting unmarshal from inputs to inputs.
 	//
 	// inputs[1:] since we want to skip the initial context.Context.
-	err = hydrateTo(inputs, inputs,
+	inputs, err = hydrateTo(inputs,
 		func(i int) reflect.Type { return fType.In(i + 1) })
 	if err != nil {
 		r.t.Fatalf("Failed to hydrate step %s args: %s", stepName, err.Error())
