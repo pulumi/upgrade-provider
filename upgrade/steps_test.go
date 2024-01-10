@@ -264,7 +264,7 @@ func TestReleaseLabel(t *testing.T) {
 }
 
 func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
-	simpleReplay((&Context{
+	testReplay((&Context{
 		GoPath:               "/Users/myuser/go",
 		UpstreamProviderName: "terraform-provider-datadog",
 		UpstreamProviderOrg:  "",
