@@ -23,6 +23,7 @@ func TestInformGithub(t *testing.T) {
 		PrAssign:               "@me",
 		PrReviewers:            "pulumi/Providers,lukehoban",
 		UpstreamProviderName:   "terraform-provider-wavefront",
+		UpstreamProviderOrg:    "vmware",
 	}).Wrap(ctx)
 
 	err := step.PipelineCtx(ctx, "Tfgen & Build SDKs", func(ctx context.Context) {
@@ -38,8 +39,7 @@ func TestInformGithub(t *testing.T) {
 				name:                   "pulumi/pulumi-wavefront",
 				currentUpstreamVersion: semver.MustParse("5.0.3"),
 			}, &GoMod{
-				UpstreamProviderOrg: "vmware",
-				Kind:                "plain",
+				Kind: "plain",
 				Upstream: module.Version{
 					Path:    "github.com/vmware/terraform-provider-wavefront",
 					Version: "v0.0.0-20231006183745-aa9a262f8bb0",
@@ -60,6 +60,7 @@ func TestInformGithubExistingPR(t *testing.T) {
 		PrAssign:             "@me",
 		PrReviewers:          "pulumi/Providers,lukehoban",
 		UpstreamProviderName: "terraform-provider-kong",
+		UpstreamProviderOrg:  "kevholditch",
 		UpgradeBridgeVersion: true,
 	}).Wrap(ctx)
 
@@ -71,8 +72,7 @@ func TestInformGithubExistingPR(t *testing.T) {
 				name:            "pulumi/pulumi-kong",
 				prAlreadyExists: true,
 			}, &GoMod{
-				UpstreamProviderOrg: "kevholditch",
-				Kind:                "plain",
+				Kind: "plain",
 				Upstream: module.Version{
 					Path:    "github.com/kevholditch/terraform-provider-kong",
 					Version: "v1.9.2-0.20220328204855-9e50bd93437f",
@@ -96,12 +96,12 @@ func TestBridgeUpgradeNoop(t *testing.T) {
 		GoPath:               "/goPath",
 		UpgradeBridgeVersion: true,
 		TargetBridgeRef:      &Latest{},
+		UpstreamProviderOrg:  "hashicorp",
 	}).Wrap(ctx)
 
 	err := step.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
 		planBridgeUpgrade(ctx, &GoMod{
-			UpstreamProviderOrg: "hashicorp",
-			Kind:                Patched,
+			Kind: Patched,
 			Pf: module.Version{
 				Path:    "github.com/pulumi/pulumi-terraform-bridge/pf",
 				Version: "v0.23.0",

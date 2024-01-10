@@ -145,8 +145,6 @@ type GoMod struct {
 	Fork     *modfile.Replace
 	Bridge   module.Version
 	Pf       module.Version
-
-	UpstreamProviderOrg string
 }
 
 type UpstreamUpgradeTarget struct {

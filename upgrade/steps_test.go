@@ -10,6 +10,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/module"
 
 	"github.com/pulumi/upgrade-provider/step/v2"
 )
@@ -266,4 +267,32 @@ func TestReleaseLabel(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
+}
+
+func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
+
+	upstreamVersion := module.Version{Path: "github.com/testing-org/terraform-provider-datadog", Version: "v0.0.0"}
+
+	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
+	{
+          "name": "Get UpstreamOrg from module version",
+          "inputs": [
+            {
+              "Path": "github.com/testing-org/terraform-provider-datadog",
+              "Version": "v0.0.0"
+            }
+          ],
+          "outputs": [
+            "testing-org",
+            null
+          ]
+        }
+]`), func(ctx context.Context) {
+		context := &Context{
+			GoPath:               "/Users/myuser/go",
+			UpstreamProviderName: "terraform-provider-datadog",
+			UpstreamProviderOrg:  "",
+		}
+		parseUpstreamProviderOrg(context.Wrap(ctx), upstreamVersion)
+	})
 }

@@ -466,12 +466,12 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 // sorted by semantic version. The list may be empty.
 //
 // The second argument represents a message to describe the result. It may be empty.
-var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Context,
-	name, upstreamOrg string) *UpstreamUpgradeTarget {
+var getExpectedTarget = stepv2.Func11("Get Expected Target", func(ctx context.Context,
+	name string) *UpstreamUpgradeTarget {
 
 	// we do not infer version from pulumi issues, or allow a target version when checking for a new upstream release
 	if GetContext(ctx).OnlyCheckUpstream {
-		return getExpectedTargetLatest(ctx, upstreamOrg)
+		return getExpectedTargetLatest(ctx)
 	}
 
 	if GetContext(ctx).TargetVersion != nil {
@@ -496,7 +496,7 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 	if GetContext(ctx).InferVersion {
 		return getExpectedTargetFromIssues(ctx, name)
 	}
-	return getExpectedTargetLatest(ctx, upstreamOrg)
+	return getExpectedTargetLatest(ctx)
 })
 
 // getExpectedTargetLatest discovers the latest stable release and sets it on UpstreamUpgradeTarget.Version.
@@ -506,10 +506,9 @@ var getExpectedTarget = stepv2.Func21("Get Expected Target", func(ctx context.Co
 // able to get this result in json), parsing the tags into versions (filtering out any invalid or non-stable tags),
 // and sorting them.
 // This is a best-effort approach. There may be edge cases in which these steps do not yield the correct latest release.
-var getExpectedTargetLatest = stepv2.Func11E("From Upstream Releases", func(ctx context.Context,
-	upstreamOrg string) (*UpstreamUpgradeTarget, error) {
+var getExpectedTargetLatest = stepv2.Func01E("From Upstream Releases", func(ctx context.Context) (*UpstreamUpgradeTarget, error) {
 
-	upstreamRepo := upstreamOrg + "/" + GetContext(ctx).UpstreamProviderName
+	upstreamRepo := GetContext(ctx).UpstreamProviderOrg + "/" + GetContext(ctx).UpstreamProviderName
 	// TODO: use --json once https://github.com/cli/cli/issues/4572 is fixed
 	releases := stepv2.Cmd(ctx, "gh", "release", "list",
 		"--repo="+upstreamRepo,
@@ -615,9 +614,10 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 })
 
 // Create an issue in the provider repo that signals an upgrade
-var createUpstreamUpgradeIssue = stepv2.Func40E("Ensure Upstream Issue", func(ctx context.Context,
-	repoOrg, repoName, version, upstreamOrg string) error {
+var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ctx context.Context,
+	repoOrg, repoName, version string) error {
 	upstreamProviderName := GetContext(ctx).UpstreamProviderName
+	upstreamOrg := GetContext(ctx).UpstreamProviderOrg
 	title := fmt.Sprintf("Upgrade %s to v%s", upstreamProviderName, version)
 
 	searchIssues := stepv2.Cmd(ctx, "gh", "search", "issues",

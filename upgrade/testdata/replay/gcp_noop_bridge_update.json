@@ -219,8 +219,7 @@
               "Pf": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/pf",
                 "Version": "v0.23.0"
-              },
-              "UpstreamProviderOrg": "hashicorp"
+              }
             },
             null
           ]
@@ -330,8 +329,7 @@
               "Pf": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/pf",
                 "Version": "v0.23.0"
-              },
-              "UpstreamProviderOrg": "hashicorp"
+              }
             }
           ],
           "outputs": [
@@ -452,8 +450,7 @@
               "Pf": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/pf",
                 "Version": "v0.23.0"
-              },
-              "UpstreamProviderOrg": "hashicorp"
+              }
             }
           ],
           "outputs": [

@@ -126,8 +126,7 @@
               },
               "Pf": {
                 "Path": ""
-              },
-              "UpstreamProviderOrg": "kevholditch"
+              }
             },
             {
               "SemVer": "3.62.0"

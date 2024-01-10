@@ -183,7 +183,7 @@ func UpgradeProviderVersion(
 		// If they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
 		steps = append(steps,
 			step.F("Lookup Tag SHA", func(context.Context) (string, error) {
-				upstreamOrg := goMod.UpstreamProviderOrg
+				upstreamOrg := GetContext(ctx).UpstreamProviderOrg
 				upstreamRepo := GetContext(ctx).UpstreamProviderName
 				gitHostPath := "https://github.com/" + upstreamOrg + "/" + upstreamRepo
 
@@ -881,8 +881,7 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 // UpstreamUpgradeTarget.
 var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx context.Context,
 	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo) (*UpstreamUpgradeTarget, error) {
-	upgradeTarget := getExpectedTarget(ctx, repoOrg+"/"+repoName,
-		goMod.UpstreamProviderOrg)
+	upgradeTarget := getExpectedTarget(ctx, repoOrg+"/"+repoName)
 	if upgradeTarget == nil {
 		return nil, fmt.Errorf("could not determine an upstream version")
 	}
@@ -1092,4 +1091,14 @@ var fetchLatestJavaGen = stepv2.Func03("Fetching latest Java Gen", func(ctx cont
 	})(ctx)
 	stepv2.SetLabel(ctx, latestJavaGen.String())
 	return currentJavaGen, latestJavaGen.String(), true
+})
+
+var parseUpstreamProviderOrg = stepv2.Func11("Get UpstreamOrg from module version", func(ctx context.Context, upstreamMod module.Version) string {
+	// We expect tokens to be of the form:
+	//
+	//	github.com/${org}/${repo}/${path}
+	//
+	// The second chunk is the org name.
+	tok := strings.Split(modPathWithoutVersion(upstreamMod.Path), "/")
+	return tok[1]
 })
