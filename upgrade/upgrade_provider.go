@@ -187,11 +187,13 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return err
 	}
 
-	var steps []step.Step
-
 	if GetContext(ctx).MajorVersionBump {
-		steps = append(steps, MajorVersionBump(ctx, goMod, upgradeTarget, repo))
-
+		err := stepv2.PipelineCtx(ctx, "Major Version Bump", func(ctx context.Context) {
+			majorVersionBump(ctx, goMod, upgradeTarget, repo)
+		})
+		if err != nil {
+			return err
+		}
 		defer func() {
 			fmt.Printf("\n\n" + colorize.Warn("Major Version Updates are not fully automated!") + "\n")
 			fmt.Printf("%s need to complete Step 11: Updating README.md and sdk/python/README.md "+
@@ -200,6 +202,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				"https://github.com/pulumi/platform-providers-team/blob/main/playbooks/tf-provider-major-version-update.md\n")
 		}()
 	}
+
+	var steps []step.Step
 
 	steps = append(steps, step.Computed(func() step.Step {
 		// No upgrade was planned, so exit
@@ -365,7 +369,7 @@ func tfgenAndBuildSDKs(
 			}
 
 			stepv2.WithCwd(ctx, *repo.sdkDir(), func(ctx context.Context) {
-				UpdateFileV2(ctx, "go.mod", update)
+				updateFile(ctx, "go.mod", update)
 				stepv2.Cmd(ctx, "go", "mod", "tidy")
 			})
 		}

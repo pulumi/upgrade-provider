@@ -578,12 +578,14 @@ var pullDefaultBranch = stepv2.Func11("Pull Default Branch", func(ctx context.Co
 	return defaultBranch
 })
 
-func MajorVersionBump(ctx context.Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo) step.Step {
+var majorVersionBump = stepv2.Func30("Increment Major Version", func(
+	ctx context.Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo,
+) {
 	if repo.currentVersion.Major() == 0 {
 		// None of these steps are necessary or appropriate when moving from
 		// version 0.x to 1.0 because Go modules only require a version suffix for
 		// versions >= 2.0.
-		return nil
+		return
 	}
 
 	prev := ""
@@ -594,110 +596,112 @@ func MajorVersionBump(ctx context.Context, goMod *GoMod, target *UpstreamUpgrade
 
 	// Replace s in file, where {} is interpolated into the old and new provider
 	// component of the path.
-	replaceInFile := func(desc, path, s string) step.Step {
-		return UpdateFile(desc+" in "+path, path, func(src []byte) ([]byte, error) {
+	replaceInFile := func(desc, path, s string) {
+		updateFile(ctx, path, func(ctx context.Context, src string) string {
+			stepv2.SetLabel(ctx, desc)
 			old := strings.ReplaceAll(s, "{}", prev)
 			new := strings.ReplaceAll(s, "{}", next)
-			return bytes.ReplaceAll(src, []byte(old), []byte(new)), nil
+			return strings.ReplaceAll(src, old, new)
 		})
 	}
 
 	name := filepath.Base(repo.root)
-	return step.Combined("Increment Major Version",
-		step.F("Next major version", func(context.Context) (string, error) {
-			// This step displays the next major version to the user.
-			return repo.currentVersion.IncMajor().String(), nil
-		}),
+
+	nextMajoreVersion := stepv2.NamedValue(ctx, "Next major version",
+		repo.currentVersion.IncMajor().String())
+
+	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
 		replaceInFile("Update PROVIDER_PATH", "Makefile",
-			"PROVIDER_PATH := provider{}",
-		).In(&repo.root),
+			"PROVIDER_PATH := provider{}")
 		replaceInFile("Update -X Version", ".goreleaser.yml",
-			"github.com/pulumi/"+name+"/provider{}/pkg",
-		).In(&repo.root),
+			"github.com/pulumi/"+name+"/provider{}/pkg")
 		replaceInFile("Update -X Version", ".goreleaser.prerelease.yml",
-			"github.com/pulumi/"+name+"/provider{}/pkg",
-		).In(&repo.root),
+			"github.com/pulumi/"+name+"/provider{}/pkg")
+	})
+
+	stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
 		replaceInFile("Update Go Module (provider)", "go.mod",
-			"module github.com/pulumi/"+name+"/provider{}",
-		).In(repo.providerDir()),
+			"module github.com/pulumi/"+name+"/provider{}")
+	})
+
+	stepv2.WithCwd(ctx, *repo.sdkDir(), func(ctx context.Context) {
 		replaceInFile("Update Go Module (sdk)", "go.mod",
-			"module github.com/pulumi/"+name+"/sdk{}",
-		).In(repo.sdkDir()),
-		step.F("Update Go Imports", func(context.Context) (string, error) {
-			var filesUpdated int
-			var fn filepath.WalkFunc = func(path string, info fs.FileInfo, err error) error {
-				if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") {
-					return err
+			"module github.com/pulumi/"+name+"/sdk{}")
+	})
+
+	stepv2.Func00E("Update Go Imports", func(ctx context.Context) error {
+		var filesUpdated int
+		var fn filepath.WalkFunc = func(path string, info fs.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") {
+				return err
+			}
+
+			data := stepv2.ReadFile(ctx, path)
+
+			new := strings.ReplaceAll(data,
+				"github.com/pulumi/"+name+"/provider"+prev,
+				"github.com/pulumi/"+name+"/provider"+next,
+			)
+
+			if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
+				if prefix, major, ok := module.SplitPathVersion(
+					goMod.Upstream.Path); ok && major != "" {
+					newUpstream := fmt.Sprintf("%s/v%d",
+						prefix, target.Version.Major())
+					new = strings.ReplaceAll(data,
+						goMod.Upstream.Path,
+						newUpstream)
 				}
-
-				data, err := os.ReadFile(path)
-				if err != nil {
-					return err
-				}
-
-				new := bytes.ReplaceAll(data,
-					[]byte("github.com/pulumi/"+name+"/provider"+prev),
-					[]byte("github.com/pulumi/"+name+"/provider"+next),
-				)
-
-				if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
-					if prefix, major, ok := module.SplitPathVersion(
-						goMod.Upstream.Path); ok && major != "" {
-						newUpstream := fmt.Sprintf("%s/v%d",
-							prefix, target.Version.Major())
-						new = bytes.ReplaceAll(data,
-							[]byte(goMod.Upstream.Path),
-							[]byte(newUpstream))
-					}
-				}
-
-				if !reflect.DeepEqual(data, new) {
-					filesUpdated++
-					return os.WriteFile(path, new, info.Mode().Perm())
-				}
-				return nil
-
 			}
-			err := filepath.Walk(*repo.providerDir(), fn)
-			if err != nil {
-				return "", err
-			}
-			err = filepath.Walk(filepath.Join(repo.root, "examples"), fn)
-			return fmt.Sprintf("Updated %d files", filesUpdated), err
-		}),
-		step.F("info.TFProviderModuleVersion", func(context.Context) (string, error) {
-			b, err := os.ReadFile(filepath.Join(*repo.providerDir(), "resources.go"))
-			if err != nil {
-				return "", err
-			}
-			r, err := regexp.Compile("TFProviderModuleVersion: \"(.*)\",")
-			if err != nil {
-				return "", err
-			}
-			field := r.Find(b)
-			if field == nil {
-				return "not present", nil
-			}
-			// Escape codes are Bold, Yellow, and Reset respectively
-			return "\u001B[1m\u001B[33mrequires manual update\u001B[m", nil
-		}),
-		step.Env("VERSION_PREFIX", repo.currentVersion.IncMajor().String()),
-		addVersionPrefixToGHWorkflows(ctx, repo).In(&repo.root),
-	)
-}
 
-func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.Step {
-	addPrefix := func(path string) error {
-		stat, err := os.Stat(path)
+			if !reflect.DeepEqual(data, new) {
+				filesUpdated++
+				stepv2.WriteFile(ctx, path, new)
+			}
+			return nil
+
+		}
+		err := filepath.Walk(*repo.providerDir(), fn)
 		if err != nil {
 			return err
 		}
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return err
+		err = filepath.Walk(filepath.Join(repo.root, "examples"), fn)
+		if err == nil {
+			stepv2.SetLabelf(ctx, "Updated %d files", filesUpdated)
 		}
+		return err
+	})(ctx)
+
+	stepv2.Func00("info.TFProviderModuleVersion", func(ctx context.Context) {
+		b := stepv2.ReadFile(ctx, filepath.Join(*repo.providerDir(), "resources.go"))
+		r, err := regexp.Compile("TFProviderModuleVersion: \"(.*)\",")
+		contract.AssertNoErrorf(err, "regexp failed to compile")
+
+		field := r.FindString(b)
+		if field == "" {
+			stepv2.SetLabel(ctx, "not present")
+			return
+		}
+		stepv2.SetLabel(ctx, colorize.Bold(colorize.Warn("requires manual update")))
+	})(ctx)
+
+	setEnv(ctx, "VERSION_PREFIX", nextMajoreVersion)
+
+	addVersionPrefixToGHWorkflows(ctx, repo, nextMajoreVersion)
+})
+
+var addVersionPrefixToGHWorkflows = stepv2.Func20("Update GitHub Workflows", func(
+	ctx context.Context, repo ProviderRepo, nextMajorVersion string,
+) {
+	addPrefix := func(ctx context.Context, path string) error {
+		_, ok := stepv2.Stat(ctx, path)
+		if !ok {
+			stepv2.SetLabelf(ctx, "%s does not exist", path)
+		}
+
+		b := stepv2.ReadFile(ctx, path)
 		doc := new(yaml.Node)
-		err = yaml.Unmarshal(b, doc)
+		err := yaml.Unmarshal([]byte(b), doc)
 		if err != nil {
 			return err
 		}
@@ -730,7 +734,7 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 			})
 		}
 
-		versionPrefix := repo.currentVersion.IncMajor().String()
+		versionPrefix := nextMajorVersion
 
 		var fixed bool
 		for i, child := range env.Content {
@@ -760,52 +764,16 @@ func addVersionPrefixToGHWorkflows(ctx context.Context, repo ProviderRepo) step.
 		if err := enc.Close(); err != nil {
 			return fmt.Errorf("Failed to flush encoder: %w", err)
 		}
-		return os.WriteFile(path, updated.Bytes(), stat.Mode())
+		stepv2.WriteFile(ctx, path, updated.String())
+		return nil
 	}
 
-	var steps []step.Step
 	for _, f := range []string{"master.yml", "main.yml", "run-acceptance-tests.yml"} {
-		steps = append(steps, step.F(f, func(context.Context) (string, error) {
-			path := filepath.Join(".github", "workflows", f)
-			err := addPrefix(path)
-			if os.IsNotExist(err) && f != "run-acceptance-tests.yml" {
-				return path + " does not exist", nil
-			}
-			return "", err
-		}))
+		stepv2.Func10E("update "+f, addPrefix)(ctx, filepath.Join(".github", "workflows", f))
 	}
-	return step.Combined("VERSION_PREFIX workflows", steps...)
-}
+})
 
-func UpdateFile(desc, path string, f func([]byte) ([]byte, error)) step.Step {
-	var b bool
-	return UpdateFileWithSignal(desc, path, &b, f)
-}
-
-func UpdateFileWithSignal(desc, path string, didChange *bool, f func([]byte) ([]byte, error)) step.Step {
-	return step.F(desc, func(context.Context) (string, error) {
-		stats, err := os.Stat(path)
-		if err != nil {
-			return "", err
-		}
-		bytes, err := os.ReadFile(path)
-		if err != nil {
-			return "", err
-		}
-		newBytes, err := f(bytes)
-		if err != nil {
-			return "", err
-		}
-		if reflect.DeepEqual(newBytes, bytes) {
-			*didChange = false
-			return "no change", nil
-		}
-		*didChange = true
-		return "", os.WriteFile(path, newBytes, stats.Mode().Perm())
-	})
-}
-
-func UpdateFileV2(ctx context.Context, path string, update func(context.Context, string) string) bool {
+func updateFile(ctx context.Context, path string, update func(context.Context, string) string) bool {
 	return stepv2.Func01("Update "+path, func(ctx context.Context) bool {
 		content := stepv2.ReadFile(ctx, path)
 		updated := stepv2.Func11("update", update)(ctx, content)
