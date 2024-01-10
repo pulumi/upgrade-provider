@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/pulumi/upgrade-provider/step/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/module"
+
+	"github.com/pulumi/upgrade-provider/step/v2"
 )
 
 func TestInformGithub(t *testing.T) {

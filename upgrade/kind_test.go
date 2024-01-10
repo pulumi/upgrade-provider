@@ -2,11 +2,13 @@ package upgrade
 
 import (
 	"context"
-	"github.com/pulumi/upgrade-provider/step/v2"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
-	"testing"
+
+	"github.com/pulumi/upgrade-provider/step/v2"
 )
 
 func TestGetUpstreamProviderOrgFromConfig(t *testing.T) {

@@ -10,9 +10,10 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/hexops/autogold/v2"
-	"github.com/pulumi/upgrade-provider/step/v2"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/mod/module"
+
+	"github.com/pulumi/upgrade-provider/step/v2"
 )
 
 func TestRemoveVersionPrefix(t *testing.T) {

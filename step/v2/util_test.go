@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pulumi/upgrade-provider/step/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/pulumi/upgrade-provider/step/v2"
 )
 
 func TestWithCwd(t *testing.T) {

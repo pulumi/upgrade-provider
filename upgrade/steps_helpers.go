@@ -11,9 +11,10 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
