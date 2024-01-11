@@ -129,6 +129,7 @@ func cmd() *cobra.Command {
 					set(&context.UpgradeCodeMigration)
 				case "pf":
 					set(&context.UpgradePfVersion)
+				case "pulumi":
 				case "check-upstream-version":
 					if targetVersion != "" {
 						return fmt.Errorf(
@@ -140,7 +141,7 @@ func cmd() *cobra.Command {
 
 				default:
 					return fmt.Errorf(
-						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, `code`, or `pf`",
+						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, `code`, `pf`, or `pulumi`",
 						upgradeKind)
 				}
 			}
