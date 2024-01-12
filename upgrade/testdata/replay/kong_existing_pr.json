@@ -112,7 +112,10 @@
           "name": "Inform Github",
           "inputs": [
             null,
-            {},
+            {
+              "Org": "",
+              "Name":"pulumi/pulumi-kong"
+            },
             {
               "Kind": "plain",
               "Upstream": {
