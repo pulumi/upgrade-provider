@@ -286,11 +286,17 @@ func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
 }
 func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
 
-	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
+	testReplay((&Context{
+		GoPath: "/Users/myuser/go",
+	}).Wrap(context.Background()),
+		t, jsonMarshal[[]*step.Step](t, `[
 	{
           "name": "Check if we should release a maintenance patch",
           "inputs": [
-            {}
+            {
+				"Org":  "pulumi",
+				"Name": "pulumi-cloudinit"
+			}
           ],
           "outputs": [
             false,
@@ -314,32 +320,26 @@ func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
           ],
           "impure": true
         }
-]`), func(ctx context.Context) {
-		context := &Context{
-			GoPath: "/Users/myuser/go",
-		}
-
-		repo := ProviderRepo{
-			org:  "pulumi",
-			name: "pulumi-cloudinit",
-		}
-
-		result := maintenanceRelease(context.Wrap(ctx), repo)
-		assert.NotNil(t, result)
-	})
+]`), "Check if we should release a maintenance patch", maintenanceRelease)
 }
 
 func TestCheckMaintenancePatchExpiredCadence(t *testing.T) {
 
-	simpleReplay(t, jsonMarshal[[]*step.Step](t, `[
+	testReplay((&Context{
+		GoPath: "/Users/myuser/go",
+	}).Wrap(context.Background()),
+		t, jsonMarshal[[]*step.Step](t, `[
 	{
           "name": "Check if we should release a maintenance patch",
           "inputs": [
-            {}
+            {
+				"Org":  "pulumi",
+				"Name": "pulumi-cloudinit"
+			}
           ],
           "outputs": [
-			true,
-            null
+            true,
+			null
           ]
         },
         {
@@ -354,22 +354,9 @@ func TestCheckMaintenancePatchExpiredCadence(t *testing.T) {
             ]
           ],
           "outputs": [
-            "{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"2023-01-04T21:03:48Z\"}}\n",
-            null
+			"{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"2023-01-04T21:03:48Z\"}}\n",            null
           ],
           "impure": true
         }
-]`), func(ctx context.Context) {
-		context := &Context{
-			GoPath: "/Users/myuser/go",
-		}
-
-		repo := ProviderRepo{
-			org:  "pulumi",
-			name: "pulumi-cloudinit",
-		}
-
-		result := maintenanceRelease(context.Wrap(ctx), repo)
-		assert.NotNil(t, result)
-	})
+]`), "Check if we should release a maintenance patch", maintenanceRelease)
 }
