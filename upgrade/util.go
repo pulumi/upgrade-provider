@@ -125,8 +125,8 @@ type ProviderRepo struct {
 	// are go module compliment, we might not be able to always resolve this version.
 	currentUpstreamVersion *semver.Version
 
-	name string
-	org  string
+	Name string
+	Org  string
 }
 
 func (p ProviderRepo) providerDir() *string {

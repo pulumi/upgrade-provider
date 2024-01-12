@@ -267,7 +267,7 @@ var maintenanceRelease = stepv2.Func11E("Check if we should release a maintenanc
 	ctx context.Context,
 	repo ProviderRepo,
 ) (bool, error) {
-	repoWithOrg := repo.org + "/" + repo.name
+	repoWithOrg := repo.Org + "/" + repo.Name
 	// We ensure a release at least every 8-9 weeks, concurrent with a bridge update.
 	// There are 24 * 7 * 8 = 1344 hours in 8 weeks.
 	releaseCadence := time.Hour * 24 * 7 * 8
@@ -846,7 +846,7 @@ func migrationSteps(ctx context.Context, repo ProviderRepo, providerName string,
 }
 
 func AddAutoAliasing(ctx context.Context, repo ProviderRepo) (step.Step, error) {
-	providerName := strings.TrimPrefix(repo.name, "pulumi-")
+	providerName := strings.TrimPrefix(repo.Name, "pulumi-")
 	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
 	steps := []step.Step{
 		step.F("ensure bridge-metadata.json", func(context.Context) (string, error) {
@@ -871,7 +871,7 @@ func AddAutoAliasing(ctx context.Context, repo ProviderRepo) (step.Step, error) 
 }
 
 func ReplaceAssertNoError(ctx context.Context, repo ProviderRepo) (step.Step, error) {
-	steps, err := migrationSteps(ctx, repo, repo.name, "Remove deprecated contract.Assert",
+	steps, err := migrationSteps(ctx, repo, repo.Name, "Remove deprecated contract.Assert",
 		AssertNoErrorMigration)
 	if err != nil {
 		return nil, err
