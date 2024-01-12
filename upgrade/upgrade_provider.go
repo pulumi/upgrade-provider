@@ -38,8 +38,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	}
 
 	repo := ProviderRepo{
-		name: repoName,
-		org:  repoOrg,
+		Name: repoName,
+		Org:  repoOrg,
 	}
 	var targetBridgeVersion, targetPfVersion Ref
 	var tfSDKUpgrade string
@@ -102,6 +102,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		if GetContext(ctx).UpgradeBridgeVersion {
 			targetBridgeVersion = planBridgeUpgrade(ctx, goMod)
 			tfSDKTargetSHA, tfSDKUpgrade = planPluginSDKUpgrade(ctx, repo)
+			// Check if we need to release a maintenance patch and set context if so
+			GetContext(ctx).MaintenancePatch = maintenanceRelease(ctx, repo)
 		}
 
 		if GetContext(ctx).UpgradePfVersion {
@@ -168,7 +170,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	var forkedProviderUpstreamCommit string
 	if goMod.Kind.IsForked() && GetContext(ctx).UpgradeProviderVersion {
 		err := stepv2.PipelineCtx(ctx, "Upgrade Forked Provider", func(ctx context.Context) {
-			upgradeUpstreamFork(ctx, repo.name, upgradeTarget.Version, goMod)
+			upgradeUpstreamFork(ctx, repo.Name, upgradeTarget.Version, goMod)
 		})
 		if err != nil {
 			return err

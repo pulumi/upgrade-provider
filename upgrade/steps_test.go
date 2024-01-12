@@ -284,3 +284,79 @@ func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
         }
 ]`), "Get UpstreamOrg from module version", parseUpstreamProviderOrg)
 }
+func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
+
+	testReplay((&Context{
+		GoPath: "/Users/myuser/go",
+	}).Wrap(context.Background()),
+		t, jsonMarshal[[]*step.Step](t, `[
+	{
+          "name": "Check if we should release a maintenance patch",
+          "inputs": [
+            {
+				"Org":  "pulumi",
+				"Name": "pulumi-cloudinit"
+			}
+          ],
+          "outputs": [
+            false,
+			null
+          ]
+        },
+        {
+          "name": "gh",
+          "inputs": [
+            "gh",
+            [
+              "repo",
+              "view",
+              "pulumi/pulumi-cloudinit",
+              "--json=latestRelease"
+            ]
+          ],
+          "outputs": [
+            "{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"2024-01-04T21:03:48Z\"}}\n",
+            null
+          ],
+          "impure": true
+        }
+]`), "Check if we should release a maintenance patch", maintenanceRelease)
+}
+
+func TestCheckMaintenancePatchExpiredCadence(t *testing.T) {
+
+	testReplay((&Context{
+		GoPath: "/Users/myuser/go",
+	}).Wrap(context.Background()),
+		t, jsonMarshal[[]*step.Step](t, `[
+	{
+          "name": "Check if we should release a maintenance patch",
+          "inputs": [
+            {
+				"Org":  "pulumi",
+				"Name": "pulumi-cloudinit"
+			}
+          ],
+          "outputs": [
+            true,
+			null
+          ]
+        },
+        {
+          "name": "gh",
+          "inputs": [
+            "gh",
+            [
+              "repo",
+              "view",
+              "pulumi/pulumi-cloudinit",
+              "--json=latestRelease"
+            ]
+          ],
+          "outputs": [
+			"{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"2023-01-04T21:03:48Z\"}}\n",            null
+          ],
+          "impure": true
+        }
+]`), "Check if we should release a maintenance patch", maintenanceRelease)
+}

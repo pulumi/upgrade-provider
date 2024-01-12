@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	semver "github.com/Masterminds/semver/v3"
 	"golang.org/x/mod/modfile"
@@ -262,6 +263,37 @@ func UpgradeProviderVersion(
 	return step.Combined("Update TF Provider", steps...)
 }
 
+var maintenanceRelease = stepv2.Func11E("Check if we should release a maintenance patch", func(
+	ctx context.Context,
+	repo ProviderRepo,
+) (bool, error) {
+	repoWithOrg := repo.Org + "/" + repo.Name
+	// We ensure a release at least every 8-9 weeks, concurrent with a bridge update.
+	// There are 24 * 7 * 8 = 1344 hours in 8 weeks.
+	releaseCadence := time.Hour * 24 * 7 * 8
+
+	relInfo, err := latestReleaseInfo(ctx, repoWithOrg)
+	if err != nil {
+		return false, err
+	}
+
+	releaseDate, err := time.Parse(time.RFC3339, relInfo.Latest.PublishedAt)
+	if err != nil {
+		return false, err
+	}
+
+	stepv2.SetLabelf(ctx, "Last provider release date: %s", relInfo.Latest.PublishedAt)
+	ago := time.Since(releaseDate).Abs()
+
+	if ago > releaseCadence {
+		stepv2.SetLabelf(
+			ctx, "Last provider release date: %s. Marking for patch release.", relInfo.Latest.PublishedAt,
+		)
+		return true, nil
+	}
+	return false, nil
+})
+
 var InformGitHub = stepv2.Func70E("Inform Github", func(
 	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
@@ -306,14 +338,20 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 			"--body", prBody)
 	} else {
 		addLabels := []string{}
-		// We only create release labels when we are running the full pulumi
+
+		switch {
+		// We create release labels when we are running the full pulumi
 		// providers process: i.e. when we discovered issues to close at the
 		// beginning of the pipeline.
-		if c.UpgradeProviderVersion && len(target.GHIssues) > 0 {
+		case c.UpgradeProviderVersion && len(target.GHIssues) > 0:
 			label := upgradeLabel(ctx, repo.currentUpstreamVersion, target.Version)
 			if label != "" {
 				addLabels = []string{"--label", label}
 			}
+		// On non-upstream upgrades, we will create a patch release label
+		// if the provider hasn't been released in 8 weeks.
+		case c.MaintenancePatch && !c.UpgradeProviderVersion:
+			addLabels = []string{"--label", "needs-release/patch"}
 		}
 
 		stepv2.Cmd(ctx, "gh",
@@ -327,7 +365,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 				addLabels...)...)
 	}
 
-	// If we are only upgrading the bridge, we wont have a list of issues.
+	// If we are only upgrading the bridge, we won't have a list of issues.
 	if !c.UpgradeProviderVersion {
 		return nil
 	}
@@ -808,7 +846,7 @@ func migrationSteps(ctx context.Context, repo ProviderRepo, providerName string,
 }
 
 func AddAutoAliasing(ctx context.Context, repo ProviderRepo) (step.Step, error) {
-	providerName := strings.TrimPrefix(repo.name, "pulumi-")
+	providerName := strings.TrimPrefix(repo.Name, "pulumi-")
 	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
 	steps := []step.Step{
 		step.F("ensure bridge-metadata.json", func(context.Context) (string, error) {
@@ -833,7 +871,7 @@ func AddAutoAliasing(ctx context.Context, repo ProviderRepo) (step.Step, error) 
 }
 
 func ReplaceAssertNoError(ctx context.Context, repo ProviderRepo) (step.Step, error) {
-	steps, err := migrationSteps(ctx, repo, repo.name, "Remove deprecated contract.Assert",
+	steps, err := migrationSteps(ctx, repo, repo.Name, "Remove deprecated contract.Assert",
 		AssertNoErrorMigration)
 	if err != nil {
 		return nil, err
@@ -1063,8 +1101,7 @@ var plantPfUpgrade = stepv2.Func11E("Planning Plugin Framework Upgrade", func(
 })
 
 var fetchLatestJavaGen = stepv2.Func03("Fetching latest Java Gen", func(ctx context.Context) (string, string, bool) {
-	latestJavaGen := latestRelease(ctx, "pulumi/pulumi-java")
-
+	latestJavaGen := latestReleaseVersion(ctx, "pulumi/pulumi-java")
 	var currentJavaGen string
 	_, exists := stepv2.Stat(ctx, ".pulumi-java-gen.version")
 	if !exists {

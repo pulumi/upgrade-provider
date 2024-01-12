@@ -40,6 +40,11 @@ type Context struct {
 
 	UpgradeJavaVersion bool
 
+	// Some providers go for months without an upstream release, but do receive weekly bridge updates.
+	// upgrade-provider will detect if the provider's last release is more than eight weeks old, and if it is,
+	// setting this field to True will trigger a patch release on a non-upstream upgrade.
+	MaintenancePatch bool
+
 	// The unqualified name of the upstream provider.
 	//
 	// As an example, Pulumi's AWS provider has:
@@ -120,8 +125,8 @@ type ProviderRepo struct {
 	// are go module compliment, we might not be able to always resolve this version.
 	currentUpstreamVersion *semver.Version
 
-	name string
-	org  string
+	Name string
+	Org  string
 }
 
 func (p ProviderRepo) providerDir() *string {

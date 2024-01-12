@@ -36,7 +36,7 @@ func TestInformGithub(t *testing.T) {
 			}, ProviderRepo{
 				workingBranch:          "upgrade-terraform-provider-wavefront-to-v5.0.5",
 				defaultBranch:          "master",
-				name:                   "pulumi/pulumi-wavefront",
+				Name:                   "pulumi/pulumi-wavefront",
 				currentUpstreamVersion: semver.MustParse("5.0.3"),
 			}, &GoMod{
 				Kind: "plain",
@@ -69,7 +69,7 @@ func TestInformGithubExistingPR(t *testing.T) {
 			nil, ProviderRepo{
 				workingBranch:   "upgrade-pulumi-terraform-bridge-to-v3.62.0",
 				defaultBranch:   "master",
-				name:            "pulumi/pulumi-kong",
+				Name:            "pulumi/pulumi-kong",
 				prAlreadyExists: true,
 			}, &GoMod{
 				Kind: "plain",

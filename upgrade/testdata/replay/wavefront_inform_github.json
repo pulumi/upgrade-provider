@@ -12,9 +12,13 @@
                 {
                   "number": 232
                 }
+
               ]
             },
-            {},
+            {
+              "Org": "",
+              "Name":"pulumi/pulumi-wavefront"
+            },
             {
               "Kind": "plain",
               "Upstream": {
