@@ -607,7 +607,7 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 
 	name := filepath.Base(repo.root)
 
-	nextMajoreVersion := stepv2.NamedValue(ctx, "Next major version",
+	nextMajorVersion := stepv2.NamedValue(ctx, "Next major version",
 		repo.currentVersion.IncMajor().String())
 
 	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
@@ -685,9 +685,9 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 		stepv2.SetLabel(ctx, colorize.Bold(colorize.Warn("requires manual update")))
 	})(ctx)
 
-	setEnv(ctx, "VERSION_PREFIX", nextMajoreVersion)
+	setEnv(ctx, "VERSION_PREFIX", nextMajorVersion)
 
-	addVersionPrefixToGHWorkflows(ctx, repo, nextMajoreVersion)
+	addVersionPrefixToGHWorkflows(ctx, repo, nextMajorVersion)
 })
 
 var addVersionPrefixToGHWorkflows = stepv2.Func20("Update GitHub Workflows", func(
