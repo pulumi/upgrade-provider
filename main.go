@@ -99,6 +99,12 @@ func cmd() *cobra.Command {
 				}
 			}
 
+			// This can happen by calling `upgrade-provider --kind=""`
+			if len(upgradeKind) == 0 {
+				return fmt.Errorf("--kind=\"\" is invalid. Must be one of `all`, " +
+					"`bridge`, `provider`, `code`, `pf`, or `pulumi`")
+			}
+
 			// Validate the kind switch
 			var warnedAll bool
 			for _, kind := range upgradeKind {
