@@ -588,22 +588,13 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 		return
 	}
 
-	prev := ""
+	var prev string
 	if repo.currentVersion.Major() > 1 {
-		prev += fmt.Sprintf("/v%d", repo.currentVersion.Major())
+		prev = fmt.Sprintf("/v%d", repo.currentVersion.Major())
 	}
 	next := fmt.Sprintf("/v%d", repo.currentVersion.IncMajor().Major())
 
-	// Replace s in file, where {} is interpolated into the old and new provider
-	// component of the path.
-	replaceInFile := func(desc, path, s string) {
-		updateFile(ctx, path, func(ctx context.Context, src string) string {
-			stepv2.SetLabel(ctx, desc)
-			old := strings.ReplaceAll(s, "{}", prev)
-			new := strings.ReplaceAll(s, "{}", next)
-			return strings.ReplaceAll(src, old, new)
-		})
-	}
+	updateFile := buildReplaceInFile(prev, next)
 
 	name := filepath.Base(repo.root)
 
@@ -611,21 +602,21 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 		repo.currentVersion.IncMajor().String())
 
 	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
-		replaceInFile("Update PROVIDER_PATH", "Makefile",
+		updateFile(ctx, "Update PROVIDER_PATH", "Makefile",
 			"PROVIDER_PATH := provider{}")
-		replaceInFile("Update -X Version", ".goreleaser.yml",
+		updateFile(ctx, "Update -X Version", ".goreleaser.yml",
 			"github.com/pulumi/"+name+"/provider{}/pkg")
-		replaceInFile("Update -X Version", ".goreleaser.prerelease.yml",
+		updateFile(ctx, "Update -X Version", ".goreleaser.prerelease.yml",
 			"github.com/pulumi/"+name+"/provider{}/pkg")
 	})
 
 	stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
-		replaceInFile("Update Go Module (provider)", "go.mod",
+		updateFile(ctx, "Update Go Module (provider)", "go.mod",
 			"module github.com/pulumi/"+name+"/provider{}")
 	})
 
 	stepv2.WithCwd(ctx, *repo.sdkDir(), func(ctx context.Context) {
-		replaceInFile("Update Go Module (sdk)", "go.mod",
+		updateFile(ctx, "Update Go Module (sdk)", "go.mod",
 			"module github.com/pulumi/"+name+"/sdk{}")
 	})
 
@@ -689,6 +680,26 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 
 	addVersionPrefixToGHWorkflows(ctx, repo, nextMajorVersion)
 })
+
+// Build a replace function that converts finds instances of `replace` and converts
+// it. `{}` is a special character that is templated as the `from` during searching and
+// the `to` for the replace.
+//
+// For example, consider:
+//
+//	buildReplaceInFile("foo", "bar")(ctx, "Change foo to bar", "example.txt", "({})")
+//
+// This will replace all instances of "(foo)" with "(bar)" in the file "example.txt".
+func buildReplaceInFile(from, to string) func(ctx context.Context, description string, file string, replace string) {
+	return func(ctx context.Context, description string, file string, replace string) {
+		updateFile(ctx, file, func(ctx context.Context, src string) string {
+			stepv2.SetLabel(ctx, description)
+			old := strings.ReplaceAll(replace, "{}", from)
+			new := strings.ReplaceAll(replace, "{}", to)
+			return strings.ReplaceAll(src, old, new)
+		})
+	}
+}
 
 var addVersionPrefixToGHWorkflows = stepv2.Func20("Update GitHub Workflows", func(
 	ctx context.Context, repo ProviderRepo, nextMajorVersion string,
