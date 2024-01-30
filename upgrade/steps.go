@@ -137,7 +137,7 @@ var ensureUpstreamRepo = stepv2.Func11("Ensure Upstream Repo", func(ctx context.
 	if !repoExists {
 		stepv2.Func10("Downloading", func(ctx context.Context, path string) {
 			targetDir := stepv2.NamedValue(ctx, "Target Dir", filepath.Dir(path))
-			stepv2.MkDirAll(ctx, targetDir, 0700)
+			stepv2.MkDirAll(ctx, targetDir, 0o700)
 			stepv2.Cmd(ctx, "git", "clone", fmt.Sprintf("https://%s.git", repoPath), path)
 		})(ctx, expectedLocation)
 	}
@@ -324,6 +324,8 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		prTitle = "Test: Upgrade pulumi/{pkg,sdk} to " + c.TargetPulumiVersion.String()
 	case c.UpgradeJavaVersion:
 		prTitle = "Upgrade pulumi-java to " + c.JavaVersion
+	case c.UpgradeTFSDKVersion:
+		prTitle = "Upgrade tfSDK to " + c.TargetTFSDKRef.String()
 	default:
 		return fmt.Errorf("Unknown action")
 	}
@@ -355,13 +357,15 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		}
 
 		stepv2.Cmd(ctx, "gh",
-			append([]string{"pr", "create",
+			append([]string{
+				"pr", "create",
 				"--assignee", c.PrAssign,
 				"--base", repo.defaultBranch,
 				"--head", repo.workingBranch,
 				"--reviewer", c.PrReviewers,
 				"--title", prTitle,
-				"--body", prBody},
+				"--body", prBody,
+			},
 				addLabels...)...)
 	}
 
@@ -446,7 +450,7 @@ func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA *st
 		if err != nil {
 			return "", fmt.Errorf("failed to format file as bytes: %w", err)
 		}
-		err = os.WriteFile("go.mod", goModFile, 0600)
+		err = os.WriteFile("go.mod", goModFile, 0o600)
 		return "updated", err
 	}).In(repo.providerDir())
 }
@@ -500,8 +504,8 @@ var hasRemoteBranch = stepv2.Func11("Has Remote Branch", func(ctx context.Contex
 })
 
 var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Context, c Context,
-	targetBridgeVersion, targetPfVersion Ref, upgradeTarget *UpstreamUpgradeTarget) (string, error) {
-
+	targetBridgeVersion, targetPfVersion Ref, upgradeTarget *UpstreamUpgradeTarget,
+) (string, error) {
 	ciSuffix := stepv2.Func01("Random Suffix", func(ctx context.Context) string {
 		stepv2.MarkImpure(ctx) // This needs to be impure since it is random
 		return fmt.Sprintf("-%08d", rand.Intn(int(math.Pow10(8))))
@@ -533,6 +537,8 @@ var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Co
 		return ret("upgrade-pulumi-version-to-%s", c.TargetPulumiVersion)
 	case c.UpgradeJavaVersion:
 		return ret("upgrade-java-version-to-%s", c.JavaVersion)
+	case c.UpgradeTFSDKVersion:
+		return ret("upgrade-tf-sdk-version-to-%s", c.TargetTFSDKRef)
 	default:
 		return "", fmt.Errorf("calculating branch name: unknown action")
 	}
@@ -568,7 +574,6 @@ var pullDefaultBranch = stepv2.Func11("Pull Default Branch", func(ctx context.Co
 			return "master", nil
 		}
 		return "", fmt.Errorf("could not find 'master' or 'main' branch")
-
 	})(ctx)
 
 	stepv2.Cmd(ctx, "git", "fetch")
@@ -650,7 +655,6 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 				stepv2.WriteFile(ctx, path, new)
 			}
 			return nil
-
 		}
 		err := filepath.Walk(*repo.providerDir(), fn)
 		if err != nil {
@@ -763,7 +767,6 @@ var addVersionPrefixToGHWorkflows = stepv2.Func20("Update GitHub Workflows", fun
 				{Value: "VERSION_PREFIX", Kind: yaml.ScalarNode},
 				{Value: versionPrefix, Kind: yaml.ScalarNode},
 			}, env.Content...)
-
 		}
 
 		updated := new(bytes.Buffer)
@@ -799,7 +802,8 @@ func updateFile(ctx context.Context, path string, update func(context.Context, s
 }
 
 func migrationSteps(ctx context.Context, repo ProviderRepo, providerName string, description string,
-	migrationFunc func(resourcesFilePath, providerName string) (bool, error)) ([]step.Step, error) {
+	migrationFunc func(resourcesFilePath, providerName string) (bool, error),
+) ([]step.Step, error) {
 	steps := []step.Step{}
 	providerName = strings.TrimPrefix(providerName, "pulumi-")
 	changesMade := false
@@ -897,7 +901,8 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 // That means figuring out the old and the new version, and producing a
 // UpstreamUpgradeTarget.
 var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx context.Context,
-	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo) (*UpstreamUpgradeTarget, error) {
+	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo,
+) (*UpstreamUpgradeTarget, error) {
 	upgradeTarget := getExpectedTarget(ctx, repoOrg+"/"+repoName)
 	if upgradeTarget == nil {
 		return nil, fmt.Errorf("could not determine an upstream version")
@@ -1020,7 +1025,9 @@ var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 	currentBranch, ok := refs.labelOf(currentRef)
 	if !ok {
 		// use latest versioned branch
-		return "", fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
+		latestSha, ok := refs.shaOf(fmt.Sprintf("refs/heads/upstream-%s", latest.Original()))
+		contract.Assertf(ok, "Failed to lookup sha of known tag: %q not in %#v", latest.Original(), refs.labelToRef)
+		return latestSha, fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
 			"latest branch at %s instead.", currentRef, latest), nil
 	}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"q"
 	"sort"
 	"strings"
 
@@ -29,7 +30,6 @@ func setEnv(ctx context.Context, k, v string) {
 }
 
 func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) {
-
 	// Setup ctx to enable replay tests with stepv2:
 	if file := os.Getenv("PULUMI_REPLAY"); file != "" {
 		var write io.Closer
@@ -113,10 +113,14 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		if GetContext(ctx).MajorVersionBump {
 			repo.currentVersion = findCurrentMajorVersion(ctx, repoOrg, repoName)
 		}
-
 	})
 	if err != nil {
 		return err
+	}
+
+	if tfSDKTargetSHA != "" {
+		GetContext(ctx).UpgradeTFSDKVersion = true
+		GetContext(ctx).TargetTFSDKRef = &HashReference{tfSDKTargetSHA}
 	}
 
 	if GetContext(ctx).UpgradeJavaVersion {
@@ -152,7 +156,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	// are no actions remaining, we can exit early.
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
 		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion && ctx.TargetPulumiVersion == nil &&
-		!ctx.UpgradeJavaVersion {
+		!ctx.UpgradeJavaVersion && !ctx.UpgradeTFSDKVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -207,6 +211,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	steps = append(steps, step.Computed(func() step.Step {
 		// No upgrade was planned, so exit
+		q.Q(tfSDKTargetSHA)
 		if tfSDKTargetSHA == "" {
 			return nil
 		}
@@ -257,7 +262,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		r := func(kind string) string {
 			mod := "github.com/pulumi/pulumi/" + kind + "/v3"
 			return fmt.Sprintf("%[1]s=%[1]s@%s", mod, ref)
-
 		}
 
 		upgrade := func(name string) step.Step {

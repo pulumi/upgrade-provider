@@ -40,6 +40,9 @@ type Context struct {
 
 	UpgradeJavaVersion bool
 
+	UpgradeTFSDKVersion bool
+	TargetTFSDKRef      Ref
+
 	// Some providers go for months without an upstream release, but do receive weekly bridge updates.
 	// upgrade-provider will detect if the provider's last release is more than eight weeks old, and if it is,
 	// setting this field to True will trigger a patch release on a non-upstream upgrade.
