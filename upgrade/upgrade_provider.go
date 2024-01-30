@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"q"
 	"sort"
 	"strings"
 
@@ -211,7 +210,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	steps = append(steps, step.Computed(func() step.Step {
 		// No upgrade was planned, so exit
-		q.Q(tfSDKTargetSHA)
 		if tfSDKTargetSHA == "" {
 			return nil
 		}
