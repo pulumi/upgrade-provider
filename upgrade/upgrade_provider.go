@@ -29,7 +29,6 @@ func setEnv(ctx context.Context, k, v string) {
 }
 
 func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) {
-
 	// Setup ctx to enable replay tests with stepv2:
 	if file := os.Getenv("PULUMI_REPLAY"); file != "" {
 		var write io.Closer
@@ -113,7 +112,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		if GetContext(ctx).MajorVersionBump {
 			repo.currentVersion = findCurrentMajorVersion(ctx, repoOrg, repoName)
 		}
-
 	})
 	if err != nil {
 		return err
@@ -257,7 +255,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		r := func(kind string) string {
 			mod := "github.com/pulumi/pulumi/" + kind + "/v3"
 			return fmt.Sprintf("%[1]s=%[1]s@%s", mod, ref)
-
 		}
 
 		upgrade := func(name string) step.Step {
