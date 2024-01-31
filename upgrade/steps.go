@@ -1021,7 +1021,9 @@ var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 	currentBranch, ok := refs.labelOf(currentRef)
 	if !ok {
 		// use latest versioned branch
-		return "", fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
+		latestSha, ok := refs.shaOf(fmt.Sprintf("refs/heads/upstream-%s", latest.Original()))
+		contract.Assertf(ok, "Failed to lookup sha of known tag: %q not in %#v", latest.Original(), refs.labelToRef)
+		return latestSha, fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
 			"latest branch at %s instead.", currentRef, latest), nil
 	}
 
