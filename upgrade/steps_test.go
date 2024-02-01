@@ -79,7 +79,6 @@ func TestGetWorkingBranch(t *testing.T) {
 			t.Run("", testF(tt))
 		}
 	})
-
 }
 
 func TestHasRemoteBranch(t *testing.T) {
@@ -284,8 +283,8 @@ func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
         }
 ]`), "Get UpstreamOrg from module version", parseUpstreamProviderOrg)
 }
-func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
 
+func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
 	testReplay((&Context{
 		GoPath: "/Users/myuser/go",
 	}).Wrap(context.Background()),
@@ -324,7 +323,6 @@ func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
 }
 
 func TestCheckMaintenancePatchExpiredCadence(t *testing.T) {
-
 	testReplay((&Context{
 		GoPath: "/Users/myuser/go",
 	}).Wrap(context.Background()),
@@ -359,4 +357,87 @@ func TestCheckMaintenancePatchExpiredCadence(t *testing.T) {
           "impure": true
         }
 ]`), "Check if we should release a maintenance patch", maintenanceRelease)
+}
+
+func TestPluginSDKUpgradeLatest(t *testing.T) {
+	testReplay((&Context{
+		GoPath: "/Users/myuser/go",
+	}).Wrap(context.Background()),
+		t, jsonMarshal[[]*step.Step](t, `[
+	{
+		"name": "Planning Plugin SDK Upgrade",
+		"inputs": [
+			{
+			"Name": "pulumi-keycloak",
+			"Org": "pulumi"
+			}
+		],
+		"outputs": [
+			"74776a5cd5f9a1330c34124588e0ad800d26724d",
+			"Could not find head branch at ref e6d96b3b8f7e. Upgrading to latest branch at 2.29.0 instead.",
+			null
+		]
+	},
+	{
+		"name": "Original Go Version of",
+		"inputs": [
+		  {
+			"Name": "pulumi-keycloak",
+			"Org": "pulumi"
+		  },
+		  "provider/go.mod",
+		  "github.com/pulumi/terraform-plugin-sdk/v2"
+		],
+		"outputs": [
+		  {
+			"Path": "github.com/pulumi/terraform-plugin-sdk/v2",
+			"Version": "v2.0.0-20230912190043-e6d96b3b8f7e"
+		  },
+		  true,
+		  null
+		]
+	  },
+	  {
+		"name": "git",
+		"inputs": [
+		  "git",
+		  [
+			"show",
+			":provider/go.mod"
+		  ]
+		],
+		"outputs": [
+		  "module github.com/pulumi/pulumi-keycloak/provider/v5\n\ngo 1.21\n\nreplace (\n\tgithub.com/hashicorp/terraform-plugin-sdk/v2 =\u003e github.com/pulumi/terraform-plugin-sdk/v2 v2.0.0-20230912190043-e6d96b3b8f7e\n\tgithub.com/hashicorp/vault =\u003e github.com/hashicorp/vault v1.2.0\n\tgithub.com/mrparkers/terraform-provider-keycloak =\u003e ../upstream\n)\n\nrequire (\n\tgithub.com/mrparkers/terraform-provider-keycloak v0.0.0-00010101000000-000000000000\n\tgithub.com/pulumi/pulumi-terraform-bridge/v3 v3.72.0\n\tgithub.com/pulumi/pulumi/sdk/v3 v3.103.1\n)\n\nrequire (\n\tcloud.google.com/go v0.110.8 // indirect\n\tcloud.google.com/go/compute v1.23.0 // indirect\n)\n",
+		  null
+		],
+		"impure": true
+	  },
+	  {
+		"name": "git refs of",
+		"inputs": [
+		  "https://github.com/pulumi/terraform-plugin-sdk.git",
+		  "heads"
+		],
+		"outputs": [
+		  {},
+		  null
+		]
+	  },
+	  {
+		"name": "git",
+		"inputs": [
+		  "git",
+		  [
+			"ls-remote",
+			"--heads",
+			"https://github.com/pulumi/terraform-plugin-sdk.git"
+		  ]
+		],
+		"outputs": [
+		  "efd600e5c6b7a15badde5c32d6b16312c8823409\trefs/heads/dependabot/go_modules/golang.org/x/crypto-0.17.0\n313a7c4cbcad744ab88abc26b42f8e526680ce49\trefs/heads/dependabot/go_modules/golang.org/x/net-0.17.0\ndacd5f7afbedcd7aeb5881b94573369385692784\trefs/heads/dependabot/go_modules/google.golang.org/grpc-1.56.3\n7ac578ce47fc07e0888beee6d4ab9db09369274f\trefs/heads/master\na81109190d574226079b2ceff408cc7bca82f6fe\trefs/heads/pgavlin/upstream-v2.12.0\n430f685de305a148a5a79d1c3959ecf109986675\trefs/heads/upstream-v2.24.1\n3fa930f865709d507154454c2af20e023d15b6e6\trefs/heads/upstream-v2.26.1\n03a71d0fca3d7d5ff24a52e334aa2e52f442fe04\trefs/heads/upstream-v2.27.0\n74776a5cd5f9a1330c34124588e0ad800d26724d\trefs/heads/upstream-v2.29.0\n",
+		  null
+		],
+		"impure": true
+	  }
+]`), "Planning Plugin SDK Upgrade", planPluginSDKUpgrade)
 }
