@@ -221,6 +221,9 @@ Values include:
 - `pr-reviewers`: A comma separated list of reviewers to assign the upgrade PR to.
 - `pr-assign`: A user to assign the upgrade PR to (default: `@me`).
 
+## Writing tests
+Use `PULUMI_REPLAY=logs.json upgrade-provider...` to record logs to use in replay tests like [this](https://github.com/pulumi/upgrade-provider/blob/2b3682f894e0b8d85673cee0c0f50fb25ad067b6/upgrade/steps_test.go#L287).
+
 ## Project Guidelines
 
 ### Goals
