@@ -1015,8 +1015,10 @@ var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 
 	var r string
 	switch br := br.(type) {
-	case *Version: r = "v"+br.SemVer.String()
-	case *HashReference: r = br.GitHash
+	case *Version:
+		r = "v" + br.SemVer.String()
+	case *HashReference:
+		r = br.GitHash
 	case *Latest:
 		contract.Failf("Unsupported `latest` Ref")
 	default:

@@ -360,8 +360,8 @@ func TestCheckMaintenancePatchExpiredCadence(t *testing.T) {
 }
 
 func TestPluginSDKUpgrade(t *testing.T) {
-	ctx := context.WithValue(context.Background(), httpHandlerKey, simpleHttpHandler(func (url string) ([]byte, error) {
-		if url == "https://raw.githubusercontent.com/pulumi/pulumi-terraform-bridge/v3.73.0/go.mod"  {
+	ctx := context.WithValue(context.Background(), httpHandlerKey, simpleHttpHandler(func(url string) ([]byte, error) {
+		if url == "https://raw.githubusercontent.com/pulumi/pulumi-terraform-bridge/v3.73.0/go.mod" {
 			return []byte(`
 module github.com/pulumi/pulumi-terraform-bridge/v3
 
@@ -374,20 +374,20 @@ replace github.com/hashicorp/terraform-plugin-sdk/v2 => github.com/pulumi/terraf
 		}
 		return nil, fmt.Errorf("not found")
 	}))
-	testReplay((&Context{	GoPath: "/Users/myuser/go"	}).Wrap(ctx), t, jsonMarshal[[]*step.Step](t, `
-		[
-		  {
-		    "name": "Planning Plugin SDK Upgrade",
-		    "inputs": [
-		      "3.73.0"
-		    ],
-		    "outputs": [
-		      "v2.0.0-20240129205329-74776a5cd5f9",
-		      "bridge 3.73.0 needs terraform-plugin-sdk v2.0.0-20240129205329-74776a5cd5f9",
-		      null
-		    ]
-		  }
-		]`), "Planning Plugin SDK Upgrade", planPluginSDKUpgrade)
+	testReplay((&Context{GoPath: "/Users/myuser/go"}).Wrap(ctx), t, jsonMarshal[[]*step.Step](t, `
+	[
+	  {
+	    "name": "Planning Plugin SDK Upgrade",
+	    "inputs": [
+	      "3.73.0"
+	    ],
+	    "outputs": [
+	      "v2.0.0-20240129205329-74776a5cd5f9",
+	      "bridge 3.73.0 needs terraform-plugin-sdk v2.0.0-20240129205329-74776a5cd5f9",
+	      null
+	    ]
+	  }
+	]`), "Planning Plugin SDK Upgrade", planPluginSDKUpgrade)
 }
 
 type simpleHttpHandler func(string) ([]byte, error)
