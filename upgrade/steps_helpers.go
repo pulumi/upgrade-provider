@@ -383,15 +383,6 @@ func (g gitRepoRefs) shaOf(label string) (string, bool) {
 	return "", false
 }
 
-func (g gitRepoRefs) labelOf(sha string) (string, bool) {
-	for label, ref := range g.labelToRef {
-		if strings.HasPrefix(ref, sha) {
-			return label, true
-		}
-	}
-	return "", false
-}
-
 func (g gitRepoRefs) sortedLabels(less func(string, string) bool) []string {
 	labels := make([]string, 0, len(g.labelToRef))
 	for label := range g.labelToRef {

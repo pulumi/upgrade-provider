@@ -1002,51 +1002,53 @@ var planBridgeUpgrade = stepv2.Func11E("Planning Bridge Upgrade", func(
 })
 
 var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
-	ctx context.Context, repo ProviderRepo,
+	ctx context.Context, bridgeRef string,
 ) (_, display string, _ error) {
 	defer func() { stepv2.SetLabel(ctx, display) }()
-	current, ok := originalGoVersionOfV2(ctx, repo, "provider/go.mod",
-		"github.com/pulumi/terraform-plugin-sdk/v2")
-	if !ok {
-		return "", "not found", nil
-	}
-	refs := gitRefsOfV2(ctx,
-		"https://github.com/pulumi/terraform-plugin-sdk.git", "heads")
-	currentRef, err := module.PseudoVersionRev(current.Version)
+
+	sdkv2 := "github.com/hashicorp/terraform-plugin-sdk/v2"
+
+	br, err := ParseRef(bridgeRef)
 	if err != nil {
-		return "", "", fmt.Errorf("unable to parse PseudoVersionRef %q: %w",
-			current.Version, err)
-	}
-	latest := latestSemverTag("upstream-", refs)
-	currentBranch, ok := refs.labelOf(currentRef)
-	if !ok {
-		// use latest versioned branch
-		// This is not quite correct, since it could be newer than the
-		// version used in the bridge.
-		// TODO: https://github.com/pulumi/upgrade-provider/issues/245
-		latestSha, ok := refs.shaOf(fmt.Sprintf("refs/heads/upstream-%s", latest.Original()))
-		contract.Assertf(ok, "Failed to lookup sha of known tag: %q not in %#v", latest.Original(), refs.labelToRef)
-		return latestSha, fmt.Sprintf("Could not find head branch at ref %s. Upgrading to "+
-			"latest branch at %s instead.", currentRef, latest), nil
+		return "", "", fmt.Errorf("cannot parse a Git bridge ref: %v", bridgeRef)
 	}
 
-	trim := func(branch string) string {
-		const p = "refs/heads/upstream-"
-		return strings.TrimPrefix(branch, p)
+	var r string
+	switch br := br.(type) {
+	case *Version:
+		r = "v" + br.SemVer.String()
+	case *HashReference:
+		r = br.GitHash
+	case *Latest:
+		contract.Failf("Unsupported `latest` Ref")
+	default:
+		contract.Failf("Unsupported type of Ref: incomplete case match")
 	}
-	currentBranch = trim(currentBranch)
 
-	// We are guaranteed to get a non-nil result because there
-	// are semver tags released tags with this prefix.
-	if latest.Original() == currentBranch {
-		return "", fmt.Sprintf("Up to date at %s", latest), nil
+	url := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-terraform-bridge/%s/go.mod", r)
+
+	gomodBytes, err := getHTTP(ctx, url)
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to get %v: %w", url, err)
 	}
-	latestTag := fmt.Sprintf("refs/heads/upstream-%s", latest.Original())
-	latestSha, ok := refs.shaOf(latestTag)
-	contract.Assertf(ok, "Failed to lookup sha of known tag: %q not in %#v",
-		latestTag, refs.labelToRef)
 
-	return latestSha, fmt.Sprintf("%s -> %s", currentBranch, latest), nil
+	goMod, err := modfile.Parse("go.mod", gomodBytes, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("Failed parse go.mod: %w", err)
+	}
+
+	version := ""
+	for _, re := range goMod.Replace {
+		if re.Old.Path == sdkv2 {
+			version = re.New.Version
+		}
+	}
+
+	if version == "" {
+		return "", "", fmt.Errorf("Failed to find %v replace in bridge go.mod", sdkv2)
+	}
+
+	return version, fmt.Sprintf("bridge %s needs terraform-plugin-sdk %s", bridgeRef, version), nil
 })
 
 var plantPfUpgrade = stepv2.Func11E("Planning Plugin Framework Upgrade", func(

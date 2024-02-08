@@ -100,7 +100,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	err = stepv2.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
 		if GetContext(ctx).UpgradeBridgeVersion {
 			targetBridgeVersion = planBridgeUpgrade(ctx, goMod)
-			tfSDKTargetSHA, tfSDKUpgrade = planPluginSDKUpgrade(ctx, repo)
+			tfSDKTargetSHA, tfSDKUpgrade = planPluginSDKUpgrade(ctx, targetBridgeVersion.String())
 			// Check if we need to release a maintenance patch and set context if so
 			GetContext(ctx).MaintenancePatch = maintenanceRelease(ctx, repo)
 		}
