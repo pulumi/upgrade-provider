@@ -963,6 +963,11 @@ var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx conte
 	return upgradeTarget, nil
 })
 
+// If a bridge update is needed, will return the concrete Ref (never returns "latest").
+//
+// If the bridge is up to date, will return nil and unset the following flag:
+//
+//	GetContext(ctx).UpgradeBridgeVersion = false
 var planBridgeUpgrade = stepv2.Func11E("Planning Bridge Upgrade", func(
 	ctx context.Context, goMod *GoMod,
 ) (Ref, error) {
