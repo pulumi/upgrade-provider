@@ -223,35 +223,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			setTFPluginSDKReplace(ctx, repo, &tfSDKTargetSHA),
 			step.Cmd("go", "mod", "tidy").In(repo.providerDir()))
 
-		// replaceTFMuxAndPluginGo := step.F("Replace tf module versions", func(ctx context.Context) (string, error) {
-		// 	content, err := os.ReadFile("go.mod")
-		// 	if err != nil {
-		// 		return "", err
-		// 	}
-
-		// 	pluginGoStr := "github.com/hashicorp/terraform-plugin-go v0.%s.0 // indirect"
-		// 	oldPluginGoStr := fmt.Sprintf(pluginGoStr, "22")
-		// 	newPluginGoStr := fmt.Sprintf(pluginGoStr, "21")
-
-		// 	muxStr := "github.com/hashicorp/terraform-plugin-mux v0.%s.0 // indirect"
-		// 	oldMuxStr := fmt.Sprintf(muxStr, "15")
-		// 	newMuxStr := fmt.Sprintf(muxStr, "14")
-
-		// 	modifiedContent := strings.Replace(string(content), oldPluginGoStr, newPluginGoStr, -1)
-		// 	modifiedContent = strings.Replace(modifiedContent, oldMuxStr, newMuxStr, -1)
-
-		// 	err = os.WriteFile("go.mod", []byte(modifiedContent), 0)
-		// 	if err != nil {
-		// 		return "", err
-		// 	}
-		// 	return "", nil
-		// }).In(repo.providerDir())
-
-		// steps = append(steps,
-		// 	replaceTFMuxAndPluginGo,
-		// 	step.Cmd("go", "mod", "tidy").In(repo.providerDir()),
-		// )
-
 		return step.Combined("Update Plugin SDK", steps...)
 	}))
 
