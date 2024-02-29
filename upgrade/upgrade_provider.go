@@ -242,9 +242,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			step.Cmd("go", "get",
 				"github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion.String()),
 			step.Cmd("go", "get", "github.com/hashicorp/terraform-plugin-framework"),
-			// Hard-code the versions here until https://github.com/pulumi/pulumi-terraform-bridge/issues/1704 is resolved
-			step.Cmd("go", "get", "github.com/hashicorp/terraform-plugin-mux@v0.14.0"),
-			step.Cmd("go", "get", "github.com/hashicorp/terraform-plugin-go@v0.21.0"),
+			step.Cmd("go", "get", "github.com/hashicorp/terraform-plugin-mux"),
 			step.Cmd("go", "mod", "tidy"),
 		).In(repo.providerDir()))
 	}
