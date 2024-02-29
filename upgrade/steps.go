@@ -310,22 +310,9 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	// attempt to build on existing branches.
 	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch, "--force")
 
-	var prTitle string
-	switch {
-	case c.UpgradeProviderVersion:
-		prTitle = fmt.Sprintf("Upgrade %s to v%s", c.UpstreamProviderName, target.Version)
-	case c.UpgradeBridgeVersion:
-		prTitle = "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion.String()
-	case c.UpgradeCodeMigration:
-		prTitle = fmt.Sprintf("Code migration: %s", strings.Join(c.MigrationOpts, ", "))
-	case c.UpgradePfVersion:
-		prTitle = "Upgrade pulumi-terraform-bridge/pf to " + targetPfVersion.String()
-	case c.TargetPulumiVersion != nil:
-		prTitle = "Test: Upgrade pulumi/{pkg,sdk} to " + c.TargetPulumiVersion.String()
-	case c.UpgradeJavaVersion:
-		prTitle = "Upgrade pulumi-java to " + c.JavaVersion
-	default:
-		return fmt.Errorf("Unknown action")
+	prTitle, err := prTitle(ctx, target, targetBridgeVersion, targetPfVersion)
+	if err != nil {
+		return err
 	}
 
 	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade, osArgs)

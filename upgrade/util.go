@@ -90,6 +90,7 @@ type Context struct {
 	PrAssign         string
 
 	PRDescription string
+	PRTitlePrefix string
 }
 
 func (c *Context) Wrap(ctx context.Context) context.Context {

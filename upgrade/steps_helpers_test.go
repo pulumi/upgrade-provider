@@ -115,6 +115,36 @@ func TestPullRequestBody(t *testing.T) {
 	})
 }
 
+func TestPullRequestTitle(t *testing.T) {
+	t.Run("prefix", func(t *testing.T) {
+		ctx := context.Background()
+		uc := Context{PRTitlePrefix: "[TEST]", UpgradeBridgeVersion: true}
+		bridgeVersion, err := ParseRef("v5.3.1")
+		assert.Nil(t, err)
+		got, err := prTitle(uc.Wrap(ctx), nil, bridgeVersion, nil)
+		assert.Nil(t, err)
+		autogold.ExpectFile(t, got)
+	})
+
+	t.Run("no-prefix", func(t *testing.T) {
+		ctx := context.Background()
+		uc := Context{PRTitlePrefix: "", UpgradeBridgeVersion: true}
+		bridgeVersion, err := ParseRef("v5.3.1")
+		assert.Nil(t, err)
+		got, err := prTitle(uc.Wrap(ctx), nil, bridgeVersion, nil)
+		assert.Nil(t, err)
+		autogold.ExpectFile(t, got)
+	})
+
+	t.Run("provider-upgrade", func(t *testing.T) {
+		ctx := context.Background()
+		uc := Context{PRTitlePrefix: "", UpgradeProviderVersion: true, UpstreamProviderName: "terraform-provider-aws"}
+		got, err := prTitle(uc.Wrap(ctx), &UpstreamUpgradeTarget{Version: semver.MustParse("5.3.0")}, nil, nil)
+		assert.Nil(t, err)
+		autogold.ExpectFile(t, got)
+	})
+}
+
 func TestGetExpectedTargetFromUpstream(t *testing.T) {
 	repo := "pulumi/pulumi-cloudflare"
 
