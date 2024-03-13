@@ -277,6 +277,14 @@ var maintenanceRelease = stepv2.Func11E("Check if we should release a maintenanc
 		return false, err
 	}
 
+	// If relInfo.Latest is nil, that means that no releases were detected.
+	//
+	// We don't suggest a release, since we assume that the author wants to control
+	// the first release by hand.
+	if relInfo.Latest == nil {
+		return false, nil
+	}
+
 	releaseDate, err := time.Parse(time.RFC3339, relInfo.Latest.PublishedAt)
 	if err != nil {
 		return false, err
@@ -695,6 +703,7 @@ var addVersionPrefixToGHWorkflows = stepv2.Func20("Update GitHub Workflows", fun
 		_, ok := stepv2.Stat(ctx, path)
 		if !ok {
 			stepv2.SetLabelf(ctx, "%s does not exist", path)
+			return nil
 		}
 
 		b := stepv2.ReadFile(ctx, path)
@@ -1080,7 +1089,10 @@ var plantPfUpgrade = stepv2.Func11E("Planning Plugin Framework Upgrade", func(
 })
 
 var fetchLatestJavaGen = stepv2.Func03("Fetching latest Java Gen", func(ctx context.Context) (string, string, bool) {
-	latestJavaGen := latestReleaseVersion(ctx, "pulumi/pulumi-java")
+	latestJavaGen, foundRelease := latestReleaseVersion(ctx, "pulumi/pulumi-java")
+	contract.Assertf(foundRelease,
+		"We could not find a GH release for pulumi/pulumi-java, but we know one exists")
+
 	var currentJavaGen string
 	_, exists := stepv2.Stat(ctx, ".pulumi-java-gen.version")
 	if !exists {
