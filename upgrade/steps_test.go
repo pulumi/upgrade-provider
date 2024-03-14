@@ -299,7 +299,7 @@ func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
           ],
           "outputs": [
             false,
-			null
+	    null
           ]
         },
         {
@@ -314,7 +314,7 @@ func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
             ]
           ],
           "outputs": [
-            "{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"2024-01-04T21:03:48Z\"}}\n",
+            "{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"2024-05-04T21:03:48Z\"}}\n",
             null
           ],
           "impure": true
