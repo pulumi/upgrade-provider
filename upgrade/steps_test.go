@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
@@ -285,6 +286,7 @@ func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
 }
 
 func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
+	fourWeeksAgo := time.Now().Add(-time.Hour * 24 * 7 * 4).Format(time.RFC3339)
 	testReplay((&Context{
 		GoPath: "/Users/myuser/go",
 	}).Wrap(context.Background()),
@@ -314,7 +316,7 @@ func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
             ]
           ],
           "outputs": [
-            "{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"2024-05-04T21:03:48Z\"}}\n",
+            "{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"`+fourWeeksAgo+`\"}}\n",
             null
           ],
           "impure": true
