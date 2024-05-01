@@ -18,7 +18,14 @@ In the provider repo:
     +major-version: 2
     ```
 
-1. Run `make ci-mgmt` to reflect the changes made in the previous step. At minimum, you
+1. Set the `VERSION_PREFIX` field in `.ci-mgmt.yaml` to `2.0.0`:
+
+    ```patch
+    env:
+      VERSION_PREFIX: 2.0.0
+    ```
+
+1. Run `make ci-mgmt` to reflect the changes made in the previous steps. You
    should see these changes in `.goreleaser.prerelease.yml`, `.goreleaser.yml` and
    `Makefile`:
 
@@ -34,8 +41,19 @@ In the provider repo:
 
     ```patch
     -PROVIDER_PATH := provider
-    +PROVIDER_PATH := provider/v2
+    +PROVIDER_PATH := provider/v2:
     ```
+
+    You should also see the following changes in relevant `.github/workflows` files (e.g. `master.yml`, `run-acceptance-tests.yml`)
+
+    ```patch
+    env:
+      PROVIDER: ${PROVIDER}
+      (...)
+      VERSION_PREFIX: 2.0.0
+    ```
+
+1. Because the `VERSION_PREFIX` field is stateful, at this point remove it from `.ci-mgmt.yaml` so that automation can clean up the workflow files on the next workflow file update.
 
 1. In `provider/go.mod`, change the `module` directive to be v2, e.g.:
 
