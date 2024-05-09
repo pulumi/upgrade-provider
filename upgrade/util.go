@@ -91,6 +91,8 @@ type Context struct {
 
 	PRDescription string
 	PRTitlePrefix string
+
+	NeedsReleasePatch bool
 }
 
 func (c *Context) Wrap(ctx context.Context) context.Context {

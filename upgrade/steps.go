@@ -345,7 +345,11 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 			}
 		// On non-upstream upgrades, we will create a patch release label
 		// if the provider hasn't been released in 8 weeks.
-		case c.MaintenancePatch && !c.UpgradeProviderVersion:
+		case (c.MaintenancePatch && !c.UpgradeProviderVersion):
+			addLabels = []string{"--label", "needs-release/patch"}
+
+		// If we have the needs release flag, we make a patch release.
+		case c.NeedsReleasePatch:
 			addLabels = []string{"--label", "needs-release/patch"}
 		}
 
