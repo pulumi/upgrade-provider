@@ -1121,12 +1121,19 @@ var fetchLatestJavaGen = stepv2.Func03("Fetching latest Java Gen", func(ctx cont
 	return currentJavaGen, latestJavaGen.String(), true
 })
 
-var parseUpstreamProviderOrg = stepv2.Func11("Get UpstreamOrg from module version", func(ctx context.Context, upstreamMod module.Version) string {
+var parseUpstreamProviderOrg = stepv2.Func11E("Get UpstreamOrg from module version", func(ctx context.Context, upstreamMod module.Version) (string, error) {
 	// We expect tokens to be of the form:
 	//
 	//	github.com/${org}/${repo}/${path}
 	//
 	// The second chunk is the org name.
+
+	// Verify that the token is of valid format
+	goModRegexp := regexp.MustCompile("github.com/[a-zA-Z0-9-]*/[a-zA-Z0-9-]*")
+
+	if !goModRegexp.MatchString(upstreamMod.Path) {
+		return "", fmt.Errorf(fmt.Sprintf("Invalid upstream module format: expected format github.com/${org}/${repo}/${path} but got %s", upstreamMod.Path))
+	}
 	tok := strings.Split(modPathWithoutVersion(upstreamMod.Path), "/")
-	return tok[1]
+	return tok[1], nil
 })
