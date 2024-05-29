@@ -1129,10 +1129,10 @@ var parseUpstreamProviderOrg = stepv2.Func11E("Get UpstreamOrg from module versi
 	// The second chunk is the org name.
 
 	// Verify that the token is of valid format
-	goModRegexp := regexp.MustCompile("github.com/[a-zA-Z0-9-]*/[a-zA-Z0-9-]*")
+	goModRegexp := regexp.MustCompile("[a-zA-Z0-9-.]*/[a-zA-Z0-9-_.]*/[a-zA-Z0-9-]*")
 
 	if !goModRegexp.MatchString(upstreamMod.Path) {
-		return "", fmt.Errorf(fmt.Sprintf("Invalid upstream module format: expected format github.com/${org}/${repo}/${path} but got %s", upstreamMod.Path))
+		return "", fmt.Errorf("invalid upstream module format: expected format github.com/${org}/${repo}/${path} but got %s", upstreamMod.Path)
 	}
 	tok := strings.Split(modPathWithoutVersion(upstreamMod.Path), "/")
 	return tok[1], nil
