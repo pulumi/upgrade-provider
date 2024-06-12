@@ -516,6 +516,8 @@ var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Co
 	}
 
 	switch {
+	case c.MajorVersionBump:
+		return ret("upgrade-%s-to-v%s-major", c.UpstreamProviderName, upgradeTarget.Version)
 	case c.UpgradeProviderVersion:
 		return ret("upgrade-%s-to-v%s", c.UpstreamProviderName, upgradeTarget.Version)
 	case c.UpgradeBridgeVersion:
