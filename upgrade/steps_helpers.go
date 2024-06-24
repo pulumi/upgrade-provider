@@ -249,6 +249,9 @@ var setCurrentUpstreamFromPatched = stepv2.Func10E("Set Upstream From Patched", 
 	checkedInCommit := stepv2.Cmd(ctx,
 		"git", "ls-tree", repo.defaultBranch, "upstream", "--object-only")
 	sha := strings.TrimSpace(checkedInCommit)
+	if sha == "" {
+		return fmt.Errorf("found empty SHA")
+	}
 
 	stepv2.Cmd(ctx, "git", "submodule", "init")
 	remoteURL := strings.TrimSpace(stepv2.Cmd(ctx,
@@ -263,7 +266,13 @@ var setCurrentUpstreamFromPatched = stepv2.Func10E("Set Upstream From Patched", 
 		if !strings.HasPrefix(tag, sha) {
 			continue
 		}
-		ref := strings.Split(strings.TrimSpace(tag), "\t")[1]
+		var ref string
+
+		if parts := strings.Split(tag, "\t"); len(parts) >= 2 {
+			ref = parts[1]
+		} else {
+			return fmt.Errorf(`unparsable ref line %q: expected seperating \t`, tag)
+		}
 		version = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(ref, "refs/tags/"), "^{}"))
 	}
 	if version == "" {
