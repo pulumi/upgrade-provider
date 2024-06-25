@@ -200,7 +200,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			fmt.Printf("%s need to complete Step 11: Updating README.md and sdk/python/README.md "+
 				"in a follow up commit.\n", colorize.Bold("You"))
 			fmt.Printf("Steps are listed at\n\t" +
-				"https://github.com/pulumi/platform-providers-team/blob/main/playbooks/tf-provider-major-version-update.md\n")
+				"https://github.com/pulumi/upgrade-provider/blob/main/playbooks/Release: Major Version.md\n")
 		}()
 	}
 
