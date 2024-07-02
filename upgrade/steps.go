@@ -164,8 +164,18 @@ func UpgradeProviderVersion(
 			step.Cmd("git", "fetch", "--tags").In(&upstreamDir),
 			// We need to remove any patches to so we can cleanly pull the next upstream version.
 			step.Cmd("git", "reset", "HEAD", "--hard").In(&upstreamDir),
-			step.Cmd("git", "checkout", "tags/v"+target.String()).In(&upstreamDir),
-			step.Cmd("git", "add", "upstream").In(&repo.root),
+			// Load patches into a 'pulumi-patch' branch.
+			// This also creates a "checkout-base" branch which marks where to extract patches back to.
+			step.Cmd("make", "upstream.checkout").In(&repo.root),
+			// Re-point the "checkout-base" branch to the new version.
+			// The "branch" command lets us move it without checking it out.
+			step.Cmd("git", "branch", "-f", "checkout-base", "refs/tags/v"+target.String()).In(&upstreamDir),
+			// Rebase onto new version tag.
+			step.Cmd("git", "rebase", "--onto", "refs/tags/v"+target.String()).In(&upstreamDir),
+			// Extract patches back to the patches directory.
+			step.Cmd("make", "upstream.format_patches").In(&repo.root),
+			// Add the upstream changes and patches to be committed.
+			step.Cmd("git", "add", "upstream", "patches").In(&repo.root),
 			// We re-apply changes, eagerly.
 			//
 			// Failure to perform this step can lead to failures later, for
