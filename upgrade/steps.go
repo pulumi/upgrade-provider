@@ -164,25 +164,12 @@ func UpgradeProviderVersion(
 			step.Cmd("git", "fetch", "--tags").In(&upstreamDir),
 			// We need to remove any patches to so we can cleanly pull the next upstream version.
 			step.Cmd("git", "reset", "HEAD", "--hard").In(&upstreamDir),
-			// Load patches into a 'pulumi-patch' branch.
-			// This also creates a "checkout-base" branch which marks where to extract patches back to.
-			step.Cmd("make", "upstream.checkout").In(&repo.root),
-			// Re-point the "checkout-base" branch to the new version.
-			// The "branch" command lets us move it without checking it out.
-			step.Cmd("git", "branch", "-f", "checkout-base", "refs/tags/v"+target.String()).In(&upstreamDir),
-			// Rebase onto new version tag.
-			step.Cmd("git", "rebase", "--onto", "refs/tags/v"+target.String()).In(&upstreamDir),
-			// Extract patches back to the patches directory.
-			step.Cmd("make", "upstream.format_patches").In(&repo.root),
-			// Add the upstream changes and patches to be committed.
-			step.Cmd("git", "add", "upstream", "patches").In(&repo.root),
-			// We re-apply changes, eagerly.
-			//
-			// Failure to perform this step can lead to failures later, for
-			// example, we might have a patched in shim dir that is not yet
-			// restored, causing `go mod tidy` to fail, even where `make
-			// provider` would succeed.
-			step.Cmd("make", "upstream").In(&repo.root),
+			// Load patches into a branch.
+			step.Cmd("./upstream.sh", "checkout").In(&repo.root),
+			// Rebase the upstream tracking branch onto the new version.
+			step.Cmd("./upstream.sh", "rebase", "-o", "refs/tags/v"+target.String()).In(&repo.root),
+			// Turn the rebased commits back into patches.
+			step.Cmd("./upstream.sh", "check_in").In(&repo.root),
 		))
 	}
 
