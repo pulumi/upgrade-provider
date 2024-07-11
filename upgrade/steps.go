@@ -164,15 +164,12 @@ func UpgradeProviderVersion(
 			step.Cmd("git", "fetch", "--tags").In(&upstreamDir),
 			// We need to remove any patches to so we can cleanly pull the next upstream version.
 			step.Cmd("git", "reset", "HEAD", "--hard").In(&upstreamDir),
-			step.Cmd("git", "checkout", "tags/v"+target.String()).In(&upstreamDir),
-			step.Cmd("git", "add", "upstream").In(&repo.root),
-			// We re-apply changes, eagerly.
-			//
-			// Failure to perform this step can lead to failures later, for
-			// example, we might have a patched in shim dir that is not yet
-			// restored, causing `go mod tidy` to fail, even where `make
-			// provider` would succeed.
-			step.Cmd("make", "upstream").In(&repo.root),
+			// Load patches into a branch.
+			step.Cmd("./upstream.sh", "checkout").In(&repo.root),
+			// Rebase the upstream tracking branch onto the new version.
+			step.Cmd("./upstream.sh", "rebase", "-o", "refs/tags/v"+target.String()).In(&repo.root),
+			// Turn the rebased commits back into patches.
+			step.Cmd("./upstream.sh", "check_in").In(&repo.root),
 		))
 	}
 
