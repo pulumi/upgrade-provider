@@ -360,6 +360,14 @@ func setUpstreamFromRemoteRepo(
 		// characters, but its **very** unlikely.
 		line = strings.Split(line, "\t")[1]
 		versionComponent := strings.TrimPrefix(string(line), "refs/"+kind+"/")
+		// From the gitrevisions(7) Manual Page:
+		//
+		//	<rev>^{}, e.g. v0.99.8^{}
+		//
+		//	A suffix ^ followed by an empty brace pair means the object could
+		//	be a tag, and dereference the tag recursively until a non-tag
+		//	object is found.
+		versionComponent = strings.TrimSuffix(versionComponent, "^{}")
 		version, err := parse(versionComponent)
 		if err != nil {
 			// Its possible that this error is valid, for example if the tag has a path,
