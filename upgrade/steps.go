@@ -673,6 +673,9 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 	setEnv(ctx, "VERSION_PREFIX", nextMajorVersion)
 
 	addVersionPrefixToGHWorkflows(ctx, repo, nextMajorVersion)
+
+	// Remove examples cache
+	stepv2.Cmd(ctx, "rm", "-rf", ".pulumi/examples-cache")
 })
 
 // Build a replace function that converts finds instances of `replace` and converts
