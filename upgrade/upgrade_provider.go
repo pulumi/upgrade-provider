@@ -65,7 +65,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		repo.root = OrgProviderRepos(ctx, repoOrg, repoName)
 		// If the user set --repo-path as CWD, assume all git content is already in-place; simply infer the main
 		// branch without pulling anything. Otherwise, pull.
-		if GetContext(ctx).repoPath == "." {
+		if GetContext(ctx).IsCWD() {
 			repo.defaultBranch = findDefaultBranch(ctx, "origin")
 		} else {
 			repo.defaultBranch = pullDefaultBranch(ctx, "origin")

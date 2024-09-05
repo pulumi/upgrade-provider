@@ -175,7 +175,7 @@ func cmd() *cobra.Command {
 	contract.AssertNoErrorf(err, "could not mark `upgrade-java` flag as hidden")
 
 	cmd.PersistentFlags().StringVar(&repoPath, "repo-path", "",
-		`Clone the provider repo to the specified path.`)
+		`Clone the provider repo to the specified path. Skip cloning if set to "."`)
 
 	cmd.PersistentFlags().StringVar(&targetVersion, "target-version", "",
 		`Upgrade the provider to the passed version.

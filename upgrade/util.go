@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 )
@@ -91,6 +92,19 @@ type Context struct {
 
 	PRDescription string
 	PRTitlePrefix string
+}
+
+// Check if the user specified operating in the current working directory (CWD) with `--repo-path=.`. In this case the
+// tool can assume all Git fetching and sumbodule resolution has been done already by the user.
+func (c *Context) IsCWD() bool {
+	if c.repoPath == "" {
+		return false
+	}
+	cwd, err := filepath.Abs(".")
+	contract.AssertNoErrorf(err, "filepath.Abs failed unexpectedly")
+	rp, err := filepath.Abs(c.repoPath)
+	contract.AssertNoErrorf(err, "filepath.Abs failed unexpectedly")
+	return cwd == rp
 }
 
 func (c *Context) Wrap(ctx context.Context) context.Context {
