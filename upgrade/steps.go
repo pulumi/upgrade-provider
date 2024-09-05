@@ -538,33 +538,35 @@ func OrgProviderRepos(ctx context.Context, org, repo string) string {
 	return ensureUpstreamRepo(ctx, path.Join("github.com", org, repo))
 }
 
-var pullDefaultBranch = stepv2.Func11("Pull Default Branch", func(ctx context.Context, remote string) string {
+var findDefaultBranch = stepv2.Func11E("Find default Branch", func(ctx context.Context, remote string) (string, error) {
 	lsRemoteHeads := stepv2.Cmd(ctx, "git", "ls-remote", "--heads", remote)
-	defaultBranch := stepv2.Func01E("Find default Branch", func(ctx context.Context) (string, error) {
-		var hasMaster bool
-		lines := strings.Split(lsRemoteHeads, "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			_, ref, found := strings.Cut(line, "\t")
-			contract.Assertf(found, "not found")
-			branch := strings.TrimPrefix(ref, "refs/heads/")
-			if branch == "master" {
-				hasMaster = true
-			}
-			if branch == "main" {
-				stepv2.SetLabel(ctx, branch)
-				return branch, nil
-			}
+	var hasMaster bool
+	lines := strings.Split(lsRemoteHeads, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
-		if hasMaster {
-			stepv2.SetLabel(ctx, "master")
-			return "master", nil
+		_, ref, found := strings.Cut(line, "\t")
+		contract.Assertf(found, "not found")
+		branch := strings.TrimPrefix(ref, "refs/heads/")
+		if branch == "master" {
+			hasMaster = true
 		}
-		return "", fmt.Errorf("could not find 'master' or 'main' branch")
-	})(ctx)
+		if branch == "main" {
+			stepv2.SetLabel(ctx, branch)
+			return branch, nil
+		}
+	}
+	if hasMaster {
+		stepv2.SetLabel(ctx, "master")
+		return "master", nil
+	}
+	return "", fmt.Errorf("could not find 'master' or 'main' branch")
+})
+
+var pullDefaultBranch = stepv2.Func11("Pull Default Branch", func(ctx context.Context, remote string) string {
+	defaultBranch := findDefaultBranch(ctx, remote)
 
 	stepv2.Cmd(ctx, "git", "fetch")
 	stepv2.Cmd(ctx, "git", "checkout", defaultBranch)
