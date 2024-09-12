@@ -601,10 +601,6 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
 		updateFile(ctx, "Update PROVIDER_PATH", "Makefile",
 			"PROVIDER_PATH := provider{}")
-		updateFile(ctx, "Update -X Version", ".goreleaser.yml",
-			"github.com/pulumi/"+name+"/provider{}/pkg")
-		updateFile(ctx, "Update -X Version", ".goreleaser.prerelease.yml",
-			"github.com/pulumi/"+name+"/provider{}/pkg")
 	})
 
 	stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
