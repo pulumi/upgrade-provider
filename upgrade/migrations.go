@@ -24,7 +24,7 @@ const (
 func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error) {
 	// Create the AST by parsing src
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, resourcesFilePath, nil, parser.ParseComments)
+	file, err := parser.ParseFile(fset, resourcesFilePath, nil, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
 		return false, err
 	}
@@ -96,7 +96,7 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error)
 					}
 					c.InsertBefore(&ast.AssignStmt{
 						Tok: tok,
-						Lhs: []ast.Expr{&ast.Ident{Name: "err", Obj: &ast.Object{Kind: ast.Var, Name: "err"}}},
+						Lhs: []ast.Expr{&ast.Ident{Name: "err"}},
 						Rhs: []ast.Expr{&ast.CallExpr{
 							Fun: &ast.SelectorExpr{
 								X:   &ast.Ident{Name: "x"},
@@ -105,11 +105,11 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error)
 							Args: []ast.Expr{
 								&ast.UnaryExpr{
 									Op: token.AND,
-									X:  &ast.Ident{Name: "prov", Obj: &ast.Object{Kind: ast.Var, Name: "prov"}},
+									X:  &ast.Ident{Name: "prov"},
 								},
 								&ast.CallExpr{
 									Fun: &ast.SelectorExpr{
-										X:   &ast.Ident{Name: "prov", Obj: &ast.Object{Kind: ast.Var, Name: "prov"}},
+										X:   &ast.Ident{Name: "prov"},
 										Sel: &ast.Ident{Name: "GetMetadata"},
 									},
 								},
@@ -123,7 +123,7 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error)
 								Sel: &ast.Ident{Name: "AssertNoErrorf"},
 							},
 							Args: []ast.Expr{
-								&ast.Ident{Name: "err", Obj: &ast.Object{Kind: ast.Var, Name: "err"}},
+								&ast.Ident{Name: "err"},
 								&ast.BasicLit{Kind: token.STRING, Value: "\"auto aliasing apply failed\""},
 							},
 						}})
@@ -140,7 +140,7 @@ func AutoAliasingMigration(resourcesFilePath, providerName string) (bool, error)
 			Tok: token.VAR,
 			Specs: []ast.Spec{
 				&ast.ValueSpec{
-					Names: []*ast.Ident{{Name: "metadata", Obj: &ast.Object{Kind: ast.Var, Name: "metadata"}}},
+					Names: []*ast.Ident{{Name: "metadata"}},
 					Type:  &ast.ArrayType{Elt: &ast.Ident{Name: "byte // EMBED_DIRECTIVE_ANCHOR"}},
 				},
 			},
@@ -179,7 +179,7 @@ func AssertNoErrorMigration(resourcesFilePath, providerName string) (bool, error
 				Sel: &ast.Ident{Name: "AssertNoErrorf"},
 			},
 			Args: []ast.Expr{
-				&ast.Ident{Name: "err", Obj: &ast.Object{Kind: ast.Var, Name: "err"}},
+				&ast.Ident{Name: "err"},
 				&ast.BasicLit{Kind: token.STRING, Value: "\"failed to apply auto token mapping\""},
 			},
 		})

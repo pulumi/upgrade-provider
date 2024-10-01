@@ -98,7 +98,7 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", bridgeMissingMsg, err)
 	} else if !ok {
-		return nil, fmt.Errorf(bridgeMissingMsg)
+		return nil, fmt.Errorf("%s", bridgeMissingMsg)
 	}
 
 	pf, ok, err := originalGoVersionOf(ctx, repo, filepath.Join("provider", "go.mod"), "github.com/pulumi/pulumi-terraform-bridge/pf")

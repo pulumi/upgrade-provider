@@ -29,7 +29,9 @@ type httpHandler interface {
 	getHTTP(url string) ([]byte, error)
 }
 
-var httpHandlerKey = struct{}{}
+type httpContextKey struct{}
+
+var httpHandlerKey httpContextKey = httpContextKey{}
 
 type defaultHttpHandler struct {
 	retryAttempts int
