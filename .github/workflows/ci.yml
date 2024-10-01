@@ -1,6 +1,6 @@
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  GOLANGCI_LINT_VERSION: v1.55.2
+  GOLANGCI_LINT_VERSION: v1.61.0
 name: Pull Request
 on: [pull_request]
 jobs:

@@ -202,7 +202,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			return err
 		}
 		defer func() {
-			fmt.Printf("\n\n" + colorize.Warn("Major Version Updates are not fully automated!") + "\n")
+			fmt.Printf("\n\n%s\n", colorize.Warn("Major Version Updates are not fully automated!"))
 			fmt.Printf("%s need to complete Step 11: Updating README.md and sdk/python/README.md "+
 				"in a follow up commit.\n", colorize.Bold("You"))
 			fmt.Printf("Steps are listed at\n\t" +
