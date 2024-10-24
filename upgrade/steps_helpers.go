@@ -618,13 +618,16 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 	name string) (*UpstreamUpgradeTarget, error) {
 	issueList := stepv2.Cmd(ctx, "gh", "issue", "list",
 		"--state=open",
-		"--author=pulumi-bot",
 		"--repo="+name,
 		"--limit=100",
-		"--json=title,number")
+		"--search=\"Upgrade terraform-provider- to\"",
+		"--json=title,number,author")
 	titles := []struct {
 		Title  string `json:"title"`
 		Number int    `json:"number"`
+		Author struct {
+			Login string `json:"login"`
+		} `json:"author"`
 	}{}
 	err := json.Unmarshal([]byte(issueList), &titles)
 	if err != nil {
@@ -633,6 +636,11 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 
 	var versions []UpgradeTargetIssue
 	for _, title := range titles {
+		isPulumiBot := title.Author.Login == "pulumi-bot"
+		isGitHubActions := title.Author.Login == "app/github-actions"
+		if !isPulumiBot && !isGitHubActions {
+			continue
+		}
 		_, nameToVersion, found := strings.Cut(title.Title, "Upgrade terraform-provider-")
 		if !found {
 			continue
