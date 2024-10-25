@@ -273,14 +273,14 @@ func TestGetExpectedTargetFromTarget(t *testing.T) {
         "issue",
         "list",
         "--state=open",
-        "--author=pulumi-bot",
         "--repo=pulumi/pulumi-cloudflare",
         "--limit=100",
-        "--json=title,number"
+        "--search=\"Upgrade terraform-provider- to\"",
+        "--json=title,number,author"
       ]
     ],
     "outputs": [
-      "[{\"number\":540,\"title\":\"Upgrade terraform-provider-cloudflare to v2.32.0\"},{\"number\":538,\"title\":\"Upgrade terraform-provider-cloudflare to v2.31.0\"}]\n",
+      "[{\"number\":540,\"title\":\"Upgrade terraform-provider-cloudflare to v2.32.0\",\"author\":{\"login\":\"pulumi-bot\"}},{\"number\":538,\"title\":\"Upgrade terraform-provider-cloudflare to v2.31.0\",\"author\":{\"login\":\"app/github-actions\"}}]\n",
       null
     ],
     "impure": true
