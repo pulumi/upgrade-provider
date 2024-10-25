@@ -2,6 +2,7 @@ package upgrade
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -677,40 +678,62 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 	upstreamProviderName := GetContext(ctx).UpstreamProviderName
 	upstreamOrg := GetContext(ctx).UpstreamProviderOrg
 	title := fmt.Sprintf("Upgrade %s to v%s", upstreamProviderName, version)
+	// Turn the version into a token that we can search for later.
+	versionToken := base64.RawStdEncoding.EncodeToString([]byte(version))
 
-	searchIssues := stepv2.Cmd(ctx, "gh", "search", "issues",
-		title,
-		"--repo="+repoOrg+"/"+repoName,
-		"--json=title,number",
-		"--state=open",
-		"--author=@me",
-	)
+	// Try to check if the issue already exists for the version via the token.
+	repoArg := fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName)
+	tokenIssues, err := searchIssues(ctx, repoArg, fmt.Sprintf("--search=%q", versionToken))
 
-	var issues []struct {
-		Title  string `json:"title"`
-		Number int    `json:"number"`
-	}
-	err := json.Unmarshal([]byte(searchIssues), &issues)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal `gh search issues` output: %w", err)
+		return err
 	}
-	// create new issue if none exist
-	createIssue := true
+	if len(tokenIssues) > 0 {
+		return nil
+	}
+
+	// Fall back to checking if the issue exists by the title for the time being.
+	myIssues, err := searchIssues(ctx, repoArg,
+		fmt.Sprintf("--search=%q", title),
+		"--state=open",
+		"--author=@me")
+
+	if err != nil {
+		return err
+	}
+
 	// check for exact title match from search results
-	for _, issue := range issues {
+	for _, issue := range myIssues {
 		if issue.Title == title {
-			createIssue = false
+			return nil
 		}
 	}
 
-	if createIssue {
-		stepv2.Cmd(ctx,
-			"gh", "issue", "create",
-			"--repo="+repoOrg+"/"+repoName,
-			"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version,
-			"--title="+title,
-			"--label="+"kind/enhancement",
-		)
-	}
+	// Hide some special searchable words in the issue body via an HTML comment to help us find
+	// this issue later, also without requiring labels to be set up.
+	hiddenBody := fmt.Sprintf("<!-- pulumiupgradeproviderissue %s -->", versionToken)
+
+	stepv2.Cmd(ctx,
+		"gh", "issue", "create",
+		"--repo="+repoOrg+"/"+repoName,
+		"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version+"\n\n"+hiddenBody,
+		"--title="+title,
+		"--label="+"kind/enhancement",
+	)
+
 	return nil
 })
+
+type issue struct {
+	Title  string `json:"title"`
+	Number int    `json:"number"`
+}
+
+func searchIssues(ctx context.Context, args ...string) ([]issue, error) {
+	cmdArgs := []string{"issue", "list", "--json=title,number"}
+	cmdArgs = append(cmdArgs, args...)
+	issueList := stepv2.Cmd(ctx, "gh", cmdArgs...)
+	var issues []issue
+	err := json.Unmarshal([]byte(issueList), &issues)
+	return issues, err
+}
