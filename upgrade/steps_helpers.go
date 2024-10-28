@@ -2,7 +2,6 @@ package upgrade
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -672,46 +671,46 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 	}, nil
 })
 
+const pulumiupgradeproviderissue = "pulumiupgradeproviderissue"
+
 // Create an issue in the provider repo that signals an upgrade
 var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ctx context.Context,
 	repoOrg, repoName, version string) error {
 	upstreamProviderName := GetContext(ctx).UpstreamProviderName
 	upstreamOrg := GetContext(ctx).UpstreamProviderOrg
 	title := fmt.Sprintf("Upgrade %s to v%s", upstreamProviderName, version)
-	// Turn the version into a token that we can search for later.
-	versionToken := base64.RawStdEncoding.EncodeToString([]byte(version))
 
-	// Try to check if the issue already exists for the version via the token.
-	repoArg := fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName)
-	tokenIssues, err := searchIssues(ctx, repoArg, fmt.Sprintf("--search=%q", versionToken))
-
+	var found bool
+	var err error
+	// Search through existing "pulumiupgradeproviderissue" issues to see if we've already created one for this version.
+	found, err = issueExistsForVersion(ctx, title,
+		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
+		fmt.Sprintf("--search=%q", pulumiupgradeproviderissue),
+		"--state=open")
 	if err != nil {
 		return err
 	}
-	if len(tokenIssues) > 0 {
+	if found {
 		return nil
 	}
 
-	// Fall back to checking if the issue exists by the title for the time being.
-	myIssues, err := searchIssues(ctx, repoArg,
+	// Fall back to searching through the issues from the current user.
+	found, err = issueExistsForVersion(ctx, title,
+		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
 		fmt.Sprintf("--search=%q", title),
 		"--state=open",
 		"--author=@me")
-
 	if err != nil {
 		return err
 	}
-
-	// check for exact title match from search results
-	for _, issue := range myIssues {
-		if issue.Title == title {
-			return nil
-		}
+	if found {
+		return nil
 	}
 
-	// Hide some special searchable words in the issue body via an HTML comment to help us find
-	// this issue later, also without requiring labels to be set up.
-	hiddenBody := fmt.Sprintf("<!-- pulumiupgradeproviderissue %s -->", versionToken)
+	// We've not found an appropriate existing issue, so we'll create a new one.
+
+	// Hide searchable token in the issue body via an HTML comment to help us find this issue later without requiring labels to be set up.
+	hiddenBody := fmt.Sprintf("<!-- %s -->", pulumiupgradeproviderissue)
 
 	stepv2.Cmd(ctx,
 		"gh", "issue", "create",
@@ -727,6 +726,21 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 type issue struct {
 	Title  string `json:"title"`
 	Number int    `json:"number"`
+}
+
+func issueExistsForVersion(ctx context.Context, title string, searchArgs ...string) (bool, error) {
+	issues, err := searchIssues(ctx, searchArgs...)
+	if err != nil {
+		return false, err
+	}
+
+	// check for exact title match from search results
+	for _, issue := range issues {
+		if issue.Title == title {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func searchIssues(ctx context.Context, args ...string) ([]issue, error) {
