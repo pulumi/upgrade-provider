@@ -680,34 +680,27 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 	upstreamOrg := GetContext(ctx).UpstreamProviderOrg
 	title := fmt.Sprintf("Upgrade %s to v%s", upstreamProviderName, version)
 
-	var found bool
-	var err error
-	// Search through existing "pulumiupgradeproviderissue" issues to see if we've already created one for this version.
-	found, err = issueExistsForVersion(ctx, title,
-		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
-		fmt.Sprintf("--search=%q", pulumiupgradeproviderissue),
-		"--state=open")
+	issueAlreadyExists, err := upgradeIssueExits(ctx, title, repoOrg, repoName)
 	if err != nil {
 		return err
 	}
-	if found {
-		return nil
+
+	// Write issue_created=true to GITHUB_OUTPUT, if it exists for CI control flow.
+	if GITHUB_OUTPUT, found := os.LookupEnv("GITHUB_OUTPUT"); found {
+		f, err := os.OpenFile(GITHUB_OUTPUT, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if _, err := f.WriteString(fmt.Sprintf("issue_created=%t\n", issueAlreadyExists)); err != nil {
+			return err
+		}
 	}
 
-	// Fall back to searching through the issues from the current user.
-	found, err = issueExistsForVersion(ctx, title,
-		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
-		fmt.Sprintf("--search=%q", title),
-		"--state=open",
-		"--author=@me")
-	if err != nil {
-		return err
-	}
-	if found {
+	// We've found an appropriate existing issue, so we'll skip creating a new one.
+	if issueAlreadyExists {
 		return nil
 	}
-
-	// We've not found an appropriate existing issue, so we'll create a new one.
 
 	// Hide searchable token in the issue body via an HTML comment to help us find this issue later without requiring labels to be set up.
 	hiddenBody := fmt.Sprintf("<!-- %s -->", pulumiupgradeproviderissue)
@@ -722,6 +715,33 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 
 	return nil
 })
+
+func upgradeIssueExits(ctx context.Context, title, repoOrg, repoName string) (bool, error) {
+	var found bool
+	var err error
+	// Search through existing "pulumiupgradeproviderissue" issues to see if we've already created one for this version.
+	found, err = issueExistsForVersion(ctx, title,
+		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
+		fmt.Sprintf("--search=%q", pulumiupgradeproviderissue),
+		"--state=open")
+	if err != nil {
+		return false, err
+	}
+	if found {
+		return true, nil
+	}
+
+	// Fall back to searching through the issues from the current user.
+	found, err = issueExistsForVersion(ctx, title,
+		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
+		fmt.Sprintf("--search=%q", title),
+		"--state=open",
+		"--author=@me")
+	if err != nil {
+		return false, err
+	}
+	return found, nil
+}
 
 type issue struct {
 	Title  string `json:"title"`
