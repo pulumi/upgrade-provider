@@ -722,11 +722,14 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 func upgradeIssueExits(ctx context.Context, title, repoOrg, repoName string) (bool, error) {
 	var found bool
 	var err error
-	// Search through existing "pulumiupgradeproviderissue" issues to see if we've already created one for this version.
+	// TODO: Remove this after we've migrated all issues to the new format.
+	// https://github.com/pulumi/upgrade-provider/issues/284
+	// Fall back to searching through the issues from the current user.
 	found, err = issueExistsForVersion(ctx, title,
 		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
-		fmt.Sprintf("--search=%q", upgradeIssueBodyTemplate),
-		"--state=open")
+		fmt.Sprintf("--search=%q", title),
+		"--state=open",
+		"--author=@me")
 	if err != nil {
 		return false, err
 	}
@@ -734,12 +737,11 @@ func upgradeIssueExits(ctx context.Context, title, repoOrg, repoName string) (bo
 		return true, nil
 	}
 
-	// Fall back to searching through the issues from the current user.
+	// Search through existing pulumiupgradeproviderissue issues to see if we've already created one for this version.
 	found, err = issueExistsForVersion(ctx, title,
 		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
-		fmt.Sprintf("--search=%q", title),
-		"--state=open",
-		"--author=@me")
+		fmt.Sprintf("--search=%q", upgradeIssueBodyTemplate),
+		"--state=open")
 	if err != nil {
 		return false, err
 	}
