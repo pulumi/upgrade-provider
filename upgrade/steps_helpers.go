@@ -671,7 +671,13 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 	}, nil
 })
 
-const pulumiupgradeproviderissue = "pulumiupgradeproviderissue"
+// Hide searchable token in the issue body via an HTML comment to help us find this issue later without requiring labels to be set up.
+const upgradeIssueBodyTemplate = `
+<!-- for upgrade-provider issue searching: pulumiupgradeproviderissue -->
+
+> [!NOTE]
+> This issue was created automatically by the upgrade-provider tool and should be automatically closed by a subsequent upgrade pull request.
+`
 
 // Create an issue in the provider repo that signals an upgrade
 var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ctx context.Context,
@@ -692,7 +698,7 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 			return err
 		}
 		defer f.Close()
-		if _, err := f.WriteString(fmt.Sprintf("issue_created=%t\n", issueAlreadyExists)); err != nil {
+		if _, err := f.WriteString(fmt.Sprintf("latest_version=%s\n", version)); err != nil {
 			return err
 		}
 	}
@@ -702,13 +708,10 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 		return nil
 	}
 
-	// Hide searchable token in the issue body via an HTML comment to help us find this issue later without requiring labels to be set up.
-	hiddenBody := fmt.Sprintf("<!-- %s -->", pulumiupgradeproviderissue)
-
 	stepv2.Cmd(ctx,
 		"gh", "issue", "create",
 		"--repo="+repoOrg+"/"+repoName,
-		"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version+"\n\n"+hiddenBody,
+		"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version+"\n"+upgradeIssueBodyTemplate,
 		"--title="+title,
 		"--label="+"kind/enhancement",
 	)
@@ -722,7 +725,7 @@ func upgradeIssueExits(ctx context.Context, title, repoOrg, repoName string) (bo
 	// Search through existing "pulumiupgradeproviderissue" issues to see if we've already created one for this version.
 	found, err = issueExistsForVersion(ctx, title,
 		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
-		fmt.Sprintf("--search=%q", pulumiupgradeproviderissue),
+		fmt.Sprintf("--search=%q", upgradeIssueBodyTemplate),
 		"--state=open")
 	if err != nil {
 		return false, err
