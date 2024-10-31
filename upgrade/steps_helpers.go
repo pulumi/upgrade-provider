@@ -671,6 +671,14 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 	}, nil
 })
 
+// Hide searchable token in the issue body via an HTML comment to help us find this issue later without requiring labels to be set up.
+const upgradeIssueBodyTemplate = `
+<!-- for upgrade-provider issue searching: pulumiupgradeproviderissue -->
+
+> [!NOTE]
+> This issue was created automatically by the upgrade-provider tool and should be automatically closed by a subsequent upgrade pull request.
+`
+
 // Create an issue in the provider repo that signals an upgrade
 var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ctx context.Context,
 	repoOrg, repoName, version string) error {
@@ -678,39 +686,93 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 	upstreamOrg := GetContext(ctx).UpstreamProviderOrg
 	title := fmt.Sprintf("Upgrade %s to v%s", upstreamProviderName, version)
 
-	searchIssues := stepv2.Cmd(ctx, "gh", "search", "issues",
-		title,
-		"--repo="+repoOrg+"/"+repoName,
-		"--json=title,number",
-		"--state=open",
-		"--author=@me",
-	)
-
-	var issues []struct {
-		Title  string `json:"title"`
-		Number int    `json:"number"`
-	}
-	err := json.Unmarshal([]byte(searchIssues), &issues)
+	issueAlreadyExists, err := upgradeIssueExits(ctx, title, repoOrg, repoName)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal `gh search issues` output: %w", err)
+		return err
 	}
-	// create new issue if none exist
-	createIssue := true
-	// check for exact title match from search results
-	for _, issue := range issues {
-		if issue.Title == title {
-			createIssue = false
+
+	// Write issue_created=true to GITHUB_OUTPUT, if it exists for CI control flow.
+	if GITHUB_OUTPUT, found := os.LookupEnv("GITHUB_OUTPUT"); found {
+		f, err := os.OpenFile(GITHUB_OUTPUT, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if _, err := f.WriteString(fmt.Sprintf("latest_version=%s\n", version)); err != nil {
+			return err
 		}
 	}
 
-	if createIssue {
-		stepv2.Cmd(ctx,
-			"gh", "issue", "create",
-			"--repo="+repoOrg+"/"+repoName,
-			"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version,
-			"--title="+title,
-			"--label="+"kind/enhancement",
-		)
+	// We've found an appropriate existing issue, so we'll skip creating a new one.
+	if issueAlreadyExists {
+		return nil
 	}
+
+	stepv2.Cmd(ctx,
+		"gh", "issue", "create",
+		"--repo="+repoOrg+"/"+repoName,
+		"--body=Release details: https://github.com/"+upstreamOrg+"/"+upstreamProviderName+"/releases/tag/v"+version+"\n"+upgradeIssueBodyTemplate,
+		"--title="+title,
+		"--label="+"kind/enhancement",
+	)
+
 	return nil
 })
+
+func upgradeIssueExits(ctx context.Context, title, repoOrg, repoName string) (bool, error) {
+	var found bool
+	var err error
+	// TODO: Remove this after we've migrated all issues to the new format.
+	// https://github.com/pulumi/upgrade-provider/issues/284
+	// Fall back to searching through the issues from the current user.
+	found, err = issueExistsForVersion(ctx, title,
+		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
+		fmt.Sprintf("--search=%q", title),
+		"--state=open",
+		"--author=@me")
+	if err != nil {
+		return false, err
+	}
+	if found {
+		return true, nil
+	}
+
+	// Search through existing pulumiupgradeproviderissue issues to see if we've already created one for this version.
+	found, err = issueExistsForVersion(ctx, title,
+		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
+		fmt.Sprintf("--search=%q", upgradeIssueBodyTemplate),
+		"--state=open")
+	if err != nil {
+		return false, err
+	}
+	return found, nil
+}
+
+type issue struct {
+	Title  string `json:"title"`
+	Number int    `json:"number"`
+}
+
+func issueExistsForVersion(ctx context.Context, title string, searchArgs ...string) (bool, error) {
+	issues, err := searchIssues(ctx, searchArgs...)
+	if err != nil {
+		return false, err
+	}
+
+	// check for exact title match from search results
+	for _, issue := range issues {
+		if issue.Title == title {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func searchIssues(ctx context.Context, args ...string) ([]issue, error) {
+	cmdArgs := []string{"issue", "list", "--json=title,number"}
+	cmdArgs = append(cmdArgs, args...)
+	issueList := stepv2.Cmd(ctx, "gh", cmdArgs...)
+	var issues []issue
+	err := json.Unmarshal([]byte(issueList), &issues)
+	return issues, err
+}
