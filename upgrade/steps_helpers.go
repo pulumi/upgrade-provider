@@ -726,7 +726,7 @@ func upgradeIssueExits(ctx context.Context, title, repoOrg, repoName string) (bo
 	// https://github.com/pulumi/upgrade-provider/issues/284
 	// Fall back to searching through the issues from the current user.
 	found, err = issueExistsForVersion(ctx, title,
-		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
+		fmt.Sprintf("--repo=%s", repoOrg+"/"+repoName),
 		fmt.Sprintf("--search=%q", title),
 		"--state=open",
 		"--author=@me")
@@ -739,7 +739,7 @@ func upgradeIssueExits(ctx context.Context, title, repoOrg, repoName string) (bo
 
 	// Search through existing pulumiupgradeproviderissue issues to see if we've already created one for this version.
 	found, err = issueExistsForVersion(ctx, title,
-		fmt.Sprintf("--repo=%q", repoOrg+"/"+repoName),
+		fmt.Sprintf("--repo=%s", repoOrg+"/"+repoName),
 		fmt.Sprintf("--search=%q", upgradeIssueBodyTemplate),
 		"--state=open")
 	if err != nil {
