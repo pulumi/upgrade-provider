@@ -634,7 +634,7 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 		return nil, err
 	}
 
-	var versions []UpgradeTargetIssue
+	var upgradeTargetIssues []UpgradeTargetIssue
 	for _, title := range titles {
 		isPulumiBot := title.Author.Login == "pulumi-bot"
 		isGitHubActions := title.Author.Login == "app/github-actions"
@@ -653,21 +653,21 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 		if err != nil {
 			continue
 		}
-		versions = append(versions, UpgradeTargetIssue{
+		upgradeTargetIssues = append(upgradeTargetIssues, UpgradeTargetIssue{
 			Version: v,
 			Number:  title.Number,
 		})
 	}
-	if len(versions) == 0 {
+	if len(upgradeTargetIssues) == 0 {
 		return nil, nil
 	}
-	sort.Slice(versions, func(i, j int) bool {
-		return versions[j].Version.LessThan(versions[i].Version)
+	sort.Slice(upgradeTargetIssues, func(i, j int) bool {
+		return upgradeTargetIssues[j].Version.LessThan(upgradeTargetIssues[i].Version)
 	})
 
 	return &UpstreamUpgradeTarget{
-		Version:  versions[0].Version,
-		GHIssues: versions,
+		Version:  upgradeTargetIssues[0].Version,
+		GHIssues: upgradeTargetIssues,
 	}, nil
 })
 
