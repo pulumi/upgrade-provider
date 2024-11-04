@@ -620,7 +620,7 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 		"--state=open",
 		"--repo="+name,
 		"--limit=100",
-		"--search=\"Upgrade terraform-provider- to\"",
+		fmt.Sprintf("--search=%q", upgradeIssueToken),
 		"--json=title,number,author")
 	titles := []struct {
 		Title  string `json:"title"`
