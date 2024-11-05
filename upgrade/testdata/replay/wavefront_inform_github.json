@@ -12,12 +12,11 @@
                 {
                   "number": 232
                 }
-
               ]
             },
             {
               "Org": "",
-              "Name":"pulumi/pulumi-wavefront"
+              "Name": "pulumi/pulumi-wavefront"
             },
             {
               "Kind": "plain",
@@ -82,8 +81,6 @@
             [
               "pr",
               "create",
-              "--assignee",
-              "@me",
               "--base",
               "master",
               "--head",
