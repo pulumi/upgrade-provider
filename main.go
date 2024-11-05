@@ -236,7 +236,7 @@ plugins are used if existing versions are present in the cache.`)
 	cmd.PersistentFlags().StringVar(&context.PrReviewers, "pr-reviewers", "",
 		`A comma separated list of reviewers to assign the upgrade PR to.`)
 
-	cmd.PersistentFlags().StringVar(&context.PrAssign, "pr-assign", "@me",
+	cmd.PersistentFlags().StringVar(&context.PrAssign, "pr-assign", "",
 		`A user to assign the upgrade PR to.`)
 
 	cmd.PersistentFlags().BoolVarP(&context.AllowMissingDocs, "allow-missing-docs", "", false,

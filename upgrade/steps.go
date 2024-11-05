@@ -329,7 +329,11 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 			"--title", prTitle,
 			"--body", prBody)
 	} else {
-		addLabels := []string{}
+		extraOptions := []string{}
+
+		if c.PrAssign != "" {
+			extraOptions = append(extraOptions, "--assignee", c.PrAssign)
+		}
 
 		switch {
 		// We create release labels when we are running the full pulumi
@@ -338,25 +342,24 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		case c.UpgradeProviderVersion && len(target.GHIssues) > 0:
 			label := upgradeLabel(ctx, repo.currentUpstreamVersion, target.Version)
 			if label != "" {
-				addLabels = []string{"--label", label}
+				extraOptions = []string{"--label", label}
 			}
 		// On non-upstream upgrades, we will create a patch release label
 		// if the provider hasn't been released in 8 weeks.
 		case c.MaintenancePatch && !c.UpgradeProviderVersion:
-			addLabels = []string{"--label", "needs-release/patch"}
+			extraOptions = []string{"--label", "needs-release/patch"}
 		}
 
 		stepv2.Cmd(ctx, "gh",
 			append([]string{
 				"pr", "create",
-				"--assignee", c.PrAssign,
 				"--base", repo.defaultBranch,
 				"--head", repo.workingBranch,
 				"--reviewer", c.PrReviewers,
 				"--title", prTitle,
 				"--body", prBody,
 			},
-				addLabels...)...)
+				extraOptions...)...)
 	}
 
 	// If we are only upgrading the bridge, we won't have a list of issues.
@@ -364,14 +367,16 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		return nil
 	}
 
-	stepv2.Func00("Assign Issues", func(ctx context.Context) {
-		// This PR will close issues, so we assign the issues same assignee as the
-		// PR itself.
-		for _, t := range target.GHIssues {
-			stepv2.Cmd(ctx, "gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-				"--add-assignee", c.PrAssign)
-		}
-	})(ctx)
+	if c.PrAssign != "" {
+		stepv2.Func00("Assign Issues", func(ctx context.Context) {
+			// This PR will close issues, so we assign the issues same assignee as the
+			// PR itself.
+			for _, t := range target.GHIssues {
+				stepv2.Cmd(ctx, "gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
+					"--add-assignee", c.PrAssign)
+			}
+		})(ctx)
+	}
 
 	return nil
 })
