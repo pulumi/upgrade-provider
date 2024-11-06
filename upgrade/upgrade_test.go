@@ -35,6 +35,7 @@ func TestInformGithub(t *testing.T) {
 				Version: semver.MustParse("5.0.5"),
 			}, ProviderRepo{
 				workingBranch:          "upgrade-terraform-provider-wavefront-to-v5.0.5",
+				prTitle:                "Upgrade terraform-provider-wavefront to v5.0.5",
 				defaultBranch:          "master",
 				Name:                   "pulumi/pulumi-wavefront",
 				currentUpstreamVersion: semver.MustParse("5.0.3"),
@@ -68,6 +69,7 @@ func TestInformGithubExistingPR(t *testing.T) {
 		InformGitHub(ctx,
 			nil, ProviderRepo{
 				workingBranch:   "upgrade-pulumi-terraform-bridge-to-v3.62.0",
+				prTitle:         "Upgrade pulumi-terraform-bridge to v3.62.0",
 				defaultBranch:   "master",
 				Name:            "pulumi/pulumi-kong",
 				prAlreadyExists: true,
