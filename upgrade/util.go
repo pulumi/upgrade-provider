@@ -131,6 +131,8 @@ type ProviderRepo struct {
 	defaultBranch string
 	// The working branch of the repository
 	workingBranch string
+	// The title of the PR to be created
+	prTitle string
 	// If there is already a PR on GitHub who is merging from `repo.workingBranch`.
 	prAlreadyExists bool
 

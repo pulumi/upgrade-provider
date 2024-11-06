@@ -315,18 +315,13 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	// attempt to build on existing branches.
 	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch, "--force")
 
-	prTitle, err := prTitle(ctx, target, targetBridgeVersion, targetPfVersion)
-	if err != nil {
-		return err
-	}
-
 	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade, osArgs)
 
 	if repo.prAlreadyExists {
 		// Update the description in case anything else was upgraded (or not
 		// upgraded) in this run, compared to the existing PR.
 		stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
-			"--title", prTitle,
+			"--title", repo.prTitle,
 			"--body", prBody)
 	} else {
 		extraOptions := []string{}
@@ -356,7 +351,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 				"--base", repo.defaultBranch,
 				"--head", repo.workingBranch,
 				"--reviewer", c.PrReviewers,
-				"--title", prTitle,
+				"--title", repo.prTitle,
 				"--body", prBody,
 			},
 				extraOptions...)...)
@@ -478,17 +473,16 @@ var ensureBranchCheckedOut = stepv2.Func10("Ensure Branch", func(ctx context.Con
 	}
 })
 
-var hasRemoteBranch = stepv2.Func11("Has Remote Branch", func(ctx context.Context, branchName string) bool {
-	prBytes := []byte(stepv2.Cmd(ctx, "gh", "pr", "list", "--json=title,headRefName"))
+var hasExistingPr = stepv2.Func11("Has Existing PR", func(ctx context.Context, prTitle string) bool {
+	prBytes := []byte(stepv2.Cmd(ctx, "gh", "pr", "list", "--json=title"))
 	prs := []struct {
-		Title       string `json:"title"`
-		HeadRefName string `json:"headRefName"`
+		Title string `json:"title"`
 	}{}
 	err := json.Unmarshal(prBytes, &prs)
 	stepv2.HaltOnError(ctx, err)
 
 	for _, pr := range prs {
-		if pr.HeadRefName == branchName {
+		if pr.Title == prTitle {
 			stepv2.SetLabel(ctx, fmt.Sprintf("yes %q", pr.Title))
 			return true
 		}
