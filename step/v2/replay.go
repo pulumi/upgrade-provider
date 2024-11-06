@@ -54,6 +54,7 @@ type Replay struct {
 }
 
 func NewReplay(t *testing.T, source []byte) *Replay {
+	t.Helper()
 	var s ReplayV1
 	err := json.Unmarshal(source, &s)
 	require.NoError(t, err)
@@ -64,6 +65,7 @@ func (r *Replay) setPipeline(name string) {
 	if name == "" {
 		return
 	}
+	r.t.Helper()
 	r.t.Logf("Searching for pipeline %q", name)
 	for i := r.pipeline; i < len(r.r.Pipelines); i++ {
 		p := r.r.Pipelines[i]
@@ -87,6 +89,7 @@ func (r *Replay) setPipeline(name string) {
 }
 
 func (r *Replay) findNextStep(name string) int {
+	r.t.Helper()
 	current := r.next
 	for {
 		// We are attempting to find the next step, but there is no next step.
@@ -108,6 +111,7 @@ func (r *Replay) findNextStep(name string) int {
 }
 
 func (r *Replay) Enter(_ context.Context, info StepInfo) error {
+	r.t.Helper()
 	r.setPipeline(info.Pipeline())
 	r.t.Logf("Searching for step: %q (from step %d)", info.Name(), r.next)
 	current := r.findNextStep(info.Name())
@@ -141,6 +145,7 @@ func (r *Replay) Enter(_ context.Context, info StepInfo) error {
 }
 
 func (r *Replay) Exit(_ context.Context, output []any) error {
+	r.t.Helper()
 	if len(r.pending) == 0 {
 		return fmt.Errorf("internal: exit without entry")
 	}
@@ -347,6 +352,7 @@ func getReplay(ctx context.Context) *Replay {
 // It is expected that this function is used only in tests.
 func CallWithReplay(ctx context.Context, pipeline, stepName string, f any) error {
 	r := *getReplay(ctx) // Don't mutate the replay
+	r.t.Helper()
 
 	r.setPipeline(pipeline)
 

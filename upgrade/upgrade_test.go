@@ -107,6 +107,7 @@ func TestBridgeUpgradeNoop(t *testing.T) {
 }
 
 func newReplay(t *testing.T, name string) context.Context {
+	t.Helper()
 	ctx := context.Background()
 	path := filepath.Join("testdata", "replay", name+".json")
 	bytes := readFile(t, path)
@@ -115,12 +116,14 @@ func newReplay(t *testing.T, name string) context.Context {
 }
 
 func readFile(t *testing.T, path string) []byte {
+	t.Helper()
 	bytes, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return bytes
 }
 
 func testReplay(ctx context.Context, t *testing.T, stepReplay []*step.Step, fName string, f any) {
+	t.Helper()
 	bytes, err := json.Marshal(step.ReplayV1{
 		Pipelines: []step.RecordV1{{
 			Name:  t.Name(),
@@ -137,6 +140,7 @@ func testReplay(ctx context.Context, t *testing.T, stepReplay []*step.Step, fNam
 }
 
 func jsonMarshal[T any](t *testing.T, content string) T {
+	t.Helper()
 	var dst T
 	err := json.Unmarshal([]byte(content), &dst)
 	require.NoError(t, err)
