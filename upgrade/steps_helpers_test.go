@@ -275,7 +275,6 @@ func TestGetExpectedTargetFromTarget(t *testing.T) {
         "--state=open",
         "--repo=pulumi/pulumi-cloudflare",
         "--limit=100",
-        "--search=\"pulumiupgradeproviderissue\"",
         "--json=title,number"
       ]
     ],
