@@ -2,14 +2,14 @@
   description = "A flake defining upgrade-provider build-from-source package";
 
   inputs = {
-    nixpkgs.url = github:NixOS/nixpkgs/nixos-23.11;
+    nixpkgs.url = github:NixOS/nixpkgs/nixos-24.05;
   };
 
   outputs = { self, nixpkgs }: let
 
     package = { system }: let
       pkgs = import nixpkgs { system = system; };
-    in pkgs.buildGo121Module rec {
+    in pkgs.buildGo123Module rec {
       name = "upgrade-provider";
       version = ''${self.rev or "dirty"}'';
       src = ./.;
