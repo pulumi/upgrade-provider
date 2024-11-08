@@ -16,6 +16,9 @@
       doCheck = false;
       vendorHash = "sha256-hllbzbfy1xa6q/3YXJOiDERsy8ELJlA/wwrrpsQ7r1k=";
       ldflags = [];
+      postInstall = ''
+        rm -rf $out/bin/generate
+      '';
     };
 
   in {
