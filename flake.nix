@@ -14,7 +14,7 @@
       version = ''${self.rev or "dirty"}'';
       src = ./.;
       doCheck = false;
-      vendorHash = "sha256-0InHprcsXT9I1foDSFKEXzmOxl7LC0FxRe7wOsv6BTo=";
+      vendorHash = "sha256-hllbzbfy1xa6q/3YXJOiDERsy8ELJlA/wwrrpsQ7r1k=";
       ldflags = [];
     };
 
