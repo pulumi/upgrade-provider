@@ -52,7 +52,7 @@ func TestGetWorkingBranch(t *testing.T) {
 			err := step.Pipeline(t.Name(), func(ctx context.Context) {
 				actual := getWorkingBranch(ctx, tt.c, tt.targetBridgeVersion, tt.targetPfVersion, &tt.upgradeTarget)
 				if os.Getenv("CI") == "true" {
-					assert.Regexp(t, "^"+tt.expected+"-[0-9]{8}$", actual)
+					assert.Regexp(t, "^"+tt.expected+"-ci$", actual)
 				} else {
 					assert.Equal(t, tt.expected, actual)
 				}
