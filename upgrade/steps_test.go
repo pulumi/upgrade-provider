@@ -52,7 +52,7 @@ func TestGetWorkingBranch(t *testing.T) {
 			err := step.Pipeline(t.Name(), func(ctx context.Context) {
 				actual := getWorkingBranch(ctx, tt.c, tt.targetBridgeVersion, tt.targetPfVersion, &tt.upgradeTarget)
 				if os.Getenv("CI") == "true" {
-					assert.Regexp(t, "^"+tt.expected+"-[0-9]{8}$", actual)
+					assert.Regexp(t, "^"+tt.expected+"-ci$", actual)
 				} else {
 					assert.Equal(t, tt.expected, actual)
 				}
@@ -86,19 +86,19 @@ func TestGetWorkingBranch(t *testing.T) {
 func TestHasRemoteBranch(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		response string
-		prTitle  string
-		expect   bool
+		response   string
+		branchName string
+		expect     bool
 	}{
 		{
-			response: `[{"title":"Bump golang.org/x/net from 0.13.0 to 0.17.0 in /provider"},{"title":"bump golang.org/x/net from 0.10.0 to 0.17.0 in /sdk"},{"title":"Bump golang.org/x/net from 0.8.0 to 0.17.0 in /examples"}]`,
-			prTitle:  "Upgrade pulumi-terraform-bridge to v3.62.0",
-			expect:   false,
+			response:   `[{"headRefName":"dependabot/go_modules/provider/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.13.0 to 0.17.0 in /provider"},{"headRefName":"dependabot/go_modules/sdk/golang.org/x/net-0.17.0","title":"bump golang.org/x/net from 0.10.0 to 0.17.0 in /sdk"},{"headRefName":"dependabot/go_modules/examples/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.8.0 to 0.17.0 in /examples"}]`,
+			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
+			expect:     false,
 		},
 		{
-			response: `[{"title":"Upgrade pulumi-terraform-bridge to v3.62.0"},{"title":"Bump golang.org/x/net from 0.13.0 to 0.17.0 in /provider"},{"title":"bump golang.org/x/net from 0.10.0 to 0.17.0 in /sdk"},{"title":"Bump golang.org/x/net from 0.8.0 to 0.17.0 in /examples"}]`,
-			prTitle:  "Upgrade pulumi-terraform-bridge to v3.62.0",
-			expect:   true,
+			response:   `[{"headRefName":"upgrade-pulumi-terraform-bridge-to-v3.62.0","title":"Upgrade pulumi-terraform-bridge to v3.62.0"},{"headRefName":"dependabot/go_modules/provider/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.13.0 to 0.17.0 in /provider"},{"headRefName":"dependabot/go_modules/sdk/golang.org/x/net-0.17.0","title":"bump golang.org/x/net from 0.10.0 to 0.17.0 in /sdk"},{"headRefName":"dependabot/go_modules/examples/golang.org/x/net-0.17.0","title":"Bump golang.org/x/net from 0.8.0 to 0.17.0 in /examples"}]`,
+			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
+			expect:     true,
 		},
 	}
 
@@ -116,13 +116,13 @@ func TestHasRemoteBranch(t *testing.T) {
 			testReplay(context.Background(), t, []*step.Step{
 				{
 					Name:    "Has Existing PR",
-					Inputs:  encode([]string{tt.prTitle}),
+					Inputs:  encode([]string{tt.branchName, "pulumi/pulumi-xyz"}),
 					Outputs: encode([]any{tt.expect, nil}),
 				},
 				{
 					Name: "gh",
 					Inputs: encode([]any{
-						"gh", []string{"pr", "list", "--json=title"},
+						"gh", []string{"pr", "list", "--json=title,headRefName", "--repo=pulumi/pulumi-xyz"},
 					}),
 					Outputs: encode([]any{tt.response, nil}),
 					Impure:  true,

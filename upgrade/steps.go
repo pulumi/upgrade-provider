@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"math"
-	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -473,16 +471,17 @@ var ensureBranchCheckedOut = stepv2.Func10("Ensure Branch", func(ctx context.Con
 	}
 })
 
-var hasExistingPr = stepv2.Func11("Has Existing PR", func(ctx context.Context, prTitle string) bool {
-	prBytes := []byte(stepv2.Cmd(ctx, "gh", "pr", "list", "--json=title"))
+var hasExistingPr = stepv2.Func21("Has Existing PR", func(ctx context.Context, branchName, repo string) bool {
+	prBytes := []byte(stepv2.Cmd(ctx, "gh", "pr", "list", "--json=title,headRefName", fmt.Sprintf("--repo=%s", repo)))
 	prs := []struct {
-		Title string `json:"title"`
+		Title       string `json:"title"`
+		HeadRefName string `json:"headRefName"`
 	}{}
 	err := json.Unmarshal(prBytes, &prs)
 	stepv2.HaltOnError(ctx, err)
 
 	for _, pr := range prs {
-		if pr.Title == prTitle {
+		if pr.HeadRefName == branchName {
 			stepv2.SetLabel(ctx, fmt.Sprintf("yes %q", pr.Title))
 			return true
 		}
@@ -495,16 +494,11 @@ var hasExistingPr = stepv2.Func11("Has Existing PR", func(ctx context.Context, p
 var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Context, c Context,
 	targetBridgeVersion, targetPfVersion Ref, upgradeTarget *UpstreamUpgradeTarget,
 ) (string, error) {
-	ciSuffix := stepv2.Func01("Random Suffix", func(ctx context.Context) string {
-		stepv2.MarkImpure(ctx) // This needs to be impure since it is random
-		return fmt.Sprintf("-%08d", rand.Intn(int(math.Pow10(8))))
-	})
-
 	ret := func(format string, a ...any) (string, error) {
 		s := fmt.Sprintf(format, a...)
 
 		if stepv2.GetEnv(ctx, "CI") == "true" {
-			s += ciSuffix(ctx)
+			s += "-ci"
 		}
 
 		stepv2.SetLabel(ctx, s)
