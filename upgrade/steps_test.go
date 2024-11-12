@@ -116,13 +116,13 @@ func TestHasRemoteBranch(t *testing.T) {
 			testReplay(context.Background(), t, []*step.Step{
 				{
 					Name:    "Has Existing PR",
-					Inputs:  encode([]string{tt.prTitle}),
+					Inputs:  encode([]string{tt.prTitle, "pulumi/pulumi-xyz"}),
 					Outputs: encode([]any{tt.expect, nil}),
 				},
 				{
 					Name: "gh",
 					Inputs: encode([]any{
-						"gh", []string{"pr", "list", "--json=title"},
+						"gh", []string{"pr", "list", "--json=title", "--repo=pulumi/pulumi-xyz"},
 					}),
 					Outputs: encode([]any{tt.response, nil}),
 					Impure:  true,
