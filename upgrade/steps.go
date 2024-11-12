@@ -471,16 +471,17 @@ var ensureBranchCheckedOut = stepv2.Func10("Ensure Branch", func(ctx context.Con
 	}
 })
 
-var hasExistingPr = stepv2.Func21("Has Existing PR", func(ctx context.Context, prTitle, repo string) bool {
-	prBytes := []byte(stepv2.Cmd(ctx, "gh", "pr", "list", "--json=title", fmt.Sprintf("--repo=%s", repo)))
+var hasExistingPr = stepv2.Func21("Has Existing PR", func(ctx context.Context, branchName, repo string) bool {
+	prBytes := []byte(stepv2.Cmd(ctx, "gh", "pr", "list", "--json=title,headRefName", fmt.Sprintf("--repo=%s", repo)))
 	prs := []struct {
-		Title string `json:"title"`
+		Title       string `json:"title"`
+		HeadRefName string `json:"headRefName"`
 	}{}
 	err := json.Unmarshal(prBytes, &prs)
 	stepv2.HaltOnError(ctx, err)
 
 	for _, pr := range prs {
-		if pr.Title == prTitle {
+		if pr.HeadRefName == branchName {
 			stepv2.SetLabel(ctx, fmt.Sprintf("yes %q", pr.Title))
 			return true
 		}
