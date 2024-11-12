@@ -184,6 +184,12 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		}
 	}
 
+	if prTitle, err := prTitle(ctx, upgradeTarget, targetBridgeVersion, targetPfVersion); err != nil {
+		return err
+	} else {
+		repo.prTitle = prTitle
+	}
+
 	var targetSHA string
 	err = stepv2.PipelineCtx(ctx, "Setup working branch", func(ctx context.Context) {
 		repo.workingBranch = getWorkingBranch(ctx, *GetContext(ctx), targetBridgeVersion, targetPfVersion, upgradeTarget)
@@ -192,12 +198,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	})
 	if err != nil {
 		return err
-	}
-
-	if prTitle, err := prTitle(ctx, upgradeTarget, targetBridgeVersion, targetPfVersion); err != nil {
-		return err
-	} else {
-		repo.prTitle = prTitle
 	}
 
 	if GetContext(ctx).MajorVersionBump {
