@@ -663,8 +663,6 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 		stepv2.SetLabel(ctx, colorize.Bold(colorize.Warn("requires manual update")))
 	})(ctx)
 
-	setEnv(ctx, "VERSION_PREFIX", nextMajorVersion)
-
 	addVersionPrefixToGHWorkflows(ctx, repo, nextMajorVersion)
 
 	// Remove examples cache
