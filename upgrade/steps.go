@@ -592,9 +592,11 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 		repo.currentVersion.IncMajor().String())
 
 	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
-		updateFile(ctx, "Update PROVIDER_PATH", "Makefile",
-			"PROVIDER_PATH := provider{}")
+		updateFile(ctx, "Update PROVIDER_PATH", ".ci-mgmt.yaml",
+			"major-version: {}")
 	})
+
+	stepv2.Cmd(ctx, "make", "ci-mgmt")
 
 	stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
 		updateFile(ctx, "Update Go Module (provider)", "go.mod",
