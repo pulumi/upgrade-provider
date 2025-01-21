@@ -208,10 +208,10 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			return err
 		}
 		defer func() {
-			fmt.Printf("\n\n%s\n", colorize.Warn("Major Version Updates are not fully automated!"))
-			fmt.Printf("%s need to complete Step 11: Updating README.md and sdk/python/README.md "+
-				"in a follow up commit.\n", colorize.Bold("You"))
-			fmt.Print("Steps are listed at\n\t" +
+			fmt.Printf("\n\n%s\n", colorize.Warn("Major Version Updates are experimental!"))
+			fmt.Printf("Updating README.md and sdk/python/README.md " +
+				"in a follow up commit.\n")
+			fmt.Print("Review the steps from the guide at\n\t" +
 				"https://github.com/pulumi/platform-providers-team/blob/main/playbooks/Release%3A%20Major%20Version.md\n")
 		}()
 	}
