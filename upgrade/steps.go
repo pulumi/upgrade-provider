@@ -592,18 +592,20 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 		repo.currentVersion.IncMajor().String())
 
 	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
-		updateFile(ctx, "Update PROVIDER_PATH", "Makefile",
-			"PROVIDER_PATH := provider{}")
+		updateFile(ctx, "Update PROVIDER_PATH", ".ci-mgmt.yaml",
+			"major-version: {}")
 	})
+
+	stepv2.Cmd(ctx, "make", "ci-mgmt")
 
 	stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
 		updateFile(ctx, "Update Go Module (provider)", "go.mod",
-			"module github.com/pulumi/"+name+"/provider{}")
+			"module github.com/"+repo.Org+"/"+name+"/provider{}")
 	})
 
 	stepv2.WithCwd(ctx, *repo.sdkDir(), func(ctx context.Context) {
 		updateFile(ctx, "Update Go Module (sdk)", "go.mod",
-			"module github.com/pulumi/"+name+"/sdk{}")
+			"module github.com/"+repo.Org+"/"+name+"/sdk{}")
 	})
 
 	stepv2.Func00E("Update Go Imports", func(ctx context.Context) error {
@@ -616,8 +618,8 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 			data := stepv2.ReadFile(ctx, path)
 
 			new := strings.ReplaceAll(data,
-				"github.com/pulumi/"+name+"/provider"+prev,
-				"github.com/pulumi/"+name+"/provider"+next,
+				"github.com/"+repo.Org+"/"+name+"/provider"+prev,
+				"github.com/"+repo.Org+"/"+name+"/provider"+next,
 			)
 
 			if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
@@ -660,8 +662,6 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 		}
 		stepv2.SetLabel(ctx, colorize.Bold(colorize.Warn("requires manual update")))
 	})(ctx)
-
-	setEnv(ctx, "VERSION_PREFIX", nextMajorVersion)
 
 	addVersionPrefixToGHWorkflows(ctx, repo, nextMajorVersion)
 

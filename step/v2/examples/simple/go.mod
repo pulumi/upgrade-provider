@@ -1,6 +1,8 @@
 module github.com/pulumi/upgrade-provider/step/v2/examples/simple
 
-go 1.21.0
+go 1.23
+
+toolchain go1.23.4
 
 replace github.com/pulumi/upgrade-provider => ../../../../
 
@@ -19,7 +21,7 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/pulumi/pulumi/sdk/v3 v3.87.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
+	golang.org/x/sys v0.20.0 // indirect
 	golang.org/x/term v0.11.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
