@@ -239,7 +239,7 @@ plugins are used if existing versions are present in the cache.`)
 	cmd.PersistentFlags().StringVar(&context.PrAssign, "pr-assign", "",
 		`A user to assign the upgrade PR to.`)
 
-	cmd.PersistentFlags().BoolVarP(&context.AllowMissingDocs, "allow-missing-docs", "", false,
+	cmd.PersistentFlags().BoolVarP(&context.AllowMissingDocs, "allow-missing-docs", "", true,
 		`If true, don't error on missing docs during tfgen.
 This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 
