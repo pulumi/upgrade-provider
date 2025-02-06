@@ -163,11 +163,11 @@ func UpgradeProviderVersion(
 			// We need to remove any patches to so we can cleanly pull the next upstream version.
 			step.Cmd("git", "reset", "HEAD", "--hard").In(&upstreamDir),
 			// Load patches into a branch.
-			step.Cmd("./upstream.sh", "checkout").In(&repo.root),
+			step.Cmd("./scripts/upstream.sh", "checkout").In(&repo.root),
 			// Rebase the upstream tracking branch onto the new version.
-			step.Cmd("./upstream.sh", "rebase", "-o", "refs/tags/v"+target.String()).In(&repo.root),
+			step.Cmd("./scripts/upstream.sh", "rebase", "-o", "refs/tags/v"+target.String()).In(&repo.root),
 			// Turn the rebased commits back into patches.
-			step.Cmd("./upstream.sh", "check_in").In(&repo.root),
+			step.Cmd("./scripts/upstream.sh", "check_in").In(&repo.root),
 		))
 	}
 
