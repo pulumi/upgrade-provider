@@ -21,6 +21,7 @@ func TestGetWorkingBranch(t *testing.T) {
 		c                                    Context
 		targetBridgeVersion, targetPfVersion Ref
 		upgradeTarget                        UpstreamUpgradeTarget
+		branchSuffix                         string
 
 		expected    string
 		expectedErr string
@@ -31,6 +32,7 @@ func TestGetWorkingBranch(t *testing.T) {
 				UpgradeProviderVersion: true,
 				UpstreamProviderName:   "foo",
 			},
+			branchSuffix:  "",
 			upgradeTarget: UpstreamUpgradeTarget{Version: semver.MustParse("1.2.3")},
 			expected:      "upgrade-foo-to-v1.2.3",
 		},
@@ -39,8 +41,29 @@ func TestGetWorkingBranch(t *testing.T) {
 				UpgradeBridgeVersion: true,
 				TargetBridgeRef:      &Version{SemVer: semver.MustParse("v1.2.3")},
 			},
+			branchSuffix:        "",
 			targetBridgeVersion: &Version{SemVer: semver.MustParse("1.2.3")},
 			expected:            "upgrade-pulumi-terraform-bridge-to-1.2.3",
+		},
+		{
+			c: Context{
+				UpgradeBridgeVersion: true,
+				TargetBridgeRef:      &Version{SemVer: semver.MustParse("v1.2.3")},
+				PRTitlePrefix:        "foo",
+			},
+			targetBridgeVersion: &Version{SemVer: semver.MustParse("1.2.3")},
+			branchSuffix:        "foo",
+			expected:            "upgrade-pulumi-terraform-bridge-to-1.2.3-foo",
+		},
+		{
+			c: Context{
+				UpgradeBridgeVersion: true,
+				TargetBridgeRef:      &Version{SemVer: semver.MustParse("v1.2.3")},
+				PRTitlePrefix:        "[DOWNSTREAM TEST] [PLATFORM]",
+			},
+			targetBridgeVersion: &Version{SemVer: semver.MustParse("1.2.3")},
+			branchSuffix:        "[DOWNSTREAM TEST] [PLATFORM]",
+			expected:            "upgrade-pulumi-terraform-bridge-to-1.2.3-downstreamtestplatform",
 		},
 		{expectedErr: "unknown action"}, // If no action can be produced, we should error.
 	}
@@ -50,7 +73,7 @@ func TestGetWorkingBranch(t *testing.T) {
 			t.Parallel()
 
 			err := step.Pipeline(t.Name(), func(ctx context.Context) {
-				actual := getWorkingBranch(ctx, tt.c, tt.targetBridgeVersion, tt.targetPfVersion, &tt.upgradeTarget)
+				actual := getWorkingBranch(ctx, tt.c, tt.targetBridgeVersion, tt.targetPfVersion, &tt.upgradeTarget, tt.branchSuffix)
 				if os.Getenv("CI") == "true" {
 					assert.Regexp(t, "^"+tt.expected+"-ci$", actual)
 				} else {

@@ -190,9 +190,11 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		repo.prTitle = prTitle
 	}
 
+	prTitlePrefix := GetContext(ctx).PRTitlePrefix
+
 	var targetSHA string
 	err = stepv2.PipelineCtx(ctx, "Setup working branch", func(ctx context.Context) {
-		repo.workingBranch = getWorkingBranch(ctx, *GetContext(ctx), targetBridgeVersion, targetPfVersion, upgradeTarget)
+		repo.workingBranch = getWorkingBranch(ctx, *GetContext(ctx), targetBridgeVersion, targetPfVersion, upgradeTarget, prTitlePrefix)
 		ensureBranchCheckedOut(ctx, repo.workingBranch)
 		repo.prAlreadyExists = hasExistingPr(ctx, repo.workingBranch, repo.Org+"/"+repo.Name)
 	})
