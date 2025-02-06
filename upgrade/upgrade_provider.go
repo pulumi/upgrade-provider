@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -190,9 +191,15 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		repo.prTitle = prTitle
 	}
 
+	branchSuffix := GetContext(ctx).PRTitlePrefix
+	if branchSuffix != "" {
+		branchSuffix = strings.ToLower(branchSuffix)
+		branchSuffix = regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(branchSuffix, "")
+	}
+
 	var targetSHA string
 	err = stepv2.PipelineCtx(ctx, "Setup working branch", func(ctx context.Context) {
-		repo.workingBranch = getWorkingBranch(ctx, *GetContext(ctx), targetBridgeVersion, targetPfVersion, upgradeTarget)
+		repo.workingBranch = getWorkingBranch(ctx, *GetContext(ctx), targetBridgeVersion, targetPfVersion, upgradeTarget, branchSuffix)
 		ensureBranchCheckedOut(ctx, repo.workingBranch)
 		repo.prAlreadyExists = hasExistingPr(ctx, repo.workingBranch, repo.Org+"/"+repo.Name)
 	})

@@ -491,11 +491,16 @@ var hasExistingPr = stepv2.Func21("Has Existing PR", func(ctx context.Context, b
 	return false
 })
 
-var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Context, c Context,
+var getWorkingBranch = stepv2.Func51E("Working Branch Name", func(ctx context.Context, c Context,
 	targetBridgeVersion, targetPfVersion Ref, upgradeTarget *UpstreamUpgradeTarget,
+	branchSuffix string,
 ) (string, error) {
 	ret := func(format string, a ...any) (string, error) {
 		s := fmt.Sprintf(format, a...)
+
+		if branchSuffix != "" {
+			s += "-" + branchSuffix
+		}
 
 		if stepv2.GetEnv(ctx, "CI") == "true" {
 			s += "-ci"
