@@ -55,6 +55,16 @@ func TestGetWorkingBranch(t *testing.T) {
 			branchSuffix:        "foo",
 			expected:            "upgrade-pulumi-terraform-bridge-to-1.2.3-foo",
 		},
+		{
+			c: Context{
+				UpgradeBridgeVersion: true,
+				TargetBridgeRef:      &Version{SemVer: semver.MustParse("v1.2.3")},
+				PRTitlePrefix:        "[DOWNSTREAM TEST] [PLATFORM]",
+			},
+			targetBridgeVersion: &Version{SemVer: semver.MustParse("1.2.3")},
+			branchSuffix:        "[DOWNSTREAM TEST] [PLATFORM]",
+			expected:            "upgrade-pulumi-terraform-bridge-to-1.2.3-downstreamtestplatform",
+		},
 		{expectedErr: "unknown action"}, // If no action can be produced, we should error.
 	}
 
