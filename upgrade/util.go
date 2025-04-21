@@ -93,6 +93,9 @@ type Context struct {
 
 	PRDescription string
 	PRTitlePrefix string
+
+	// If true, create a patch release for the provider.
+	PatchRelease bool
 }
 
 // Check if the user specified operating in the current working directory (CWD) with `--repo-path=.`. In this case the

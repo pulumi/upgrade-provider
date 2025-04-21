@@ -256,6 +256,9 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 	cmd.PersistentFlags().StringVar(&context.PRTitlePrefix, "pr-title-prefix", "",
 		`The prefix to insert in the generated pull request title.`)
 
+	cmd.PersistentFlags().BoolVar(&context.PatchRelease, "patch-release", false,
+		`Create a patch release for the provider.`)
+
 	return cmd
 }
 

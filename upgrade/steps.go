@@ -341,6 +341,8 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 		// if the provider hasn't been released in 8 weeks.
 		case c.MaintenancePatch && !c.UpgradeProviderVersion:
 			extraOptions = []string{"--label", "needs-release/patch"}
+		case c.PatchRelease:
+			extraOptions = []string{"--label", "needs-release/patch"}
 		}
 
 		stepv2.Cmd(ctx, "gh",
@@ -597,6 +599,7 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 
 	nextMajorVersion := stepv2.NamedValue(ctx, "Next major version",
 		repo.currentVersion.IncMajor().String())
+
 
 	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
 		updateFile(ctx, "Update PROVIDER_PATH", ".ci-mgmt.yaml",
