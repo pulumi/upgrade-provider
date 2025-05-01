@@ -142,7 +142,7 @@ func SetLabelf(ctx context.Context, format string, a ...any) {
 }
 
 // Run a function against arguments and set outputs.
-func run(ctx context.Context, name string, f1 any, inputs, outputs []any) {
+func run(ctx context.Context, name string, f any, inputs, outputs []any) {
 	p := mustGetPipeline(ctx, name)
 	done := make(chan struct{})
 
