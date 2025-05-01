@@ -77,10 +77,10 @@ Flags:
       --repo-path string                Clone the provider repo to the specified path.
       --target-bridge-version ref       The desired bridge version to upgrade to. Git hash references permitted. (default <latest>)
       --target-pulumi-version ref       Upgrade the provider to the passed pulumi/{pkg,sdk} version.
-                                        
+
                                         If no version is passed, the pulumi/{pkg,sdk} version will track the bridge
       --target-version string           Upgrade the provider to the passed version.
-                                        
+
                                         If the passed version does not exist, an error is signaled.
       --upstream-provider-name string   The name of the upstream provider.
                                         Required unless running from provider root and set in upgrade-config.yml.
@@ -117,9 +117,9 @@ A typical run for a patched provider with an upgrade configuration file will loo
 - ✓ /usr/bin/make tfgen: done
 - ✓ /usr/local/bin/git add --all: done
 - ✓ /usr/local/bin/git commit -m make tfgen: done
-- ✓ /usr/bin/make build_sdks: done
+- ✓ /usr/bin/make generate_sdks: done
 - ✓ /usr/local/bin/git add --all: done
-- ✓ /usr/local/bin/git commit -m make build_sdks: done
+- ✓ /usr/local/bin/git commit -m make generate_sdks: done
 - Open PR
   - ✓ /usr/local/bin/git push --set-upstream origin upgrade-terraform-provider-snowfla...: done
   - ✓ /usr/local/bin/gh pr create --assignee @me --base master --head upgrade-terrafor...: done
@@ -176,9 +176,9 @@ ok = step.Run(step.Combined("Upgrading Provider",
 			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "make", "build_sdks")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "make", "generate_sdks")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
-			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make build_sdks")).In(&path),
+			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make generate_sdks")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branchName)).In(&path),
 		)...))
 ```
@@ -206,7 +206,7 @@ Then the basic provider upgrade is performed:
 2. Upgrade the upstream dependency. (If forked, update the fork)
 3. Upgrade terraform bridge.
 4. Run `make tfgen` and check in the result.
-5. Run `make build_sdks` and check in the result.
+5. Run `make generate_sdks` and check in the result.
 
 If `shim` is a subfolder of `provider`, then upgrades will be performed in `shim`.
 
