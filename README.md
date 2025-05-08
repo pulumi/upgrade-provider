@@ -1,5 +1,13 @@
 # upgrade-provider
 
+> [!NOTE]
+> While this is a public repository, its use by third parties is not recommended.
+> This repository is not stable and will undergo breaking changes.
+> Additionally, it is meant to be used in conjunction with https://github.com/pulumi/ci-mgmt and thus makes certain
+> assumptions about repository structure and CI.
+> The reason this repository is public is so that Pulumi maintainers can cross-reference it from ecosystem-wide orgs.
+> Please use with caution.
+
 This repo contains the `upgrade-provider` tool. `upgrade-provider` aims to reduce the
 amount of human intervention necessary for upgrading bridged Pulumi providers to a limit of zero.
 
