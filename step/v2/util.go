@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // Name a value so it is viable to the user.
@@ -45,6 +46,25 @@ func Cmd(ctx context.Context, name string, args ...string) string {
 			err = fmt.Errorf("%s:\n%s", err.Error(), string(exit.Stderr))
 		}
 		return string(out), err
+	})(ctx, name, args)
+}
+
+// Like [Cmd] but never errors, instead reports the errors out.
+func CmdIgnoreError(ctx context.Context, name string, args ...string) string {
+	return Func21E(name, func(ctx context.Context, _ string, _ []string) (string, error) {
+		MarkImpure(ctx)
+		cmd := exec.CommandContext(ctx, name, args...)
+		SetLabel(ctx, cmd.String())
+		out, err := cmd.Output()
+		if exit, ok := err.(*exec.ExitError); ok {
+			err = fmt.Errorf("%s:\n%s", err.Error(), string(exit.Stderr))
+		}
+		if err != nil {
+			return fmt.Sprintf("ERROR while executing `%s %s`: %v\n\nOutput: %s\n\n",
+				name, strings.Join(args, " "), err, out,
+			), nil
+		}
+		return string(out), nil
 	})(ctx, name, args)
 }
 

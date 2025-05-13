@@ -363,12 +363,12 @@ func tfgenAndBuildSDKs(
 			stepv2.WriteFile(ctx, ".pulumi-java-gen.version", GetContext(ctx).JavaVersion)
 		}
 
-		stepv2.Cmd(ctx, "make", "tfgen")
+		stepv2.CmdIgnoreError(ctx, "make", "tfgen")
 
-		stepv2.Cmd(ctx, "git", "add", "--all")
+		stepv2.CmdIgnoreError(ctx, "git", "add", "--all")
 		gitCommit(ctx, "make tfgen")
 
-		stepv2.Cmd(ctx, "make", "generate_sdks")
+		stepv2.CmdIgnoreError(ctx, "make", "generate_sdks")
 
 		// Update sdk/go.mod's module after rebuilding the go SDK
 		if GetContext(ctx).MajorVersionBump {
