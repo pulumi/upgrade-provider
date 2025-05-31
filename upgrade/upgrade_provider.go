@@ -234,7 +234,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		}
 
 		steps = append(steps,
-			setTFPluginSDKReplace(ctx, repo, &tfSDKTargetSHA),
+			setTFPluginSDKReplace(ctx, repo, tfSDKTargetSHA),
 			step.Cmd("go", "mod", "tidy").In(repo.providerDir()))
 
 		return step.Combined("Update Plugin SDK", steps...)
