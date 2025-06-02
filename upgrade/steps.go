@@ -405,41 +405,69 @@ var upgradeLabel = stepv2.Func21("Release Label", func(ctx context.Context, from
 	return ""
 })
 
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
+
 // Most if not all of our TF SDK based providers use a "replace" based version of
 // github.com/hashicorp/terraform-plugin-sdk/v2. To avoid compile errors, we want
 // to be using the most up to date version of this plugin.
 //
 // This is predicated on updating to the latest version being safe. We will need to
 // revisit this when a new major version of the plugin SDK is released.
-func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA *string) step.Step {
+func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA string) step.Step {
 	// We do discover in a step.Computed so if the fork isn't present, it isn't
 	// displayed to the user.
-	return step.F("Update TF Plugin SDK Fork", func(context.Context) (string, error) {
-		goModFile, err := os.ReadFile("go.mod")
+	updateModReplace := func(path string) error {
+		goModFile, err := os.ReadFile(path)
 		if err != nil {
-			return "", fmt.Errorf("could not find go.mod: %w", err)
+			return fmt.Errorf("could not find go.mod: %w", err)
 		}
-		goMod, err := modfile.Parse("go.mod", goModFile, nil)
+		goMod, err := modfile.Parse(path, goModFile, nil)
 		if err != nil {
-			return "", fmt.Errorf("failed to parse go.mod: %w", err)
+			return fmt.Errorf("failed to parse go.mod: %w", err)
 		}
 
 		// Otherwise, we need to replace the old version. goMod.AddReplace
 		// will handle replacing existing `replace` directives.
 		err = goMod.AddReplace("github.com/hashicorp/terraform-plugin-sdk/v2", "",
-			"github.com/pulumi/terraform-plugin-sdk/v2", *targetSHA)
+			"github.com/pulumi/terraform-plugin-sdk/v2", targetSHA)
 		if err != nil {
-			return "", fmt.Errorf("failed to update version: %w", err)
+			return fmt.Errorf("failed to update version: %w", err)
 		}
 
 		// We now write out the new file over the old file.
 		goMod.Cleanup()
 		goModFile, err = goMod.Format()
 		if err != nil {
-			return "", fmt.Errorf("failed to format file as bytes: %w", err)
+			return fmt.Errorf("failed to format file as bytes: %w", err)
 		}
-		err = os.WriteFile("go.mod", goModFile, 0o600)
-		return "updated", err
+		err = os.WriteFile(path, goModFile, 0o600)
+		return err
+	}
+	return step.F("Update TF Plugin SDK Fork", func(context.Context) (string, error) {
+		// update go.mod in the root directory of the provider.
+		err := updateModReplace("go.mod")
+		if err != nil {
+			return "", fmt.Errorf("failed to update go.mod: %w", err)
+		}
+
+		// if we have an examples directory, we also update the go.mod in there.
+		exampleGoMod := filepath.Join(repo.root, "examples", "go.mod")
+		if fileExists(filepath.Join(exampleGoMod)) {
+			err = updateModReplace(exampleGoMod)
+			if err != nil {
+				return "", fmt.Errorf("failed to update examples/go.mod: %w", err)
+			}
+		}
+
+		return "updated", nil
 	}).In(repo.providerDir())
 }
 
