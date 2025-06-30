@@ -315,7 +315,7 @@ type recordKey struct{}
 // Note: Impure functions must have serializable inputs and outputs for replay testing.
 func MarkImpure(ctx context.Context) {
 	if IsReplay(ctx) {
-		HaltOnError(ctx, fmt.Errorf("Calling impure function in replay"))
+		HaltOnError(ctx, fmt.Errorf("calling impure function in replay"))
 	}
 	r, ok := ctx.Value(recordKey{}).(*record)
 	if !ok {

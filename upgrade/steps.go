@@ -793,10 +793,10 @@ var addVersionPrefixToGHWorkflows = stepv2.Func20("Update GitHub Workflows", fun
 		enc := yaml.NewEncoder(updated)
 		enc.SetIndent(2) // TODO Round trip correctly
 		if err := enc.Encode(doc); err != nil {
-			return fmt.Errorf("Failed to marshal: %w", err)
+			return fmt.Errorf("failed to marshal: %w", err)
 		}
 		if err := enc.Close(); err != nil {
-			return fmt.Errorf("Failed to flush encoder: %w", err)
+			return fmt.Errorf("failed to flush encoder: %w", err)
 		}
 		stepv2.WriteFile(ctx, path, updated.String())
 		return nil
@@ -856,7 +856,7 @@ func AddAutoAliasing(ctx context.Context, repo ProviderRepo) (step.Step, error) 
 			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 				_, err = os.Create(metadataPath)
 				if err != nil {
-					return "", fmt.Errorf("Could not initialize %s: %w", metadataPath, err)
+					return "", fmt.Errorf("could not initialize %s: %w", metadataPath, err)
 				}
 				return "created", nil
 			}
@@ -897,7 +897,7 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 			return "", err
 		}
 		if !found {
-			return "", fmt.Errorf("%s: %s not found\n", modFile, lookupModule)
+			return "", fmt.Errorf("%s: %s not found", modFile, lookupModule)
 		}
 		return pulumiMod.Version, nil
 	}).AssignTo(&newSdkVersion)
@@ -945,7 +945,7 @@ var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx conte
 	case goMod.Kind == Plain:
 		setCurrentUpstreamFromPlain(ctx, repo, goMod)
 	default:
-		return nil, fmt.Errorf("Unexpected repo kind: %s", goMod.Kind)
+		return nil, fmt.Errorf("unexpected repo kind: %s", goMod.Kind)
 	}
 
 	// If we have a target version, we need to make sure that
@@ -1058,12 +1058,12 @@ var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 
 	gomodBytes, err := getHTTP(ctx, url)
 	if err != nil {
-		return "", "", fmt.Errorf("Failed to get %v: %w", url, err)
+		return "", "", fmt.Errorf("failed to get %v: %w", url, err)
 	}
 
 	goMod, err := modfile.Parse("go.mod", gomodBytes, nil)
 	if err != nil {
-		return "", "", fmt.Errorf("Failed parse go.mod: %w", err)
+		return "", "", fmt.Errorf("failed parse go.mod: %w", err)
 	}
 
 	version := ""
@@ -1074,7 +1074,7 @@ var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 	}
 
 	if version == "" {
-		return "", "", fmt.Errorf("Failed to find %v replace in bridge go.mod", sdkv2)
+		return "", "", fmt.Errorf("failed to find %v replace in bridge go.mod", sdkv2)
 	}
 
 	return version, fmt.Sprintf("bridge %s needs terraform-plugin-sdk %s", bridgeRef, version), nil
