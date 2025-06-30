@@ -14,7 +14,6 @@ amount of human intervention necessary for upgrading bridged Pulumi providers to
 With our current bridged provider structure, we can reduce provider upgrades to 3 manual
 operations:
 
-- resolving merge dependencies for forked providers
 - manual provider mappings in `resources.go`, if using (we recommend upgrading to auto token mapping!) // TODO: send a link to example
 - resolving build conflicts on updates
 
@@ -194,20 +193,12 @@ upgrade. The basic pipeline goes as follows:
 
 1. Download the pulumi provider repository if it's not present.
 2. Check with github to get the version to upgrade to.
-3. Determine the type of upgrade to perform (forked or normal).
-
-If the provider references a pulumi owned fork in it's provider/go.mod:
-
-1. Download the fork to it's appropriate place on the file system (if not present).
-2. Checkout a new branch upstream of the target version and then merge the previous
-   upstream into it.
-3. Check that we can still build cleanly
-4. Push the upstream branch back into the pulumi fork.
+3. Determine the type of upgrade to perform.
 
 Then the basic provider upgrade is performed:
 
 1. Checkout the repo, pull the latest master, and create a new branch for the upgrade.
-2. Upgrade the upstream dependency. (If forked, update the fork)
+2. Upgrade the upstream dependency.
 3. Upgrade terraform bridge.
 4. Run `make tfgen` and check in the result.
 5. Run `make generate_sdks` and check in the result.
@@ -235,7 +226,7 @@ Use `PULUMI_REPLAY=logs.json upgrade-provider...` to record logs to use in repla
 - Automate the boring stuff. If a task is simple enough for a computer to do, then we
   should let the computer do it.
 - Treat all upgrades the same. Upgrading a provider shouldn't have different steps
-  depending on if we maintain an upstream fork or a patch.
+  depending on if we maintain an upstream patch or not.
 - Intuitive to understand. `upgrade-provider` should inform the user what it's doing. If
   something breaks, the user should be able to diagnose and complete the process on their
   own.

@@ -119,7 +119,6 @@
                 "Path": "github.com/kevholditch/terraform-provider-kong",
                 "Version": "v1.9.2-0.20220328204855-9e50bd93437f"
               },
-              "Fork": null,
               "Bridge": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/v3",
                 "Version": "v3.60.0"
