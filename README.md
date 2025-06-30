@@ -42,12 +42,6 @@ go install github.com/pulumi/upgrade-provider@main
 Additionally, `upgrade-provider` relies on all tools necessary for a manual provider upgrade.
 That generally means `pulumi`, `make`, and the build toolchain for each released SDK.
 
-### Auto Token Mapping
-
-To take full advantage of this tool, you can choose to use the new auto token mapping functionality.
-This feature is still experimental, and may be subject to change.
-[An implementation example can be found in pulumi-okta.](https://github.com/pulumi/pulumi-okta/pull/273/files#diff-34c57e622183cb0d8dd0d3f9eaa0861b3340120e9b2ad811bac7ac7be4cea4b1L561)
-
 ## Usage
 
 ### From the command line
@@ -62,7 +56,6 @@ Usage:
 Flags:
       --allow-missing-docs              If true, don't error on missing docs during tfgen.
                                         This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.
-      --experimental                    Enable experimental features, such as auto token mapping and auto aliasing
   -h, --help                            help for upgrade-provider
       --java-version string             The version of pulumi-java-gen to target.
       --kind strings                    The kind of upgrade to perform:
@@ -74,9 +67,6 @@ Flags:
       --pr-assign string                A user to assign the upgrade PR to. (default "@me")
       --pr-description string           Extra text to insert in the generated pull request description.
       --pr-reviewers string             A comma separated list of reviewers to assign the upgrade PR to.
-      --remove-plugins                  Remove all pulumi plugins from cache before running the upgrade.
-                                                        It is possible that the generated examples may be non-deterministic depending on which
-                                                        plugins are used if existing versions are present in the cache.
       --repo-path string                Clone the provider repo to the specified path.
       --target-bridge-version ref       The desired bridge version to upgrade to. Git hash references permitted. (default <latest>)
       --target-pulumi-version ref       Upgrade the provider to the passed pulumi/{pkg,sdk} version.
@@ -211,8 +201,6 @@ A configuration file `.upgrade-config.{yml/json}` may be defined within the prov
 Values include:
 
 - `upstream-provider-name`: The name of the upstream provider repo, i.e. `terraform-provider-docker`
-- `experimental`: Whether to enable experimental `pulumi-terraform-bridge` features https://github.com/pulumi/pulumi-terraform-bridge/tree/master/pkg/tfbridge/x. Value must be [true, false (default)].
-- `remove-plugins`: Whether to clear all Pulumi plugins from cache before running the upgrade. It is possible that the generated examples may be non-deterministic depending on which plugins are used if existing versions are present in the cache. Values must be [true, false (default)].
 - `pr-reviewers`: A comma separated list of reviewers to assign the upgrade PR to.
 - `pr-assign`: A user to assign the upgrade PR to (default: `@me`).
 

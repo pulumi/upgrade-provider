@@ -81,7 +81,6 @@ type Context struct {
 	oldJavaVersion string
 
 	AllowMissingDocs bool
-	RemovePlugins    bool
 	PrReviewers      string
 	PrAssign         string
 
