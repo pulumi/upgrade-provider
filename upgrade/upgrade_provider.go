@@ -6,20 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
-
-type CodeMigration = func(ctx context.Context, repo ProviderRepo) (step.Step, error)
-
-var CodeMigrations = map[string]CodeMigration{
-	"autoalias":     AddAutoAliasing,
-	"assertnoerror": ReplaceAssertNoError,
-}
 
 func setEnv(ctx context.Context, k, v string) {
 	stepv2.Func20E(k+"="+v, func(ctx context.Context, k, v string) error {
@@ -154,20 +146,9 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		!ctx.UpgradeCodeMigration && ctx.TargetPulumiVersion == nil &&
-		!ctx.UpgradeJavaVersion {
+		ctx.TargetPulumiVersion == nil && !ctx.UpgradeJavaVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
-	}
-
-	if GetContext(ctx).UpgradeCodeMigration && len(GetContext(ctx).MigrationOpts) == 0 {
-		keys := make([]string, 0, len(CodeMigrations))
-		for k := range CodeMigrations {
-			keys = append(keys, k)
-		}
-		GetContext(ctx).MigrationOpts = keys
-	} else if !GetContext(ctx).UpgradeCodeMigration && len(GetContext(ctx).MigrationOpts) > 0 {
-		fmt.Println(colorize.Warn("--migration-opts passed but --kind does not indicate a code migration"))
 	}
 
 	var forkedProviderUpstreamCommit string
@@ -284,34 +265,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		// We make sure that TargetPulumiVersion == "", since we cannot discover
 		// the version of a replace statement.
 		steps = append(steps, applyPulumiVersion(ctx, repo))
-	}
-
-	if GetContext(ctx).UpgradeCodeMigration {
-		applied := make(map[string]struct{})
-		sort.Slice(GetContext(ctx).MigrationOpts, func(i, j int) bool {
-			m := GetContext(ctx).MigrationOpts
-			return m[i] < m[j]
-		})
-		for _, opt := range GetContext(ctx).MigrationOpts {
-			if _, ok := applied[opt]; ok {
-				fmt.Println(colorize.Warn("Duplicate code migration " + colorize.Bold(opt)))
-				continue
-			}
-			applied[opt] = struct{}{}
-
-			getMigration, found := CodeMigrations[opt]
-			if !found {
-				return fmt.Errorf("unknown migration '%s'", opt)
-			}
-
-			migration, err := getMigration(ctx, repo)
-			if err != nil {
-				return fmt.Errorf("unable implement migration '%s': %w", opt, err)
-			}
-
-			steps = append(steps, migration)
-
-		}
 	}
 
 	ok := step.Run(ctx, step.Combined("Update Repository", steps...))

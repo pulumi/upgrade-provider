@@ -17,8 +17,6 @@
               "MajorVersionBump": false,
               "UpstreamProviderName": "terraform-provider-kong",
               "JavaVersion": "",
-              "UpgradeCodeMigration": false,
-              "MigrationOpts": null,
               "AllowMissingDocs": false,
               "RemovePlugins": true,
               "PrReviewers": "pulumi/Providers,lukehoban",

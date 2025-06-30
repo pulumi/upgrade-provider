@@ -81,9 +81,6 @@ type Context struct {
 	// The old java version we found.
 	oldJavaVersion string
 
-	UpgradeCodeMigration bool
-	MigrationOpts        []string
-
 	AllowMissingDocs bool
 	RemovePlugins    bool
 	PrReviewers      string
