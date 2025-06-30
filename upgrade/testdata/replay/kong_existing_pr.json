@@ -13,7 +13,6 @@
               "UpgradeBridgeVersion": true,
               "TargetBridgeRef": {},
               "UpgradeSdkVersion": false,
-              "UpgradePfVersion": false,
               "UpgradeProviderVersion": false,
               "MajorVersionBump": false,
               "UpstreamProviderName": "terraform-provider-kong",
@@ -126,9 +125,6 @@
               "Bridge": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/v3",
                 "Version": "v3.60.0"
-              },
-              "Pf": {
-                "Path": ""
               }
             },
             {

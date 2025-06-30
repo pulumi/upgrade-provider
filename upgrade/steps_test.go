@@ -18,10 +18,10 @@ import (
 
 func TestGetWorkingBranch(t *testing.T) {
 	type test struct {
-		c                                    Context
-		targetBridgeVersion, targetPfVersion Ref
-		upgradeTarget                        UpstreamUpgradeTarget
-		branchSuffix                         string
+		c                   Context
+		targetBridgeVersion Ref
+		upgradeTarget       UpstreamUpgradeTarget
+		branchSuffix        string
 
 		expected    string
 		expectedErr string
@@ -73,7 +73,7 @@ func TestGetWorkingBranch(t *testing.T) {
 			t.Parallel()
 
 			err := step.Pipeline(t.Name(), func(ctx context.Context) {
-				actual := getWorkingBranch(ctx, tt.c, tt.targetBridgeVersion, tt.targetPfVersion, &tt.upgradeTarget, tt.branchSuffix)
+				actual := getWorkingBranch(ctx, tt.c, tt.targetBridgeVersion, &tt.upgradeTarget, tt.branchSuffix)
 				if os.Getenv("CI") == "true" {
 					assert.Regexp(t, "^"+tt.expected+"-ci$", actual)
 				} else {

@@ -102,7 +102,7 @@ func cmd() *cobra.Command {
 			// This can happen by calling `upgrade-provider --kind=""`
 			if len(upgradeKind) == 0 {
 				return fmt.Errorf("--kind=\"\" is invalid. Must be one of `all`, " +
-					"`bridge`, `provider`, `code`, `pf`, or `pulumi`")
+					"`bridge`, `provider`, `code`, or `pulumi`")
 			}
 
 			// Validate the kind switch
@@ -122,19 +122,15 @@ func cmd() *cobra.Command {
 				case "all":
 					context.UpgradeBridgeVersion = true
 					context.UpgradeProviderVersion = true
-					context.UpgradePfVersion = true
 					if experimental {
 						context.UpgradeCodeMigration = true
 					}
 				case "bridge":
 					set(&context.UpgradeBridgeVersion)
-					set(&context.UpgradePfVersion)
 				case "provider":
 					set(&context.UpgradeProviderVersion)
 				case "code":
 					set(&context.UpgradeCodeMigration)
-				case "pf":
-					set(&context.UpgradePfVersion)
 				case "pulumi":
 				case "check-upstream-version":
 					if targetVersion != "" {
@@ -205,7 +201,6 @@ we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DE
 - "all": Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code,pf".
 - "bridge": Upgrade the bridge only.
 - "provider": Upgrade the upstream provider only.
-- "pf": Upgrade the Plugin Framework only.
 - "code": Perform some number of code migrations.`
 	if pulumiDev {
 		kindMsg += `

@@ -40,7 +40,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		Name: repoName,
 		Org:  repoOrg,
 	}
-	var targetBridgeVersion, targetPfVersion Ref
+	var targetBridgeVersion Ref
 	var tfSDKUpgrade string
 	var tfSDKTargetSHA string
 	var upgradeTarget *UpstreamUpgradeTarget
@@ -114,10 +114,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			GetContext(ctx).MaintenancePatch = maintenanceRelease(ctx, repo)
 		}
 
-		if GetContext(ctx).UpgradePfVersion {
-			targetPfVersion = plantPfUpgrade(ctx, goMod)
-		}
-
 		if GetContext(ctx).MajorVersionBump {
 			repo.currentVersion = findCurrentMajorVersion(ctx, repoOrg, repoName)
 		}
@@ -158,7 +154,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		!ctx.UpgradeCodeMigration && !ctx.UpgradePfVersion && ctx.TargetPulumiVersion == nil &&
+		!ctx.UpgradeCodeMigration && ctx.TargetPulumiVersion == nil &&
 		!ctx.UpgradeJavaVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
@@ -184,7 +180,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		}
 	}
 
-	if prTitle, err := prTitle(ctx, upgradeTarget, targetBridgeVersion, targetPfVersion); err != nil {
+	if prTitle, err := prTitle(ctx, upgradeTarget, targetBridgeVersion); err != nil {
 		return err
 	} else {
 		repo.prTitle = prTitle
@@ -194,7 +190,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	var targetSHA string
 	err = stepv2.PipelineCtx(ctx, "Setup working branch", func(ctx context.Context) {
-		repo.workingBranch = getWorkingBranch(ctx, *GetContext(ctx), targetBridgeVersion, targetPfVersion, upgradeTarget, prTitlePrefix)
+		repo.workingBranch = getWorkingBranch(ctx, *GetContext(ctx), targetBridgeVersion, upgradeTarget, prTitlePrefix)
 		ensureBranchCheckedOut(ctx, repo.workingBranch)
 		repo.prAlreadyExists = hasExistingPr(ctx, repo.workingBranch, repo.Org+"/"+repo.Name)
 	})
@@ -260,13 +256,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			step.Cmd("go", "mod", "tidy"),
 		).In(repo.providerDir()))
 	}
-	if GetContext(ctx).UpgradePfVersion {
-		steps = append(steps, step.Combined("Upgrade Pf Version",
-			step.Cmd("go", "get",
-				"github.com/pulumi/pulumi-terraform-bridge/pf@"+targetPfVersion.String()),
-			step.Cmd("go", "mod", "tidy"),
-		).In(repo.providerDir()))
-	}
 
 	if ref := GetContext(ctx).TargetPulumiVersion; ref != nil {
 		r := func(kind string) string {
@@ -288,8 +277,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			upgrade("sdk").In(repo.sdkDir())))
 	}
 
-	if (GetContext(ctx).UpgradeBridgeVersion || GetContext(ctx).UpgradePfVersion) &&
-		GetContext(ctx).TargetPulumiVersion == nil {
+	if GetContext(ctx).UpgradeBridgeVersion && GetContext(ctx).TargetPulumiVersion == nil {
 		// Having changed the version of pulumi/{sdk,pkg} that we are using, we
 		// need to propagate that change to the go.mod in {sdk,examples}/go.mod
 		//
@@ -333,12 +321,12 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	return stepv2.PipelineCtx(ctx, "Tfgen & Build SDKs",
 		tfgenAndBuildSDKs(repo, repoName, upgradeTarget, goMod,
-			targetBridgeVersion, targetPfVersion, tfSDKUpgrade))
+			targetBridgeVersion, tfSDKUpgrade))
 }
 
 func tfgenAndBuildSDKs(
 	repo ProviderRepo, repoName string, upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
-	targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
+	targetBridgeVersion Ref, tfSDKUpgrade string,
 ) func(ctx context.Context) {
 	return func(ctx context.Context) {
 		ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
@@ -392,7 +380,6 @@ func tfgenAndBuildSDKs(
 
 		gitCommit(ctx, "make generate_sdks")
 
-		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion,
-			targetPfVersion, tfSDKUpgrade, os.Args)
+		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, tfSDKUpgrade, os.Args)
 	}
 }

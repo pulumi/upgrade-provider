@@ -215,10 +215,6 @@
               "Bridge": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/v3",
                 "Version": "v3.70.0"
-              },
-              "Pf": {
-                "Path": "github.com/pulumi/pulumi-terraform-bridge/pf",
-                "Version": "v0.23.0"
               }
             },
             null
