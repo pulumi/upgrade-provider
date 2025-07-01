@@ -2,8 +2,6 @@ package upgrade
 
 import (
 	"context"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
@@ -42,11 +40,6 @@ func TestRemoveVersionPrefix(t *testing.T) {
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
-}
-
-func trimSeparators(path string) string {
-	return strings.TrimSuffix(strings.TrimPrefix(path, string(os.PathSeparator)),
-		string(os.PathSeparator))
 }
 
 func TestPullRequestBody(t *testing.T) {
