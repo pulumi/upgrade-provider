@@ -31,6 +31,8 @@ const (
 
 func cmd() *cobra.Command {
 	var targetVersion string
+	var currentUpstreamVersion string
+	var parsedCurrentUpstreamVersion *semver.Version
 
 	gopath, ok := os.LookupEnv("GOPATH")
 	if !ok {
@@ -89,6 +91,10 @@ func cmd() *cobra.Command {
 				return fmt.Errorf(`"upstream-provider-name" must not be fully qualified%s`, s)
 			}
 
+			if currentUpstreamVersion == "" {
+				return errors.New("`current-upstream-version` must be provided")
+			}
+
 			// Validate that targetVersion is a valid version
 			if targetVersion != "" {
 				context.TargetVersion, err = semver.NewVersion(targetVersion)
@@ -96,6 +102,12 @@ func cmd() *cobra.Command {
 					return fmt.Errorf("--target-version=%s: %w",
 						targetVersion, err)
 				}
+			}
+
+			parsedCurrentUpstreamVersion, err = semver.NewVersion(currentUpstreamVersion)
+			if err != nil {
+				return fmt.Errorf("--current-upstream-version=%s: %w",
+					currentUpstreamVersion, err)
 			}
 
 			// This can happen by calling `upgrade-provider --kind=""`
@@ -149,13 +161,18 @@ func cmd() *cobra.Command {
 		},
 		Run: func(_ *cobra.Command, args []string) {
 			if slices.Contains(upgradeKind, "check-upstream-version") {
-				exitOnError(upgrade.CheckUpstream(context.Wrap(ctx), repoOrg, repoName))
+				exitOnError(upgrade.CheckUpstream(context.Wrap(ctx), repoOrg, repoName, parsedCurrentUpstreamVersion))
 				return
 			}
 
 			exitOnError(failedPreRun)
-			err := upgrade.UpgradeProvider(context.Wrap(ctx), repoOrg, repoName)
+			newVersion, err := upgrade.UpgradeProvider(context.Wrap(ctx), repoOrg, repoName, parsedCurrentUpstreamVersion)
 			exitOnError(err)
+
+			if newVersion != nil {
+				err := upgrade.BumpRecordedUpstreamVersion(context.Wrap(ctx), newVersion, configFilename+".yml")
+				exitOnError(err)
+			}
 		},
 	}
 
@@ -207,6 +224,10 @@ Required unless running from provider root and set in upgrade-config.yml.`)
 
 	cmd.PersistentFlags().StringVar(&context.UpstreamProviderOrg, "upstream-provider-org", "",
 		`The name of the upstream provider's GitHub organization'.`)
+
+	cmd.PersistentFlags().StringVar(&currentUpstreamVersion, "current-upstream-version", "",
+		`The current version of the upstream provider. This is used to determine if we need to upgrade the upstream provider.
+	Required unless set in upgrade-config.yml.`)
 
 	cmd.PersistentFlags().StringVar(&context.PrReviewers, "pr-reviewers", "",
 		`A comma separated list of reviewers to assign the upgrade PR to.`)

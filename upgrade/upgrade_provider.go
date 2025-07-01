@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
+
 	"github.com/pulumi/upgrade-provider/colorize"
 	"github.com/pulumi/upgrade-provider/step"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
@@ -20,7 +22,7 @@ func setEnv(ctx context.Context, k, v string) {
 	})(ctx, k, v)
 }
 
-func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) {
+func UpgradeProvider(ctx context.Context, repoOrg, repoName string, currentUpstreamVersion *semver.Version) (newVersion *semver.Version, err error) {
 	// Setup ctx to enable replay tests with stepv2:
 	if file := os.Getenv("PULUMI_REPLAY"); file != "" {
 		var write io.Closer
@@ -31,6 +33,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	repo := ProviderRepo{
 		Name: repoName,
 		Org:  repoOrg,
+		currentUpstreamVersion: currentUpstreamVersion,
 	}
 	var targetBridgeVersion Ref
 	var tfSDKUpgrade string
@@ -50,7 +53,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		env("PULUMI_EXTRA_MAPPING_ERROR", "true")
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = stepv2.PipelineCtx(ctx, "Discover Provider", func(ctx context.Context) {
@@ -67,7 +70,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		}
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = stepv2.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
@@ -86,7 +89,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		}
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if GetContext(ctx).UpgradeJavaVersion {
@@ -103,17 +106,17 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			c.oldJavaVersion, c.JavaVersion, c.UpgradeJavaVersion = fetchLatestJavaGen(ctx)
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	if GetContext(ctx).UpgradeProviderVersion {
 		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTarget.Version.Major()
 		if GetContext(ctx).MajorVersionBump && !shouldMajorVersionBump {
-			return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
+			return nil, fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
 				repo.currentUpstreamVersion.Major())
 		} else if !GetContext(ctx).MajorVersionBump && shouldMajorVersionBump {
-			return fmt.Errorf("this is a major version update (v%d -> v%d), but --major was not passed",
+			return nil, fmt.Errorf("this is a major version update (v%d -> v%d), but --major was not passed",
 				repo.currentUpstreamVersion.Major(), upgradeTarget.Version.Major())
 		}
 	}
@@ -123,11 +126,11 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
 		ctx.TargetPulumiVersion == nil && !ctx.UpgradeJavaVersion {
 		fmt.Println(colorize.Bold("No actions needed"))
-		return nil
+		return nil, nil
 	}
 
 	if prTitle, err := prTitle(ctx, upgradeTarget, targetBridgeVersion); err != nil {
-		return err
+		return nil, err
 	} else {
 		repo.prTitle = prTitle
 	}
@@ -141,7 +144,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		repo.prAlreadyExists = hasExistingPr(ctx, repo.workingBranch, repo.Org+"/"+repo.Name)
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if GetContext(ctx).MajorVersionBump {
@@ -149,7 +152,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			majorVersionBump(ctx, goMod, upgradeTarget, repo)
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer func() {
 			fmt.Printf("\n\n%s\n", colorize.Warn("Major Version Updates are experimental!"))
@@ -233,12 +236,17 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	ok := step.Run(ctx, step.Combined("Update Repository", steps...))
 	if !ok {
-		return ErrHandled
+		return nil, ErrHandled
 	}
 
-	return stepv2.PipelineCtx(ctx, "Tfgen & Build SDKs",
+	err = stepv2.PipelineCtx(ctx, "Tfgen & Build SDKs",
 		tfgenAndBuildSDKs(repo, repoName, upgradeTarget, goMod,
 			targetBridgeVersion, tfSDKUpgrade))
+	if err != nil {
+		return nil, err
+	}
+
+	return upgradeTarget.Version, nil
 }
 
 func tfgenAndBuildSDKs(
@@ -297,4 +305,24 @@ func tfgenAndBuildSDKs(
 
 		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, tfSDKUpgrade, os.Args)
 	}
+}
+
+func BumpRecordedUpstreamVersion(ctx context.Context, version *semver.Version, configFile string) error {
+	return stepv2.PipelineCtx(ctx, "Bump Recorded Upstream Version", func(ctx context.Context) {
+		content := stepv2.ReadFile(ctx, configFile)
+		lines := strings.Split(content, "\n")
+		var newLines []string
+		for _, line := range lines {
+			if !strings.Contains(line, "current-upstream-version:") {
+				newLines = append(newLines, line)
+			}
+		}
+		content = strings.Join(newLines, "\n")
+		content += "current-upstream-version: " + version.String() + "\n"
+		stepv2.WriteFile(ctx, configFile, content)
+
+		stepv2.Cmd(ctx, "git", "add", configFile)
+		stepv2.Cmd(ctx, "git", "commit", "-m", fmt.Sprintf("Bump recorded upstream version to %s", version.String()))
+		stepv2.Cmd(ctx, "git", "push")
+	})
 }
