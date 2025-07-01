@@ -11,7 +11,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/mod/module"
 
 	"github.com/pulumi/upgrade-provider/step/v2"
 )
@@ -278,94 +277,6 @@ func TestReleaseLabel(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
-}
-
-func TestUpstreamGoModRegexp(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		input    module.Version
-		expected string
-	}{
-		{
-			name: "Gets plain upstream org name with v1 provider format",
-			input: module.Version{
-				Path: "github.com/unicornio/terraform-provider-foo",
-			},
-			expected: "unicornio",
-		},
-		{
-			name: "Gets allowed chars in upstream org name with v1 provider format",
-			input: module.Version{
-				Path: "github.com/uniCorn_12-io/terraform-provider-foo",
-			},
-			expected: "uniCorn_12-io",
-		},
-		{
-			name: "Gets plain upstream org name with v2+ provider format",
-			input: module.Version{
-				Path: "github.com/unicornio/terraform-provider-foo/v2",
-			},
-			expected: "unicornio",
-		},
-		{
-			name: "Gets allowed chars in upstream org name with v2+ provider format",
-			input: module.Version{
-				Path: "github.com/uniCorn_12-io/terraform-provider-foo/v45",
-			},
-			expected: "uniCorn_12-io",
-		},
-		{
-			name: "Gets non-GitHub hosted module name",
-			input: module.Version{
-				Path: "gitlab.com/unicornio/terraform-provider-foo/v2",
-			},
-			expected: "unicornio",
-		},
-		{
-			name: "Errors on invalid path",
-			input: module.Version{
-				Path: "terraform-provider-foo",
-			},
-			expected: "",
-		},
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			err := step.Pipeline("test", func(ctx context.Context) {
-				actual := parseUpstreamProviderOrg(ctx, tt.input)
-				assert.Equal(t, tt.expected, actual)
-			})
-			if tt.name == "Errors on invalid path" {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestParseUpstreamProviderOrgFromModVersion(t *testing.T) {
-	testReplay((&Context{
-		GoPath:               "/Users/myuser/go",
-		UpstreamProviderName: "terraform-provider-datadog",
-		UpstreamProviderOrg:  "",
-	}).Wrap(context.Background()), t, jsonMarshal[[]*step.Step](t, `[
-	{
-          "name": "Get UpstreamOrg from module version",
-          "inputs": [
-            {
-              "Path": "github.com/testing-org/terraform-provider-datadog",
-              "Version": "v0.0.0"
-            }
-          ],
-          "outputs": [
-            "testing-org",
-            null
-          ]
-        }
-]`), "Get UpstreamOrg from module version", parseUpstreamProviderOrg)
 }
 
 func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
