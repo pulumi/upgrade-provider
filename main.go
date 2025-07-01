@@ -169,7 +169,7 @@ func cmd() *cobra.Command {
 
 	pulumiDev, _ := strconv.ParseBool(os.Getenv("PULUMI_DEV"))
 
-	cmd.PersistentFlags().BoolVar(&context.UpgradeJavaVersion, "upgrade-java", true,
+	cmd.PersistentFlags().BoolVar(&context.UpgradeJavaVersion, "upgrade-java", false,
 		`Upgrade to the latest Java version`)
 	err := cmd.PersistentFlags().MarkHidden("upgrade-java")
 	contract.AssertNoErrorf(err, "could not mark `upgrade-java` flag as hidden")
