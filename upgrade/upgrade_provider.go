@@ -137,7 +137,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string, currentUpstr
 	err = stepv2.PipelineCtx(ctx, "Setup working branch", func(ctx context.Context) {
 		repo.workingBranch = getWorkingBranch(ctx, *GetContext(ctx), targetBridgeVersion, upgradeTarget, prTitlePrefix)
 		ensureBranchCheckedOut(ctx, repo.workingBranch)
-		repo.prAlreadyExists = hasExistingPr(ctx, repo.workingBranch, repo.Org+"/"+repo.Name)
 	})
 	if err != nil {
 		return nil, err

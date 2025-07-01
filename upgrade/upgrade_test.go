@@ -68,11 +68,10 @@ func TestInformGithubExistingPR(t *testing.T) {
 	err := step.PipelineCtx(ctx, "Tfgen & Build SDKs", func(ctx context.Context) {
 		InformGitHub(ctx,
 			nil, ProviderRepo{
-				workingBranch:   "upgrade-pulumi-terraform-bridge-to-v3.62.0",
-				prTitle:         "Upgrade pulumi-terraform-bridge to v3.62.0",
-				defaultBranch:   "master",
-				Name:            "pulumi/pulumi-kong",
-				prAlreadyExists: true,
+				workingBranch: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
+				prTitle:       "Upgrade pulumi-terraform-bridge to v3.62.0",
+				defaultBranch: "master",
+				Name:          "pulumi/pulumi-kong",
 			}, &GoMod{
 				Kind: "plain",
 				Upstream: module.Version{
