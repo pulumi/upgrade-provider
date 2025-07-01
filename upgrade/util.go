@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
@@ -160,7 +159,6 @@ func (p ProviderRepo) sdkDir() *string {
 type GoMod struct {
 	Kind     RepoKind
 	Upstream module.Version
-	Fork     *modfile.Replace
 	Bridge   module.Version
 }
 

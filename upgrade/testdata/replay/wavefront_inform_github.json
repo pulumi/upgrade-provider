@@ -24,7 +24,6 @@
                 "Path": "github.com/vmware/terraform-provider-wavefront",
                 "Version": "v0.0.0-20231006183745-aa9a262f8bb0"
               },
-              "Fork": null,
               "Bridge": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/v3",
                 "Version": "v3.61.0"

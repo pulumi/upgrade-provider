@@ -151,16 +151,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return nil
 	}
 
-	var forkedProviderUpstreamCommit string
-	if goMod.Kind.IsForked() && GetContext(ctx).UpgradeProviderVersion {
-		err := stepv2.PipelineCtx(ctx, "Upgrade Forked Provider", func(ctx context.Context) {
-			upgradeUpstreamFork(ctx, repo.Name, upgradeTarget.Version, goMod)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
 	if prTitle, err := prTitle(ctx, upgradeTarget, targetBridgeVersion); err != nil {
 		return err
 	} else {
@@ -218,8 +208,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	}))
 
 	if GetContext(ctx).UpgradeProviderVersion {
-		steps = append(steps, UpgradeProviderVersion(ctx, goMod, upgradeTarget.Version, repo,
-			targetSHA, forkedProviderUpstreamCommit))
+		steps = append(steps, UpgradeProviderVersion(ctx, goMod, upgradeTarget.Version, repo, targetSHA))
 	} else if goMod.Kind.IsPatched() {
 		// If we are upgrading the provider version, then the upgrade will leave
 		// `upstream` in a usable state. Otherwise, we need to call `make

@@ -216,20 +216,6 @@ func prBody(ctx context.Context, repo ProviderRepo,
 	return b.String()
 }
 
-var ensurePulumiRemote = stepv2.Func10("Ensure Pulumi Remote", func(ctx context.Context, name string) {
-	remotes := strings.Split(stepv2.Cmd(ctx, "git", "remote"), "\n")
-	for _, remote := range remotes {
-		if remote == "pulumi" {
-			stepv2.SetLabel(ctx, "remote 'pulumi' already exists")
-			return
-		}
-	}
-
-	stepv2.Cmd(ctx, "git", "remote", "add", "pulumi",
-		fmt.Sprintf("https://github.com/pulumi/terraform-provider-%s.git", name))
-	stepv2.SetLabel(ctx, "remote set to 'pulumi'")
-})
-
 // setCurrentUpstreamFromPatched sets repo.currentUpstreamVersion to the version pointed to in the
 // submodule in the default branch.
 //
@@ -293,15 +279,6 @@ func setCurrentUpstreamFromPlain(ctx context.Context, repo *ProviderRepo, goMod 
 	f := stepv2.Func50E("Set Current Upstream From Plain", setUpstreamFromRemoteRepo)
 	f(ctx, repo, "tags", filepath.Join("provider", "go.mod"), goMod.Upstream.Path,
 		semver.NewVersion)
-}
-
-func setCurrentUpstreamFromForked(ctx context.Context, repo *ProviderRepo, goMod *GoMod) {
-	f := stepv2.Func50E("Set Current Upstream From Forked", setUpstreamFromRemoteRepo)
-	f(ctx, repo, "heads", filepath.Join("provider", "go.mod"), goMod.Fork.New.Path,
-		func(s string) (*semver.Version, error) {
-			version := strings.TrimPrefix(s, "upstream-")
-			return semver.NewVersion(version)
-		})
 }
 
 func setCurrentUpstreamFromShimmed(ctx context.Context, repo *ProviderRepo, goMod *GoMod) {

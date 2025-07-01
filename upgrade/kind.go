@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"golang.org/x/mod/modfile"
-	"golang.org/x/mod/module"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 
@@ -18,9 +17,7 @@ type RepoKind string
 
 const (
 	Plain             RepoKind = "plain"
-	Forked            RepoKind = "forked"
 	Shimmed           RepoKind = "shimmed"
-	ForkedAndShimmed  RepoKind = "forked & shimmed"
 	Patched           RepoKind = "patched"
 	PatchedAndShimmed RepoKind = "patched & shimmed"
 )
@@ -29,8 +26,6 @@ func (rk RepoKind) Shimmed() RepoKind {
 	switch rk {
 	case Plain:
 		return Shimmed
-	case Forked:
-		return ForkedAndShimmed
 	default:
 		return rk
 	}
@@ -42,29 +37,14 @@ func (rk RepoKind) Patched() RepoKind {
 		return Patched
 	case Shimmed:
 		return PatchedAndShimmed
-	case Forked, ForkedAndShimmed:
-		panic("Cannot have a forked and patched provider")
 	default:
 		return rk
-	}
-}
-
-func (rk RepoKind) IsForked() bool {
-	switch rk {
-	case Forked:
-		fallthrough
-	case ForkedAndShimmed:
-		return true
-	default:
-		return false
 	}
 }
 
 func (rk RepoKind) IsShimmed() bool {
 	switch rk {
 	case Shimmed:
-		fallthrough
-	case ForkedAndShimmed:
 		return true
 	default:
 		return false
@@ -144,48 +124,12 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 
 	contract.Assertf(upstream != nil, "upstream cannot be nil")
 
-	// If we find a replace that points to a pulumi hosted repo, that indicates a fork.
-	var fork *modfile.Replace
-	for _, replace := range goMod.Replace {
-		// If we're not replacing our upstream, we don't care here
-		if replace.Old.Path != upstream.Mod.Path {
-			continue
-		}
-		hasMajorVersion := func(path string) bool {
-			_, major, ok := module.SplitPathVersion(path)
-			return ok && major != ""
-		}
-		before, after, found := strings.Cut(replace.New.Path, "/"+tfProviderRepoName)
-		if !found || (after != "" && !hasMajorVersion(after)) {
-			if replace.New.Path == "../upstream" {
-				// We have found a patched provider, so we can just exit here.
-				break
-			}
-			return nil, fmt.Errorf("go.mod: replace has incorrect repo: '%s'", replace.New.Path)
-		}
-		repoOrgSeperator := strings.LastIndexByte(before, '/')
-		org := before[repoOrgSeperator+1:]
-		if org != "pulumi" {
-			// We have a replace directive for upstream, but it doesn't point
-			// to a pulumi fork. For the purposes of this tool, this is not a
-			// *forked* provider.
-			break
-		}
-		fork = replace
-		break
-	}
-
 	out := GoMod{
 		Upstream: upstream.Mod,
-		Fork:     fork,
 		Bridge:   bridge,
 	}
 
-	if fork == nil {
-		out.Kind = Plain
-	} else {
-		out.Kind = Forked
-	}
+	out.Kind = Plain
 
 	if shimmed {
 		out.Kind = out.Kind.Shimmed()

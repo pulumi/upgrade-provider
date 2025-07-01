@@ -211,7 +211,6 @@
                 "Path": "github.com/hashicorp/terraform-provider-google-beta",
                 "Version": "v0.0.0"
               },
-              "Fork": null,
               "Bridge": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/v3",
                 "Version": "v3.70.0"
@@ -317,7 +316,6 @@
                 "Path": "github.com/hashicorp/terraform-provider-google-beta",
                 "Version": "v0.0.0"
               },
-              "Fork": null,
               "Bridge": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/v3",
                 "Version": "v3.70.0"
@@ -434,7 +432,6 @@
                 "Path": "github.com/hashicorp/terraform-provider-google-beta",
                 "Version": "v0.0.0"
               },
-              "Fork": null,
               "Bridge": {
                 "Path": "github.com/pulumi/pulumi-terraform-bridge/v3",
                 "Version": "v3.70.0"

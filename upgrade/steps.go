@@ -40,72 +40,6 @@ var gitCommit = stepv2.Func10("git commit", func(ctx context.Context, msg string
 	}
 })
 
-// Upgrade the upstream fork of a pulumi provider.
-//
-// The SHA of the new upstream branch is returned.
-var upgradeUpstreamFork = stepv2.Func31("Upgrade Forked Provider", func(ctx context.Context, name string, target *semver.Version, goMod *GoMod) string {
-	upstreamPath := ensureUpstreamRepo(ctx, goMod.Fork.Old.Path)
-
-	// Run the rest of the function inside of upstreamPath
-	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: upstreamPath})
-
-	remoteName := strings.TrimPrefix(name, "pulumi-")
-	ensurePulumiRemote(ctx, remoteName)
-
-	stepv2.Cmd(ctx, "git", "fetch", "pulumi")
-	stepv2.Cmd(ctx, "git", "fetch", "origin", "--tags")
-
-	previousUpstreamVersion := stepv2.Func01E("Discover Previous Upstream Version", func(ctx context.Context) (*semver.Version, error) {
-		b := stepv2.Cmd(ctx, "git", "branch", "--remote", "--list", "pulumi/upstream-v*")
-		lines := strings.Split(string(b), "\n")
-		var previous *semver.Version
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			version, err := semver.NewVersion(strings.TrimPrefix(line, "pulumi/upstream-v"))
-			if err != nil {
-				continue
-			}
-			if previous == nil || previous.LessThan(version) {
-				previous = version
-			}
-		}
-		if previous == nil {
-			return nil, fmt.Errorf("no version found")
-		}
-		return previous, nil
-	})(ctx)
-
-	stepv2.Cmd(ctx, "git", "checkout", "pulumi/upstream-v"+previousUpstreamVersion.String())
-
-	stepv2.Func00("Upstream Branch", func(context.Context) {
-		target := "upstream-v" + target.String()
-		var branchExists bool
-		lines := strings.Split(stepv2.Cmd(ctx, "git", "branch"), "\n")
-		for _, line := range lines {
-			if strings.TrimSpace(line) == target {
-				branchExists = true
-				break
-			}
-		}
-		if !branchExists {
-			stepv2.SetLabel(ctx, "creating"+target)
-			stepv2.Cmd(ctx, "git", "checkout", "-b", target)
-			return
-		}
-		stepv2.SetLabel(ctx, target+" already exists")
-	})(ctx)
-
-	stepv2.Cmd(ctx, "git", "merge", "v"+target.String())
-	stepv2.Cmd(ctx, "go", "build", ".")
-	stepv2.Cmd(ctx, "git", "push", "pulumi", "upstream-v"+target.String())
-
-	return stepv2.Func01("Get Head Commit", func(context.Context) string {
-		c := strings.TrimSpace(stepv2.Cmd(ctx, "git", "rev-parse", "HEAD"))
-		stepv2.SetLabel(ctx, c)
-		return c
-	})(ctx)
-})
-
 // Ensure that the upstream repo exists.
 //
 // The path that the upstream repo exists at is returned.
@@ -150,7 +84,7 @@ var ensureUpstreamRepo = stepv2.Func11("Ensure Upstream Repo", func(ctx context.
 
 func UpgradeProviderVersion(
 	ctx context.Context, goMod *GoMod, target *semver.Version,
-	repo ProviderRepo, targetSHA, forkedProviderUpstreamCommit string,
+	repo ProviderRepo, targetSHA string,
 ) step.Step {
 	steps := []step.Step{}
 	if goMod.Kind.IsPatched() {
@@ -171,33 +105,31 @@ func UpgradeProviderVersion(
 		))
 	}
 
-	if !goMod.Kind.IsForked() {
-		// We have an upstream we don't control, so we need to get it's SHA. We do this
-		// instead of using version tags because we can't ensure that the upstream is
-		// versioning their go modules correctly.
-		//
-		// If they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
-		steps = append(steps,
-			step.F("Lookup Tag SHA", func(context.Context) (string, error) {
-				upstreamOrg := GetContext(ctx).UpstreamProviderOrg
-				upstreamRepo := GetContext(ctx).UpstreamProviderName
-				gitHostPath := "https://github.com/" + upstreamOrg + "/" + upstreamRepo
+	// We have an upstream we don't control, so we need to get it's SHA. We do this
+	// instead of using version tags because we can't ensure that the upstream is
+	// versioning their go modules correctly.
+	//
+	// If they are versioning correctly, `go mod tidy` will resolve the SHA to a tag.
+	steps = append(steps,
+		step.F("Lookup Tag SHA", func(context.Context) (string, error) {
+			upstreamOrg := GetContext(ctx).UpstreamProviderOrg
+			upstreamRepo := GetContext(ctx).UpstreamProviderName
+			gitHostPath := "https://github.com/" + upstreamOrg + "/" + upstreamRepo
 
-				// special case: we need to use the GitLab url for getting git refs.
-				if upstreamOrg == "terraform-provider-gitlab" {
-					gitHostPath = "https://gitlab.com/gitlab-org/terraform-provider-gitlab"
-				}
+			// special case: we need to use the GitLab url for getting git refs.
+			if upstreamOrg == "terraform-provider-gitlab" {
+				gitHostPath = "https://gitlab.com/gitlab-org/terraform-provider-gitlab"
+			}
 
-				refs, err := gitRefsOf(ctx, gitHostPath, "tags")
-				if err != nil {
-					return "", err
-				}
-				if ref, ok := refs.shaOf("refs/tags/v" + target.String()); ok {
-					return ref, nil
-				}
-				return "", fmt.Errorf("could not find SHA for tag '%s'", target.Original())
-			}).AssignTo(&targetSHA))
-	}
+			refs, err := gitRefsOf(ctx, gitHostPath, "tags")
+			if err != nil {
+				return "", err
+			}
+			if ref, ok := refs.shaOf("refs/tags/v" + target.String()); ok {
+				return ref, nil
+			}
+			return "", fmt.Errorf("could not find SHA for tag '%s'", target.Original())
+		}).AssignTo(&targetSHA))
 
 	// goModDir is the directory of the go.mod where we reference the upstream provider.
 	goModDir := *repo.providerDir()
@@ -207,11 +139,11 @@ func UpgradeProviderVersion(
 		goModDir = filepath.Join(*repo.providerDir(), "shim")
 	}
 
-	// If a provider is patched or forked, then there is no meaningful version to
+	// If a provider is patched, then there is no meaningful version to
 	// update. Because Go includes major versions as part of its module path, making
 	// this correct can break on major version updates. We just leave it if its not
 	// necessary to touch.
-	if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
+	if !goMod.Kind.IsPatched() {
 		steps = append(steps, step.Computed(func() step.Step {
 			targetV := "v" + target.String()
 			if targetSHA != "" {
@@ -230,23 +162,6 @@ func UpgradeProviderVersion(
 
 			return step.Cmd("go", "get", upstreamPath+"@"+targetV)
 		}).In(&goModDir))
-	}
-
-	if goMod.Kind.IsForked() {
-		// If we are running a forked update, we need to replace the reference to the fork
-		// with the SHA of the new upstream branch.
-		contract.Assertf(forkedProviderUpstreamCommit != "", "fork provider upstream commit cannot be null")
-
-		replaceIn := func(dir *string) {
-			steps = append(steps, step.Cmd("go", "mod", "edit", "-replace",
-				goMod.Fork.Old.Path+"="+
-					goMod.Fork.New.Path+"@"+forkedProviderUpstreamCommit).In(dir))
-		}
-
-		replaceIn(&goModDir)
-		if goMod.Kind.IsShimmed() {
-			replaceIn(repo.providerDir())
-		}
 	}
 
 	if goMod.Kind.IsShimmed() {
@@ -653,7 +568,7 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 				"github.com/"+repo.Org+"/"+name+"/provider"+next,
 			)
 
-			if !goMod.Kind.IsPatched() && !goMod.Kind.IsForked() {
+			if !goMod.Kind.IsPatched() {
 				if prefix, major, ok := module.SplitPathVersion(
 					goMod.Upstream.Path); ok && major != "" {
 					newUpstream := fmt.Sprintf("%s/v%d",
@@ -873,8 +788,6 @@ var planProviderUpgrade = stepv2.Func41E("Plan Provider Upgrade", func(ctx conte
 	switch {
 	case goMod.Kind.IsPatched():
 		setCurrentUpstreamFromPatched(ctx, repo)
-	case goMod.Kind.IsForked():
-		setCurrentUpstreamFromForked(ctx, repo, goMod)
 	case goMod.Kind.IsShimmed():
 		setCurrentUpstreamFromShimmed(ctx, repo, goMod)
 	case goMod.Kind == Plain:
