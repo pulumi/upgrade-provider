@@ -101,16 +101,6 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		return nil, fmt.Errorf("%s", bridgeMissingMsg)
 	}
 
-	pf, ok, err := originalGoVersionOf(ctx, repo, filepath.Join("provider", "go.mod"), "github.com/pulumi/pulumi-terraform-bridge/pf")
-	if err != nil {
-		return nil, err
-	} else if !ok {
-		// If we successfully opened provider/go.mod but didn't find any reference
-		// to "github.com/pulumi/pulumi-terraform-bridge/pf", we assume that the
-		// provider doesn't use /pf and it doesn't make sense to upgrade.
-		GetContext(ctx).UpgradePfVersion = false
-	}
-
 	tfProviderRepoName := GetContext(ctx).UpstreamProviderName
 
 	getUpstream := func(file *modfile.File) (*modfile.Require, error) {
@@ -189,7 +179,6 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		Upstream: upstream.Mod,
 		Fork:     fork,
 		Bridge:   bridge,
-		Pf:       pf,
 	}
 
 	if fork == nil {

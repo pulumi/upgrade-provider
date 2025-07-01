@@ -297,9 +297,9 @@ var maintenanceRelease = stepv2.Func11E("Check if we should release a maintenanc
 	return false, nil
 })
 
-var InformGitHub = stepv2.Func70E("Inform Github", func(
+var InformGitHub = stepv2.Func60E("Inform Github", func(
 	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
-	goMod *GoMod, targetBridgeVersion, targetPfVersion Ref, tfSDKUpgrade string,
+	goMod *GoMod, targetBridgeVersion Ref, tfSDKUpgrade string,
 	osArgs []string,
 ) error {
 	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
@@ -313,7 +313,7 @@ var InformGitHub = stepv2.Func70E("Inform Github", func(
 	// attempt to build on existing branches.
 	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch, "--force")
 
-	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, targetPfVersion, tfSDKUpgrade, osArgs)
+	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs)
 
 	if repo.prAlreadyExists {
 		// Update the description in case anything else was upgraded (or not
@@ -519,8 +519,8 @@ var hasExistingPr = stepv2.Func21("Has Existing PR", func(ctx context.Context, b
 	return false
 })
 
-var getWorkingBranch = stepv2.Func51E("Working Branch Name", func(ctx context.Context, c Context,
-	targetBridgeVersion, targetPfVersion Ref, upgradeTarget *UpstreamUpgradeTarget,
+var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Context, c Context,
+	targetBridgeVersion Ref, upgradeTarget *UpstreamUpgradeTarget,
 	prTitlePrefix string,
 ) (string, error) {
 	ret := func(format string, a ...any) (string, error) {
@@ -551,8 +551,6 @@ var getWorkingBranch = stepv2.Func51E("Working Branch Name", func(ctx context.Co
 		return ret("upgrade-pulumi-terraform-bridge-to-%s", targetBridgeVersion)
 	case c.UpgradeCodeMigration:
 		return ret("upgrade-code-migration")
-	case c.UpgradePfVersion:
-		return ret("upgrade-pf-version-to-%s", targetPfVersion)
 	case c.TargetPulumiVersion != nil:
 		return ret("upgrade-pulumi-version-to-%s", c.TargetPulumiVersion)
 	case c.UpgradeJavaVersion:
@@ -1078,42 +1076,6 @@ var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 	}
 
 	return version, fmt.Sprintf("bridge %s needs terraform-plugin-sdk %s", bridgeRef, version), nil
-})
-
-var plantPfUpgrade = stepv2.Func11E("Planning Plugin Framework Upgrade", func(
-	ctx context.Context, goMod *GoMod,
-) (Ref, error) {
-	found := func(r Ref) (Ref, error) {
-		stepv2.SetLabelf(ctx, "%s -> %s", goMod.Pf.Version, r)
-		return r, nil
-	}
-	if goMod.Pf.Version == "" {
-		// PF is not used on this provider, so we disable
-		// the upgrade attempt and move on.
-		GetContext(ctx).UpgradePfVersion = false
-		stepv2.SetLabel(ctx, "Unused")
-		return nil, nil
-	}
-	switch GetContext(ctx).TargetBridgeRef.(type) {
-	case *HashReference:
-		// if --target-bridge-version has specified a hash
-		// reference, use that reference for pf code as well
-		return found(GetContext(ctx).TargetBridgeRef)
-	default:
-		// in all other cases, compute the latest pf tag
-		refs := gitRefsOfV2(ctx, "https://"+modPathWithoutVersion(goMod.Bridge.Path),
-			"tags")
-		targetVersion := latestSemverTag("pf/", refs)
-
-		// If our target upgrade version is the same as our current version, we skip the update.
-		if targetVersion.Original() == goMod.Pf.Version {
-			GetContext(ctx).UpgradePfVersion = false
-			stepv2.SetLabelf(ctx, "Up to date at %s", targetVersion)
-			return nil, nil
-		}
-
-		return found(&Version{targetVersion})
-	}
 })
 
 var fetchLatestJavaGen = stepv2.Func03("Fetching latest Java Gen", func(ctx context.Context) (string, string, bool) {

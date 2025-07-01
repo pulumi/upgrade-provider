@@ -49,7 +49,7 @@ func TestInformGithub(t *testing.T) {
 					Path:    "github.com/pulumi/pulumi-terraform-bridge/v3",
 					Version: "v3.61.0",
 				},
-			}, nil, nil, "Up to date at 2.29.0", []string{"upgrade-provider", "pulumi/pulumi-wavefront"})
+			}, nil, "Up to date at 2.29.0", []string{"upgrade-provider", "pulumi/pulumi-wavefront"})
 	})
 	require.NoError(t, err)
 }
@@ -85,9 +85,11 @@ func TestInformGithubExistingPR(t *testing.T) {
 				},
 			},
 			&Version{SemVer: semver.MustParse("v3.62.0")},
-			nil, "Up to date at 2.29.0",
-			[]string{"upgrade-provider",
-				"pulumi/pulumi-kong", "--kind=bridge"})
+			"Up to date at 2.29.0",
+			[]string{
+				"upgrade-provider",
+				"pulumi/pulumi-kong", "--kind=bridge",
+			})
 	})
 	require.NoError(t, err)
 }

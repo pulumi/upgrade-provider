@@ -67,10 +67,9 @@ Flags:
   -h, --help                            help for upgrade-provider
       --java-version string             The version of pulumi-java-gen to target.
       --kind strings                    The kind of upgrade to perform:
-                                        - "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code,pf".
+                                        - "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code".
                                         - "bridge":  Upgrade the bridge only.
                                         - "provider": Upgrade the upstream provider only.
-                                        - "pf": Upgrade the Plugin Framework only.
                                         - "code":     Perform some number of code migrations.
                                         - "check-upstream-version": Determine if we need to upgrade the upstream provider. For use in CI only." (default [all])
       --major                           Upgrade the provider to a new major version.

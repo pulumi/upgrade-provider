@@ -86,7 +86,7 @@ func TestPullRequestBody(t *testing.T) {
 		ctx := context.Background()
 		uc := Context{PRDescription: "Some extra description here with links to pulumi/repo#123"}
 		args := []string{"upgrade-provider", "--kind", "bridge", "--pr-description", uc.PRDescription}
-		got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, nil, nil, nil, "", args)
+		got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, nil, nil, "", args)
 		autogold.ExpectFile(t, got)
 	})
 
@@ -94,23 +94,20 @@ func TestPullRequestBody(t *testing.T) {
 		ctx := context.Background()
 		uc := Context{PRDescription: "Some extra description here with links to pulumi/repo#123"}
 		args := []string{"upgrade-provider", "--kind", "bridge", "--pr-description=" + uc.PRDescription}
-		got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, nil, nil, nil, "", args)
+		got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, nil, nil, "", args)
 		autogold.ExpectFile(t, got)
 	})
 
 	t.Run("upgrades", func(t *testing.T) {
 		ctx := context.Background()
 		uc := Context{
-			UpgradePfVersion:     true,
 			UpgradeBridgeVersion: true,
 		}
 		args := []string{"upgrade-provider", "--kind", "bridge", "--pr-description", uc.PRDescription}
 		got := prBody(uc.Wrap(ctx), ProviderRepo{}, nil, &GoMod{
 			Bridge: module.Version{Version: "v1.2.2"},
-			Pf:     module.Version{Version: "v4.5.5"},
 		},
-			&Version{SemVer: semver.MustParse("v1.2.3")},
-			&Version{SemVer: semver.MustParse("v4.5.6")}, "", args)
+			&Version{SemVer: semver.MustParse("v1.2.3")}, "", args)
 		autogold.ExpectFile(t, got)
 	})
 }
@@ -121,7 +118,7 @@ func TestPullRequestTitle(t *testing.T) {
 		uc := Context{PRTitlePrefix: "[TEST]", UpgradeBridgeVersion: true}
 		bridgeVersion, err := ParseRef("v5.3.1")
 		assert.Nil(t, err)
-		got, err := prTitle(uc.Wrap(ctx), nil, bridgeVersion, nil)
+		got, err := prTitle(uc.Wrap(ctx), nil, bridgeVersion)
 		assert.Nil(t, err)
 		autogold.ExpectFile(t, got)
 	})
@@ -131,7 +128,7 @@ func TestPullRequestTitle(t *testing.T) {
 		uc := Context{PRTitlePrefix: "", UpgradeBridgeVersion: true}
 		bridgeVersion, err := ParseRef("v5.3.1")
 		assert.Nil(t, err)
-		got, err := prTitle(uc.Wrap(ctx), nil, bridgeVersion, nil)
+		got, err := prTitle(uc.Wrap(ctx), nil, bridgeVersion)
 		assert.Nil(t, err)
 		autogold.ExpectFile(t, got)
 	})
@@ -139,7 +136,7 @@ func TestPullRequestTitle(t *testing.T) {
 	t.Run("provider-upgrade", func(t *testing.T) {
 		ctx := context.Background()
 		uc := Context{PRTitlePrefix: "", UpgradeProviderVersion: true, UpstreamProviderName: "terraform-provider-aws"}
-		got, err := prTitle(uc.Wrap(ctx), &UpstreamUpgradeTarget{Version: semver.MustParse("5.3.0")}, nil, nil)
+		got, err := prTitle(uc.Wrap(ctx), &UpstreamUpgradeTarget{Version: semver.MustParse("5.3.0")}, nil)
 		assert.Nil(t, err)
 		autogold.ExpectFile(t, got)
 	})

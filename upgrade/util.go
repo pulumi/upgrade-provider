@@ -35,8 +35,6 @@ type Context struct {
 	UpgradeBridgeVersion bool
 	TargetBridgeRef      Ref
 
-	UpgradePfVersion bool
-
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
 
@@ -167,7 +165,6 @@ type GoMod struct {
 	Upstream module.Version
 	Fork     *modfile.Replace
 	Bridge   module.Version
-	Pf       module.Version
 }
 
 type UpstreamUpgradeTarget struct {

@@ -133,7 +133,7 @@ func baseFileAtV2(ctx context.Context, repo ProviderRepo, file string) string {
 	return stepv2.Cmd(ctx, "git", "show", repo.defaultBranch+":"+file)
 }
 
-func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVersion, targetPfVersion Ref) (string, error) {
+func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVersion Ref) (string, error) {
 	c := GetContext(ctx)
 	title := c.PRTitlePrefix
 
@@ -144,8 +144,6 @@ func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVer
 		title += "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion.String()
 	case c.UpgradeCodeMigration:
 		title += fmt.Sprintf("Code migration: %s", strings.Join(c.MigrationOpts, ", "))
-	case c.UpgradePfVersion:
-		title += "Upgrade pulumi-terraform-bridge/pf to " + targetPfVersion.String()
 	case c.TargetPulumiVersion != nil:
 		title += "Test: Upgrade pulumi/{pkg,sdk} to " + c.TargetPulumiVersion.String()
 	case c.UpgradeJavaVersion:
@@ -159,7 +157,7 @@ func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVer
 
 func prBody(ctx context.Context, repo ProviderRepo,
 	upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
-	targetBridge, targetPf Ref, tfSDKUpgrade string, osArgs []string) string {
+	targetBridge Ref, tfSDKUpgrade string, osArgs []string) string {
 	b := new(strings.Builder)
 
 	// We strip out --pr-description since it will appear later in the pr body.
@@ -206,10 +204,6 @@ func prBody(ctx context.Context, repo ProviderRepo,
 	if GetContext(ctx).UpgradeBridgeVersion {
 		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge from %s to %s.\n",
 			goMod.Bridge.Version, targetBridge)
-	}
-	if GetContext(ctx).UpgradePfVersion {
-		fmt.Fprintf(b, "- Upgrading pulumi-terraform-bridge/pf from %s to %v.\n",
-			goMod.Pf.Version, targetPf)
 	}
 
 	if parts := strings.Split(tfSDKUpgrade, " -> "); len(parts) == 2 {
