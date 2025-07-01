@@ -91,6 +91,10 @@ func cmd() *cobra.Command {
 				return fmt.Errorf(`"upstream-provider-name" must not be fully qualified%s`, s)
 			}
 
+			if context.UpstreamProviderOrg == "" {
+				return errors.New("`upstream-provider-org` must be provided")
+			}
+
 			if currentUpstreamVersion == "" {
 				return errors.New("`current-upstream-version` must be provided")
 			}
