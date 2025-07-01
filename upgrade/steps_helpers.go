@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -58,37 +57,6 @@ func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleMod
 	return module.Version{}, false, nil
 }
 
-// Find the go module version of needleModule, searching from the default repo branch, not
-// the currently checked out code.
-//
-// originalGoVersionOfV2 performs the same function as originalGoVersionOf, except that it
-// is stepv2 compatible.
-var originalGoVersionOfV2 = stepv2.Func32E("Original Go Version of", func(ctx context.Context,
-	repo ProviderRepo, file, needleModule string) (module.Version, bool, error) {
-	data := baseFileAtV2(ctx, repo, file)
-	goMod, err := modfile.Parse(file, []byte(data), nil)
-	if err != nil {
-		return module.Version{}, false, fmt.Errorf("%s:%s: %w",
-			repo.defaultBranch, file, err)
-	}
-
-	needleModule = modPathWithoutVersion(needleModule)
-
-	for _, req := range goMod.Replace {
-		path := modPathWithoutVersion(req.New.Path)
-		if path == needleModule {
-			return req.New, true, nil
-		}
-	}
-	for _, req := range goMod.Require {
-		path := modPathWithoutVersion(req.Mod.Path)
-		if path == needleModule {
-			return req.Mod, true, nil
-		}
-	}
-	return module.Version{}, false, nil
-})
-
 // Look up the version of the go dependency requirement of a given module in a given modfile.
 func currentGoVersionOf(modFile, lookupModule string) (module.Version, bool, error) {
 	fileData, err := os.ReadFile(modFile)
@@ -126,11 +94,6 @@ func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, er
 		return nil, fmt.Errorf("%s:%s: %w", repo.defaultBranch, file, err)
 	}
 	return data, nil
-}
-
-func baseFileAtV2(ctx context.Context, repo ProviderRepo, file string) string {
-	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
-	return stepv2.Cmd(ctx, "git", "show", repo.defaultBranch+":"+file)
 }
 
 func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVersion Ref) (string, error) {
@@ -187,10 +150,7 @@ func prBody(ctx context.Context, repo ProviderRepo,
 
 	if GetContext(ctx).UpgradeProviderVersion {
 		contract.Assertf(upgradeTarget != nil, "upgradeTarget should always be non-nil")
-		var prev string
-		if repo.currentUpstreamVersion != nil {
-			prev = fmt.Sprintf("from %s ", repo.currentUpstreamVersion)
-		}
+		prev := fmt.Sprintf("from %s ", repo.currentUpstreamVersion)
 		fmt.Fprintf(b, "- Upgrading %s %s to %s.\n",
 			GetContext(ctx).UpstreamProviderName, prev, upgradeTarget.Version)
 		for _, t := range upgradeTarget.GHIssues {
@@ -214,144 +174,6 @@ func prBody(ctx context.Context, repo ProviderRepo,
 	}
 
 	return b.String()
-}
-
-// setCurrentUpstreamFromPatched sets repo.currentUpstreamVersion to the version pointed to in the
-// submodule in the default branch.
-//
-// We don't use the current branch, since applying a partial update could change the current branch,
-// leading to a non idempotent result.
-var setCurrentUpstreamFromPatched = stepv2.Func10E("Set Upstream From Patched", func(ctx context.Context,
-	repo *ProviderRepo) error {
-	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
-	checkedInCommit := stepv2.Cmd(ctx,
-		"git", "ls-tree", repo.defaultBranch, "upstream", "--object-only")
-	sha := strings.TrimSpace(checkedInCommit)
-	if sha == "" {
-		return fmt.Errorf("found empty SHA")
-	}
-
-	remoteURL := strings.TrimSpace(stepv2.Cmd(ctx,
-		"git", "config", "--get", "submodule.upstream.url"))
-
-	allTags := stepv2.Cmd(ctx,
-		"git", "ls-remote", "--tags", remoteURL)
-
-	var version string
-	for _, tag := range strings.Split(allTags, "\n") {
-		tag := strings.TrimSpace(tag)
-		if !strings.HasPrefix(tag, sha) {
-			continue
-		}
-		var ref string
-
-		if parts := strings.Split(tag, "\t"); len(parts) >= 2 {
-			ref = parts[1]
-		} else {
-			return fmt.Errorf(`unparsable ref line %q: expected seperating \t`, tag)
-		}
-		version = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(ref, "refs/tags/"), "^{}"))
-	}
-	if version == "" {
-		return fmt.Errorf("no tags match expected SHA '%s'", string(sha))
-	}
-
-	var err error
-	repo.currentUpstreamVersion, err = semver.NewVersion(version)
-	if err != nil {
-		return fmt.Errorf("current upstream version '%s': %w", version, err)
-	}
-	return nil
-})
-
-// SetCurrentUpstreamFromPlain sets repo.currentUpstreamVersion to the version pointed to in
-// provider/go.mod if the version is valid semver. Otherwise try to resolve a pseudo version against
-// commits in the upstream repository.
-//
-// We don't use the current branch, since applying a partial update could change the current branch,
-// leading to a non idempotent result.
-func setCurrentUpstreamFromPlain(ctx context.Context, repo *ProviderRepo, goMod *GoMod) {
-	f := stepv2.Func50E("Set Current Upstream From Plain", setUpstreamFromRemoteRepo)
-	f(ctx, repo, "tags", filepath.Join("provider", "go.mod"), goMod.Upstream.Path,
-		semver.NewVersion)
-}
-
-func setCurrentUpstreamFromShimmed(ctx context.Context, repo *ProviderRepo, goMod *GoMod) {
-	f := stepv2.Func50E("Set Current Upstream From Shimmed", setUpstreamFromRemoteRepo)
-	f(ctx, repo, "tags", filepath.Join("provider", "shim", "go.mod"), goMod.Upstream.Path,
-		semver.NewVersion)
-}
-
-func setUpstreamFromRemoteRepo(
-	ctx context.Context, repo *ProviderRepo, kind, goModPath, upstream string,
-	parse func(string) (*semver.Version, error),
-) error {
-	version, found := originalGoVersionOfV2(ctx, *repo, goModPath, upstream)
-	if !found {
-		return fmt.Errorf("could not find previous upstream '%s'", upstream)
-	}
-
-	if !module.IsPseudoVersion(version.Version) {
-		parsed, err := semver.NewVersion(version.Version)
-		if err != nil {
-			return fmt.Errorf("failed to parse upstream version '%s'", version.Version)
-		}
-		// This will not happen for pulumi forks, since we use upstream branches
-		// instead of tags. It *will* happen for plain repos.
-		repo.currentUpstreamVersion = parsed
-		return nil
-	}
-
-	// If we don't have a fully resolved version, we got a partial version. We need to resolve
-	// that back into a version tag.
-
-	// The revision part of a go mod psuedo version generally corresponds to the commit sha1
-	// that the version references.
-	rev, err := module.PseudoVersionRev(version.Version)
-	if err != nil {
-		return fmt.Errorf("expected pseudo version, found '%s': %w", version.Version, err)
-	}
-
-	// We now fetch the set of tagged commits.
-	url := "https://" + modPathWithoutVersion(upstream) + ".git"
-	var tagCommits string
-	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
-		tagCommits = stepv2.Cmd(ctx, "git", "ls-remote", "--"+kind, "--quiet", url)
-	})
-	for _, line := range strings.Split(tagCommits, "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, rev) {
-			continue
-		}
-
-		// It is possible that this is a different commit, since we just take the first 12
-		// characters, but its **very** unlikely.
-		line = strings.Split(line, "\t")[1]
-		versionComponent := strings.TrimPrefix(string(line), "refs/"+kind+"/")
-		// From the gitrevisions(7) Manual Page:
-		//
-		//	<rev>^{}, e.g. v0.99.8^{}
-		//
-		//	A suffix ^ followed by an empty brace pair means the object could
-		//	be a tag, and dereference the tag recursively until a non-tag
-		//	object is found.
-		versionComponent = strings.TrimSuffix(versionComponent, "^{}")
-		version, err := parse(versionComponent)
-		if err != nil {
-			// Its possible that this error is valid, for example if the tag has a path,
-			// such as 'refs/tags/sdk/v2.3.2'. If we needed this to be 100% **correct**,
-			// we could require that the URL comes from a known source (`github.com`,
-			// `gitlab.com`, ect.) and figure out how many tag components need to be
-			// part of the url.
-			//
-			// It's not worth doing that for now.
-			return fmt.Errorf("failed to parse commit %s '%s': %w",
-				strings.TrimSuffix(kind, "s"), string(line), err)
-		}
-		repo.currentUpstreamVersion = version
-		return nil
-	}
-	return fmt.Errorf("no tag commit that matched '%s' in '%s'", rev, url)
 }
 
 func gitRefsOf(ctx context.Context, url, kind string) (refs gitRepoRefs, err error) {

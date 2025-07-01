@@ -7,11 +7,12 @@ import (
 	"io"
 	"os"
 
+	semver "github.com/Masterminds/semver/v3"
 	"github.com/pulumi/upgrade-provider/colorize"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
-func CheckUpstream(ctx context.Context, repoOrg, repoName string) (err error) {
+func CheckUpstream(ctx context.Context, repoOrg, repoName string, currentUpstreamVersion *semver.Version) (err error) {
 	// Setup ctx to enable replay tests with stepv2:
 	if file := os.Getenv("PULUMI_REPLAY"); file != "" {
 		var write io.Closer
@@ -20,8 +21,9 @@ func CheckUpstream(ctx context.Context, repoOrg, repoName string) (err error) {
 	}
 
 	repo := ProviderRepo{
-		Name: repoName,
-		Org:  repoOrg,
+		Name:                   repoName,
+		Org:                    repoOrg,
+		currentUpstreamVersion: currentUpstreamVersion,
 	}
 
 	var goMod *GoMod
