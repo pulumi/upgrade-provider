@@ -285,9 +285,7 @@ func tfgenAndBuildSDKs(
 			stepv2.Cmd(ctx, "go", "mod", "tidy")
 		})
 
-		if GetContext(ctx).RemovePlugins {
-			stepv2.Cmd(ctx, "pulumi", "plugin", "rm", "--all", "--yes")
-		}
+		stepv2.Cmd(ctx, "pulumi", "plugin", "rm", "--all", "--yes")
 		// Write Java Gen Version file
 		if GetContext(ctx).UpgradeJavaVersion {
 			stepv2.WriteFile(ctx, ".pulumi-java-gen.version", GetContext(ctx).JavaVersion)

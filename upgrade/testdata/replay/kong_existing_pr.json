@@ -18,7 +18,6 @@
               "UpstreamProviderName": "terraform-provider-kong",
               "JavaVersion": "",
               "AllowMissingDocs": false,
-              "RemovePlugins": true,
               "PrReviewers": "pulumi/Providers,lukehoban",
               "PrAssign": "@me",
               "CreateFailureIssue": false,

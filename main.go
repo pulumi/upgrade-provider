@@ -36,7 +36,6 @@ func cmd() *cobra.Command {
 		gopath = build.Default.GOPATH
 	}
 	var upgradeKind []string
-	var experimental bool
 	var repoName string
 	var repoOrg string
 	var repoPath string
@@ -203,20 +202,12 @@ we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DE
 	cmd.PersistentFlags().StringSliceVar(&upgradeKind, "kind",
 		[]string{"all"}, kindMsg)
 
-	cmd.PersistentFlags().BoolVar(&experimental, "experimental", false,
-		`Enable experimental features, such as auto token mapping and auto aliasing`)
-
 	cmd.PersistentFlags().StringVar(&context.UpstreamProviderName, "upstream-provider-name", "",
 		`The name of the upstream provider.
 Required unless running from provider root and set in upgrade-config.yml.`)
 
 	cmd.PersistentFlags().StringVar(&context.UpstreamProviderOrg, "upstream-provider-org", "",
 		`The name of the upstream provider's GitHub organization'.`)
-
-	cmd.PersistentFlags().BoolVar(&context.RemovePlugins, "remove-plugins", false,
-		`Remove all pulumi plugins from cache before running the upgrade.
-It is possible that the generated examples may be non-deterministic depending on which
-plugins are used if existing versions are present in the cache.`)
 
 	cmd.PersistentFlags().StringVar(&context.PrReviewers, "pr-reviewers", "",
 		`A comma separated list of reviewers to assign the upgrade PR to.`)
