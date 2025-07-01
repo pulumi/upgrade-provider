@@ -102,7 +102,7 @@ func cmd() *cobra.Command {
 			// This can happen by calling `upgrade-provider --kind=""`
 			if len(upgradeKind) == 0 {
 				return fmt.Errorf("--kind=\"\" is invalid. Must be one of `all`, " +
-					"`bridge`, `provider`, `code`, or `pulumi`")
+					"`bridge`, `provider`, or `pulumi`")
 			}
 
 			// Validate the kind switch
@@ -122,15 +122,10 @@ func cmd() *cobra.Command {
 				case "all":
 					context.UpgradeBridgeVersion = true
 					context.UpgradeProviderVersion = true
-					if experimental {
-						context.UpgradeCodeMigration = true
-					}
 				case "bridge":
 					set(&context.UpgradeBridgeVersion)
 				case "provider":
 					set(&context.UpgradeProviderVersion)
-				case "code":
-					set(&context.UpgradeCodeMigration)
 				case "pulumi":
 				case "check-upstream-version":
 					if targetVersion != "" {
@@ -143,7 +138,7 @@ func cmd() *cobra.Command {
 
 				default:
 					return fmt.Errorf(
-						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, `code`, `pf`, or `pulumi`",
+						"--kind=%s invalid. Must be one of `all`, `bridge`, `provider`, or `pulumi`",
 						upgradeKind)
 				}
 			}
@@ -198,10 +193,9 @@ we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DE
 
 	kindMsg := `The kind of upgrade to perform:
 
-- "all": Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code,pf".
+- "all": Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider".
 - "bridge": Upgrade the bridge only.
-- "provider": Upgrade the upstream provider only.
-- "code": Perform some number of code migrations.`
+- "provider": Upgrade the upstream provider only.`
 	if pulumiDev {
 		kindMsg += `
 - "check-upstream-version": Determine if we need to upgrade the upstream provider. For use in CI only."`
@@ -211,10 +205,6 @@ we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DE
 
 	cmd.PersistentFlags().BoolVar(&experimental, "experimental", false,
 		`Enable experimental features, such as auto token mapping and auto aliasing`)
-
-	cmd.PersistentFlags().StringSliceVar(&context.MigrationOpts, "migration-opts", nil,
-		`A comma separated list of code migration to perform:
-- "autoalias": Apply auto aliasing to the provider.`)
 
 	cmd.PersistentFlags().StringVar(&context.UpstreamProviderName, "upstream-provider-name", "",
 		`The name of the upstream provider.

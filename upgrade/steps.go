@@ -549,8 +549,6 @@ var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Co
 		contract.Assertf(targetBridgeVersion != nil,
 			"We are upgrading the bridge, so we must have a target version")
 		return ret("upgrade-pulumi-terraform-bridge-to-%s", targetBridgeVersion)
-	case c.UpgradeCodeMigration:
-		return ret("upgrade-code-migration")
 	case c.TargetPulumiVersion != nil:
 		return ret("upgrade-pulumi-version-to-%s", c.TargetPulumiVersion)
 	case c.UpgradeJavaVersion:
@@ -817,67 +815,6 @@ func updateFile(ctx context.Context, path string, update func(context.Context, s
 		stepv2.WriteFile(ctx, path, updated)
 		return true
 	})(ctx)
-}
-
-func migrationSteps(ctx context.Context, repo ProviderRepo, providerName string, description string,
-	migrationFunc func(resourcesFilePath, providerName string) (bool, error),
-) ([]step.Step, error) {
-	steps := []step.Step{}
-	providerName = strings.TrimPrefix(providerName, "pulumi-")
-	changesMade := false
-	steps = append(steps,
-		step.F(description, func(context.Context) (string, error) {
-			changes, err := migrationFunc(filepath.Join(*repo.providerDir(), "resources.go"), providerName)
-			if err != nil {
-				return fmt.Sprintf("failed to perform \"%s\" migration", description), err
-			}
-			changesMade = changes
-			fmt.Println(description, ", changes made: ", changesMade)
-			return "", err
-		}))
-	if changesMade {
-		steps = append(steps,
-			step.Cmd("gofmt", "-s", "-w", "resources.go").In(repo.providerDir()),
-			step.Cmd("git", "add", "resources.go").In(&repo.root),
-			step.Cmd("git", "commit", "-m", description).In(&repo.root),
-		)
-	}
-
-	return steps, nil
-}
-
-func AddAutoAliasing(ctx context.Context, repo ProviderRepo) (step.Step, error) {
-	providerName := strings.TrimPrefix(repo.Name, "pulumi-")
-	metadataPath := fmt.Sprintf("%s/cmd/pulumi-resource-%s/bridge-metadata.json", *repo.providerDir(), providerName)
-	steps := []step.Step{
-		step.F("ensure bridge-metadata.json", func(context.Context) (string, error) {
-			if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
-				_, err = os.Create(metadataPath)
-				if err != nil {
-					return "", fmt.Errorf("could not initialize %s: %w", metadataPath, err)
-				}
-				return "created", nil
-			}
-			return "", nil
-		}),
-		step.Cmd("git", "add", metadataPath).In(&repo.root),
-	}
-	migrationSteps, err := migrationSteps(ctx, repo, providerName, "Perform auto aliasing migration",
-		AutoAliasingMigration)
-	if err != nil {
-		return nil, err
-	}
-	steps = append(steps, migrationSteps...)
-	return step.Combined("Add AutoAliasing", steps...), nil
-}
-
-func ReplaceAssertNoError(ctx context.Context, repo ProviderRepo) (step.Step, error) {
-	steps, err := migrationSteps(ctx, repo, repo.Name, "Remove deprecated contract.Assert",
-		AssertNoErrorMigration)
-	if err != nil {
-		return nil, err
-	}
-	return step.Combined("Replace AssertNoError with AssertNoErrorf", steps...), nil
 }
 
 // applyPulumiVersion reads the current Pulumi SDK version from provider/go.mod and applies it to:

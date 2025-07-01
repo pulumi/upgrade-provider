@@ -142,8 +142,6 @@ func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVer
 		title += fmt.Sprintf("Upgrade %s to v%s", c.UpstreamProviderName, target.Version)
 	case c.UpgradeBridgeVersion:
 		title += "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion.String()
-	case c.UpgradeCodeMigration:
-		title += fmt.Sprintf("Code migration: %s", strings.Join(c.MigrationOpts, ", "))
 	case c.TargetPulumiVersion != nil:
 		title += "Test: Upgrade pulumi/{pkg,sdk} to " + c.TargetPulumiVersion.String()
 	case c.UpgradeJavaVersion:
