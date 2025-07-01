@@ -151,7 +151,7 @@ func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVer
 	case c.UpgradeJavaVersion:
 		title += "Upgrade pulumi-java to " + c.JavaVersion
 	default:
-		return "", fmt.Errorf("Unknown action")
+		return "", fmt.Errorf("unknown action")
 	}
 
 	return title, nil
@@ -280,7 +280,7 @@ var setCurrentUpstreamFromPatched = stepv2.Func10E("Set Upstream From Patched", 
 		version = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(ref, "refs/tags/"), "^{}"))
 	}
 	if version == "" {
-		return fmt.Errorf("No tags match expected SHA '%s'", string(sha))
+		return fmt.Errorf("no tags match expected SHA '%s'", string(sha))
 	}
 
 	var err error
@@ -443,7 +443,7 @@ var findCurrentMajorVersion = stepv2.Func21E("Find Current Major Version",
 	func(ctx context.Context, repoOrg, repoName string) (*semver.Version, error) {
 		repoCurrentVersion, ok := latestReleaseVersion(ctx, repoOrg+"/"+repoName)
 		if !ok {
-			return nil, fmt.Errorf("Could not find an existing release")
+			return nil, fmt.Errorf("could not find an existing release")
 		}
 		stepv2.SetLabelf(ctx, "%d", repoCurrentVersion.Major())
 		return repoCurrentVersion, nil
@@ -690,7 +690,7 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 			return err
 		}
 		defer f.Close()
-		if _, err := f.WriteString(fmt.Sprintf("latest_version=%s\n", version)); err != nil {
+		if _, err := fmt.Fprintf(f, "issue_created=true\n"); err != nil {
 			return err
 		}
 	}

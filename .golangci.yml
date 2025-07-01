@@ -1,13 +1,31 @@
+version: "2"
 linters:
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
   enable:
     - gci
-
-linters-settings:
-  gci:
-    sections:
-      - standard # Standard section: captures all standard packages.
-      - blank # Blank section: contains all blank imports.
-      - default # Default section: contains all imports that could not be matched to another section type.
-      - prefix(github.com/pulumi/) # Custom section: groups all imports with the github.com/pulumi/ prefix.
-      - prefix(github.com/pulumi/upgrade-provider) # Custom section: local imports
-    custom-order: true
+  settings:
+    gci:
+      sections:
+        - standard
+        - blank
+        - default
+        - prefix(github.com/pulumi/)
+        - prefix(github.com/pulumi/upgrade-provider)
+      custom-order: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

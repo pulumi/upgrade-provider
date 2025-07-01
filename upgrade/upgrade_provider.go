@@ -150,7 +150,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
 				repo.currentUpstreamVersion.Major())
 		} else if !GetContext(ctx).MajorVersionBump && shouldMajorVersionBump {
-			return fmt.Errorf("This is a major version update (v%d -> v%d), but --major was not passed",
+			return fmt.Errorf("this is a major version update (v%d -> v%d), but --major was not passed",
 				repo.currentUpstreamVersion.Major(), upgradeTarget.Version.Major())
 		}
 	}
