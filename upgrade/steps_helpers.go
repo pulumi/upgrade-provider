@@ -235,13 +235,18 @@ var latestReleaseVersion = stepv2.Func12E("Latest Release Version",
 // able to get this result in json), parsing the tags into versions (filtering out any invalid or non-stable tags),
 // and sorting them.
 // This is a best-effort approach. There may be edge cases in which these steps do not yield the correct latest release.
-var getExpectedTargetLatest = stepv2.Func01E("From Upstream Releases", func(ctx context.Context) (*UpstreamUpgradeTarget, error) {
+func getExpectedTargetLatest(ctx context.Context) (*UpstreamUpgradeTarget, error) {
 	upstreamRepo := GetContext(ctx).UpstreamProviderOrg + "/" + GetContext(ctx).UpstreamProviderName
 	// TODO: use --json once https://github.com/cli/cli/issues/4572 is fixed
-	releases := stepv2.Cmd(ctx, "gh", "release", "list",
-		"--repo="+upstreamRepo,
-		"--exclude-drafts",
-		"--exclude-pre-releases")
+	c := GetContext(ctx)
+	releases := c.r.Run(
+		[]string{
+			"gh", "release", "list",
+			"--repo=" + upstreamRepo,
+			"--exclude-drafts",
+			"--exclude-pre-releases",
+		},
+	)
 
 	resultLines := strings.Split(releases, "\n")
 	// Get version tags. This will become much less laborious once we can use json.
@@ -285,7 +290,7 @@ var getExpectedTargetLatest = stepv2.Func01E("From Upstream Releases", func(ctx 
 	// our target version is the last entry in the sorted versions slice
 	latestVersion := versions[len(versions)-1]
 	return &UpstreamUpgradeTarget{Version: latestVersion}, nil
-})
+}
 
 // Get a list of open issues for a given provider which will be closed by the upgrade PR.
 var getIssueList = stepv2.Func11E("From Issues", func(ctx context.Context, name string) ([]UpgradeTargetIssue, error) {

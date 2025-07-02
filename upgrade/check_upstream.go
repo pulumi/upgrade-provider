@@ -2,10 +2,7 @@ package upgrade
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
-	"os"
 
 	semver "github.com/Masterminds/semver/v3"
 
@@ -14,11 +11,9 @@ import (
 )
 
 func CheckUpstream(ctx context.Context, repoOrg, repoName string, currentUpstreamVersion *semver.Version) (err error) {
-	// Setup ctx to enable replay tests with stepv2:
-	if file := os.Getenv("PULUMI_REPLAY"); file != "" {
-		var write io.Closer
-		ctx, write = stepv2.WithRecord(ctx, file)
-		defer func() { err = errors.Join(err, write.Close()) }()
+	c := GetContext(ctx)
+	if c.r == nil {
+		c.r = &DefaultRunner{}
 	}
 
 	repo := ProviderRepo{
