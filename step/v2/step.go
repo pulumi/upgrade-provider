@@ -6,11 +6,9 @@ package step
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
@@ -111,27 +109,11 @@ func PipelineCtx(ctx context.Context, name string, steps func(context.Context), 
 		p.failed)
 }
 
-func mustGetPipeline(ctx context.Context, name string) *pipeline {
-	p := getPipeline(ctx)
-	if p == nil {
-		panic(`Must call "` + name + `" on a context Derived from a Pipeline.`)
-	}
-	return p
-}
-
 // SetLabel displays label next to the currently running step.
 //
 // The current label is transient and should be used only to inform the user.
 func SetLabel(ctx context.Context, label string) {
-	p := getPipeline(ctx)
-	if p == nil {
-		return
-	}
-	err := p.getDisplay().SetLabel(ctx, label)
-	p.handleError([]any{err})
-
-	err = p.getDisplay().Refresh(ctx, getEnvs(ctx))
-	p.handleError([]any{err})
+	fmt.Println("SetLabel", label)
 }
 
 // SetLabelf displays the formatted label next to the currently running step.
@@ -141,147 +123,23 @@ func SetLabelf(ctx context.Context, format string, a ...any) {
 	SetLabel(ctx, fmt.Sprintf(format, a...))
 }
 
-// Run a function against arguments and set outputs.
 func run(ctx context.Context, name string, f any, inputs, outputs []any) {
-	p := mustGetPipeline(ctx, name)
-	done := make(chan struct{})
-
-	handleErr := func(err error) {
-		if err == nil {
-			return
-		}
-		if p.failed == nil {
-			p.errExit(err)
-		}
-	}
-
-	go func() {
-		defer func() { close(done) }()
-		envs := getEnvs(ctx)
-		var retImmediatly ReturnImmediatly
-		silent := false
-		for _, env := range envs {
-			env := env
-			if _, ok := env.(*Silent); ok {
-				silent = true
-			}
-			err := env.Enter(ctx, StepInfo{
-				name:     name,
-				inputs:   inputs,
-				pipeline: p.title,
-			})
-			if errors.As(err, &retImmediatly) {
-			} else if err != nil {
-				p.errExit(err)
-			}
-			defer func() { handleErr(env.Exit(ctx, outputs)) }()
-		}
-
-		// If we have a silent function, disable the spinner
-		if silent {
-			handleErr(p.getDisplay().Pause(ctx))
-			defer func() { handleErr(p.getDisplay().Resume(ctx)) }()
-		}
-
-		handleErr(p.getDisplay().EnterStep(ctx, name))
-		handleErr(p.getDisplay().Refresh(ctx, getEnvs(ctx)))
-		ins := make([]reflect.Value, len(inputs)+1)
-		ins[0] = reflect.ValueOf(ctx)
-		for i, v := range inputs {
-			if v == nil {
-				ins[i+1] = reflect.Zero(reflect.TypeOf(f).In(i + 1))
-			} else {
-				ins[i+1] = reflect.ValueOf(v)
-			}
-		}
-		if retImmediatly.Out == nil {
-			outs := reflect.ValueOf(f).Call(ins)
-			contract.Assertf(len(outs) == len(outputs),
-				"internal error: This function should be typed to return the correct number of results")
-			for i, v := range outs {
-				outputs[i] = v.Interface()
-			}
+	fmt.Println("run", name)
+	ins := make([]reflect.Value, len(inputs)+1)
+	ins[0] = reflect.ValueOf(ctx)
+	for i, v := range inputs {
+		if v == nil {
+			ins[i+1] = reflect.Zero(reflect.TypeOf(f).In(i + 1))
 		} else {
-			fType := reflect.TypeOf(f)
-			// Hydrate the saved outputs back from JSON.
-			o, err := hydrateTo(retImmediatly.Out, fType.Out)
-			p.handleError([]any{err})
-			// This call is mocked, so just set the output
-			copy(outputs, o)
-		}
-
-		p.handleError(outputs)
-	}()
-	<-done
-	handleErr(p.getDisplay().ExitStep(ctx, p.failed == nil))
-	handleErr(p.getDisplay().Refresh(ctx, getEnvs(ctx)))
-
-	if p.failed != nil {
-		runtime.Goexit()
-	}
-}
-
-// Hydrate dst with the values from src, type-correcting as necessary.
-//
-// The primary type correction performed is converting map[string]any to `struct SomeValue {...}`.
-//
-// It is legal for src to equal dst.
-func hydrateTo(src []any, typ func(int) reflect.Type) ([]any, error) {
-	dst := make([]any, len(src))
-	var err error
-	for i := 0; i < len(src); i++ {
-		dst[i], err = hydrateValueTo(src[i], typ(i))
-		if err != nil {
-			return dst, err
+			ins[i+1] = reflect.ValueOf(v)
 		}
 	}
-	return dst, nil
-}
-
-// hydrateValueTo takes a value src and a type typ and attempts to return a version of src
-// that is assignable to typ.
-func hydrateValueTo(src any, typ reflect.Type) (any, error) {
-	// If the src is nil, construct a valid empty value and set that.
-	if src == nil {
-		v := reflect.New(typ)
-		return v.Elem().Interface(), nil
+	outs := reflect.ValueOf(f).Call(ins)
+	contract.Assertf(len(outs) == len(outputs),
+		"internal error: This function should be typed to return the correct number of results")
+	for i, v := range outs {
+		outputs[i] = v.Interface()
 	}
-
-	// If a trivial assignment is ok, then do that.
-	if reflect.TypeOf(src).AssignableTo(typ) {
-		return src, nil
-	}
-
-	// A trivial assignment is not ok, so we need to round-trip through a type
-	// aware format. For example, this allows converting a map[string]any to a
-	// matching struct.
-	v := reflect.New(typ)
-	v.Elem().Set(reflect.Zero(typ))
-
-	b, err := json.Marshal(src)
-	if err != nil {
-		return nil, err
-	}
-
-	err = json.Unmarshal(b, v.Interface())
-	if err != nil {
-		return nil, err
-	}
-
-	return v.Elem().Interface(), nil
-}
-
-func (p *pipeline) handleError(outputs []any) {
-	err := outputs[len(outputs)-1]
-	if err == nil {
-		return
-	}
-	p.errExit(err.(error))
-}
-
-func (p *pipeline) errExit(err error) {
-	p.failed = err
-	runtime.Goexit()
 }
 
 // cast performs a type cast from src to T.
