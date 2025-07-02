@@ -8,6 +8,7 @@ import (
 	"os"
 
 	semver "github.com/Masterminds/semver/v3"
+
 	"github.com/pulumi/upgrade-provider/colorize"
 	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )

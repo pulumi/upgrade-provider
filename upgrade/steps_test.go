@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
@@ -277,82 +276,6 @@ func TestReleaseLabel(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
-}
-
-func TestCheckMaintenancePatchWithinCadence(t *testing.T) {
-	fourWeeksAgo := time.Now().Add(-time.Hour * 24 * 7 * 4).Format(time.RFC3339)
-	testReplay((&Context{
-		GoPath: "/Users/myuser/go",
-	}).Wrap(context.Background()),
-		t, jsonMarshal[[]*step.Step](t, `[
-	{
-          "name": "Check if we should release a maintenance patch",
-          "inputs": [
-            {
-				"Org":  "pulumi",
-				"Name": "pulumi-cloudinit"
-			}
-          ],
-          "outputs": [
-            false,
-	    null
-          ]
-        },
-        {
-          "name": "gh",
-          "inputs": [
-            "gh",
-            [
-              "repo",
-              "view",
-              "pulumi/pulumi-cloudinit",
-              "--json=latestRelease"
-            ]
-          ],
-          "outputs": [
-            "{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"`+fourWeeksAgo+`\"}}\n",
-            null
-          ],
-          "impure": true
-        }
-]`), "Check if we should release a maintenance patch", maintenanceRelease)
-}
-
-func TestCheckMaintenancePatchExpiredCadence(t *testing.T) {
-	testReplay((&Context{
-		GoPath: "/Users/myuser/go",
-	}).Wrap(context.Background()),
-		t, jsonMarshal[[]*step.Step](t, `[
-	{
-          "name": "Check if we should release a maintenance patch",
-          "inputs": [
-            {
-				"Org":  "pulumi",
-				"Name": "pulumi-cloudinit"
-			}
-          ],
-          "outputs": [
-            true,
-			null
-          ]
-        },
-        {
-          "name": "gh",
-          "inputs": [
-            "gh",
-            [
-              "repo",
-              "view",
-              "pulumi/pulumi-cloudinit",
-              "--json=latestRelease"
-            ]
-          ],
-          "outputs": [
-			"{\"latestRelease\":{\"name\":\"v1.4.0\",\"tagName\":\"v1.4.0\",\"url\":\"https://github.com/pulumi/pulumi-cloudinit/releases/tag/v1.4.0\",\"publishedAt\":\"2023-01-04T21:03:48Z\"}}\n",            null
-          ],
-          "impure": true
-        }
-]`), "Check if we should release a maintenance patch", maintenanceRelease)
 }
 
 func TestPluginSDKUpgrade(t *testing.T) {

@@ -79,8 +79,6 @@ func UpgradeProvider(
 				tbv := targetBridgeVersion.String()
 				tfSDKTargetSHA, tfSDKUpgrade = planPluginSDKUpgrade(ctx, tbv)
 			}
-			// Check if we need to release a maintenance patch and set context if so
-			GetContext(ctx).MaintenancePatch = maintenanceRelease(ctx, repo)
 		}
 
 		if GetContext(ctx).MajorVersionBump {

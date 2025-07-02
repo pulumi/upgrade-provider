@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-	"time"
 
 	semver "github.com/Masterminds/semver/v3"
 	"golang.org/x/mod/modfile"
@@ -145,45 +144,6 @@ func UpgradeProviderVersion(
 	return step.Combined("Update TF Provider", steps...)
 }
 
-var maintenanceRelease = stepv2.Func11E("Check if we should release a maintenance patch", func(
-	ctx context.Context,
-	repo ProviderRepo,
-) (bool, error) {
-	repoWithOrg := repo.Org + "/" + repo.Name
-	// We ensure a release at least every 8-9 weeks, concurrent with a bridge update.
-	// There are 24 * 7 * 8 = 1344 hours in 8 weeks.
-	releaseCadence := time.Hour * 24 * 7 * 8
-
-	relInfo, err := latestReleaseInfo(ctx, repoWithOrg)
-	if err != nil {
-		return false, err
-	}
-
-	// If relInfo.Latest is nil, that means that no releases were detected.
-	//
-	// We don't suggest a release, since we assume that the author wants to control
-	// the first release by hand.
-	if relInfo.Latest == nil {
-		return false, nil
-	}
-
-	releaseDate, err := time.Parse(time.RFC3339, relInfo.Latest.PublishedAt)
-	if err != nil {
-		return false, err
-	}
-
-	stepv2.SetLabelf(ctx, "Last provider release date: %s", relInfo.Latest.PublishedAt)
-	ago := time.Since(releaseDate).Abs()
-
-	if ago > releaseCadence {
-		stepv2.SetLabelf(
-			ctx, "Last provider release date: %s. Marking for patch release.", relInfo.Latest.PublishedAt,
-		)
-		return true, nil
-	}
-	return false, nil
-})
-
 var InformGitHub = stepv2.Func60E("Inform Github", func(
 	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion Ref, tfSDKUpgrade string,
@@ -229,10 +189,6 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 			if label != "" {
 				extraOptions = []string{"--label", label}
 			}
-		// On non-upstream upgrades, we will create a patch release label
-		// if the provider hasn't been released in 8 weeks.
-		case c.MaintenancePatch && !c.UpgradeProviderVersion:
-			extraOptions = []string{"--label", "needs-release/patch"}
 		}
 
 		stepv2.Cmd(ctx, "gh",
