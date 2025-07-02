@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,6 +27,7 @@ func runCmd(args runArgs) error {
 }
 
 func runCmdWithOutput(t *testing.T, args runArgs) string {
+	t.Logf("Running command: %s in %s", strings.Join(args.cmd, " "), args.folder)
 	cm := exec.Command(args.cmd[0], args.cmd[1:]...)
 	buf := bytes.Buffer{}
 	cm.Stdout = &buf
@@ -37,6 +39,7 @@ func runCmdWithOutput(t *testing.T, args runArgs) string {
 }
 
 func runCmdT(t *testing.T, args runArgs) {
+	t.Logf("Running command: %s in %s", strings.Join(args.cmd, " "), args.folder)
 	err := runCmd(args)
 	require.NoError(t, err)
 }
@@ -123,7 +126,8 @@ func runProviderUpgrade(t *testing.T, folder string, providerName string, sha st
 }
 
 func runBridgeUpgrade(t *testing.T, folder string, providerName string, sha string, targetBridgeVersion string) {
-	repo := fmt.Sprintf("git@github.com:%s.git", providerName)
+	// use http instead of ssh to avoid ssh key issues
+	repo := fmt.Sprintf("https://github.com/%s.git", providerName)
 
 	runCheckout(t, folder, repo, sha)
 	upgradeBridge(t, folder, targetBridgeVersion, providerName)
