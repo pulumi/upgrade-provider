@@ -68,6 +68,8 @@ type Context struct {
 
 	// If true, don't actually create any PRs.
 	DryRun bool
+
+	r Runner
 }
 
 func (c *Context) Wrap(ctx context.Context) context.Context {
