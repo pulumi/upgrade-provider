@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 
@@ -24,37 +23,6 @@ func modPathWithoutVersion(path string) string {
 		return withoutVersion
 	}
 	return path
-}
-
-// Find the go module version of needleModule, searching from the default repo branch, not
-// the currently checked out code.
-func originalGoVersionOf(ctx context.Context, repo ProviderRepo, file, needleModule string) (module.Version, bool, error) {
-	data, err := baseFileAt(ctx, repo, file)
-	if err != nil {
-		return module.Version{}, false, err
-	}
-
-	goMod, err := modfile.Parse(file, data, nil)
-	if err != nil {
-		return module.Version{}, false, fmt.Errorf("%s:%s: %w",
-			repo.defaultBranch, file, err)
-	}
-
-	needleModule = modPathWithoutVersion(needleModule)
-
-	for _, req := range goMod.Replace {
-		path := modPathWithoutVersion(req.New.Path)
-		if path == needleModule {
-			return req.New, true, nil
-		}
-	}
-	for _, req := range goMod.Require {
-		path := modPathWithoutVersion(req.Mod.Path)
-		if path == needleModule {
-			return req.Mod, true, nil
-		}
-	}
-	return module.Version{}, false, nil
 }
 
 // Look up the version of the go dependency requirement of a given module in a given modfile.
@@ -84,16 +52,6 @@ func currentGoVersionOf(modFile, lookupModule string) (module.Version, bool, err
 		}
 	}
 	return module.Version{}, false, nil
-}
-
-func baseFileAt(ctx context.Context, repo ProviderRepo, file string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", "show", repo.defaultBranch+":"+file)
-	cmd.Dir = repo.root
-	data, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("%s:%s: %w", repo.defaultBranch, file, err)
-	}
-	return data, nil
 }
 
 func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVersion Ref) (string, error) {
