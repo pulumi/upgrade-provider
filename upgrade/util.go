@@ -94,8 +94,6 @@ type ProviderRepo struct {
 	workingBranch string
 	// The title of the PR to be created
 	prTitle string
-	// If there is already a PR on GitHub who is merging from `repo.workingBranch`.
-	prAlreadyExists bool
 
 	// The highest version tag released on the repo
 	currentVersion *semver.Version
