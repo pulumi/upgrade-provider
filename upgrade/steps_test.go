@@ -14,23 +14,6 @@ import (
 	"github.com/pulumi/upgrade-provider/step/v2"
 )
 
-func testReplay(ctx context.Context, t *testing.T, stepReplay []*step.Step, fName string, f any) {
-	t.Helper()
-	bytes, err := json.Marshal(step.ReplayV1{
-		Pipelines: []step.RecordV1{{
-			Name:  t.Name(),
-			Steps: stepReplay,
-		}},
-	})
-	require.NoError(t, err)
-
-	r := step.NewReplay(t, bytes)
-	ctx = step.WithEnv(ctx, r)
-
-	err = step.CallWithReplay(ctx, t.Name(), fName, f)
-	assert.NoError(t, err)
-}
-
 func jsonMarshal[T any](t *testing.T, content string) T {
 	t.Helper()
 	var dst T
@@ -153,107 +136,72 @@ func TestHasRemoteBranch(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
 
-			encode := func(elem any) json.RawMessage {
-				b, err := json.Marshal(elem)
-				require.NoError(t, err)
-				return json.RawMessage(b)
+			testRunner := &TestRunner{}
+			ctx := (&Context{
+				r: testRunner,
+			}).Wrap(context.Background())
+			testRunner.mockMap = map[string]RunResult{
+				"gh pr list --json=title,headRefName --repo=pulumi/pulumi-xyz": {
+					Output: tt.response,
+				},
 			}
 
-			testReplay(context.Background(), t, []*step.Step{
-				{
-					Name:    "Has Existing PR",
-					Inputs:  encode([]string{tt.branchName, "pulumi/pulumi-xyz"}),
-					Outputs: encode([]any{tt.expect, nil}),
-				},
-				{
-					Name: "gh",
-					Inputs: encode([]any{
-						"gh", []string{"pr", "list", "--json=title,headRefName", "--repo=pulumi/pulumi-xyz"},
-					}),
-					Outputs: encode([]any{tt.response, nil}),
-					Impure:  true,
-				},
-			}, "Has Existing PR", hasExistingPr)
+			res := hasExistingPr(ctx, tt.branchName, "pulumi/pulumi-xyz")
+			require.Equal(t, tt.expect, res)
 		})
 	}
 }
 
 func TestEnsureBranchCheckedOut(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		response   string
-		branchName string
-		call       []string
-		namedValue string
-	}{
-		{
-			response:   "* master\n",
-			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
-			namedValue: "",
-			call:       []string{"checkout", "-b", "upgrade-pulumi-terraform-bridge-to-v3.62.0"},
-		},
-		{
-			response:   "* master\n  upgrade-pulumi-terraform-bridge-to-v3.62.0\n",
-			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
-			namedValue: "already exists",
-			call:       []string{"checkout", "upgrade-pulumi-terraform-bridge-to-v3.62.0"},
-		},
-		{
-			response:   "  master\n* upgrade-pulumi-terraform-bridge-to-v3.62.0\n",
-			branchName: "upgrade-pulumi-terraform-bridge-to-v3.62.0",
-			namedValue: "already current",
-		},
-	}
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run("", func(t *testing.T) {
-			t.Parallel()
+	t.Run("does not exist", func(t *testing.T) {
+		t.Parallel()
 
-			encode := func(elem any) json.RawMessage {
-				b, err := json.Marshal(elem)
-				require.NoError(t, err)
-				return json.RawMessage(b)
-			}
+		testRunner := &TestRunner{}
+		ctx := (&Context{
+			r: testRunner,
+		}).Wrap(context.Background())
+		testRunner.mockMap = map[string]RunResult{
+			"git branch": {Output: "* master\n"},
+			"git checkout -b upgrade-pulumi-terraform-bridge-to-v3.62.0": {Output: ""},
+		}
 
-			replay := []*step.Step{
-				{
-					Name:    "Ensure Branch",
-					Inputs:  encode([]string{tt.branchName}),
-					Outputs: encode([]any{nil}),
-				},
-				{
-					Name: "git",
-					Inputs: encode([]any{
-						"git", []string{"branch"},
-					}),
-					Outputs: encode([]any{tt.response, nil}),
-					Impure:  true,
-				},
-				{
-					Name:    tt.namedValue,
-					Inputs:  encode([]any{}),
-					Outputs: encode([]any{true, nil}),
-				},
-				{
-					Name:    "git",
-					Inputs:  encode([]any{"git", tt.call}),
-					Outputs: encode([]any{"", nil}),
-					Impure:  true,
-				},
-			}
+		res := ensureBranchCheckedOut(ctx, "upgrade-pulumi-terraform-bridge-to-v3.62.0")
+		require.NoError(t, res)
+	})
 
-			if tt.namedValue == "" {
-				replay = append(replay[:2], replay[3:]...)
-			}
-			if len(tt.call) == 0 {
-				replay = replay[:len(replay)-1]
-			}
+	t.Run("already exists", func(t *testing.T) {
+		t.Parallel()
 
-			testReplay(context.Background(), t, replay,
-				"Ensure Branch", ensureBranchCheckedOut)
-		})
-	}
+		testRunner := &TestRunner{}
+		ctx := (&Context{
+			r: testRunner,
+		}).Wrap(context.Background())
+		testRunner.mockMap = map[string]RunResult{
+			"git branch": {Output: "* master\n  upgrade-pulumi-terraform-bridge-to-v3.62.0\n"},
+			"git checkout upgrade-pulumi-terraform-bridge-to-v3.62.0": {Output: ""},
+		}
+
+		res := ensureBranchCheckedOut(ctx, "upgrade-pulumi-terraform-bridge-to-v3.62.0")
+		require.NoError(t, res)
+	})
+
+	t.Run("already current", func(t *testing.T) {
+		t.Parallel()
+
+		testRunner := &TestRunner{}
+		ctx := (&Context{
+			r: testRunner,
+		}).Wrap(context.Background())
+		testRunner.mockMap = map[string]RunResult{
+			"git branch": {Output: "* upgrade-pulumi-terraform-bridge-to-v3.62.0\n"},
+			"git checkout upgrade-pulumi-terraform-bridge-to-v3.62.0": {Output: ""},
+		}
+
+		res := ensureBranchCheckedOut(ctx, "upgrade-pulumi-terraform-bridge-to-v3.62.0")
+		require.NoError(t, res)
+	})
 }
 
 func TestReleaseLabel(t *testing.T) {
@@ -318,20 +266,11 @@ replace github.com/hashicorp/terraform-plugin-sdk/v2 => github.com/pulumi/terraf
 		}
 		return nil, fmt.Errorf("not found")
 	}))
-	testReplay((&Context{GoPath: "/Users/myuser/go"}).Wrap(ctx), t, jsonMarshal[[]*step.Step](t, `
-	[
-	  {
-	    "name": "Planning Plugin SDK Upgrade",
-	    "inputs": [
-	      "3.73.0"
-	    ],
-	    "outputs": [
-	      "v2.0.0-20240129205329-74776a5cd5f9",
-	      "bridge 3.73.0 needs terraform-plugin-sdk v2.0.0-20240129205329-74776a5cd5f9",
-	      null
-	    ]
-	  }
-	]`), "Planning Plugin SDK Upgrade", planPluginSDKUpgrade)
+
+	res, display, err := planPluginSDKUpgrade(ctx, "3.73.0")
+	require.NoError(t, err)
+	require.Equal(t, "v2.0.0-20240129205329-74776a5cd5f9", res)
+	require.Equal(t, "bridge 3.73.0 needs terraform-plugin-sdk v2.0.0-20240129205329-74776a5cd5f9", display)
 }
 
 type simpleHttpHandler func(string) ([]byte, error)

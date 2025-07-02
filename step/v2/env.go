@@ -84,7 +84,7 @@ type SetCwd struct {
 
 func (e *SetCwd) Enter(ctx context.Context, _ StepInfo) error {
 	e.depth++
-	if e.depth != 1 || IsReplay(ctx) {
+	if e.depth != 1 {
 		return nil
 	}
 	cwd, err := os.Getwd()
@@ -97,7 +97,7 @@ func (e *SetCwd) Enter(ctx context.Context, _ StepInfo) error {
 
 func (e *SetCwd) Exit(ctx context.Context, _ []any) error {
 	defer func() { e.depth-- }()
-	if e.depth == 1 && !IsReplay(ctx) {
+	if e.depth == 1 {
 		return os.Chdir(e.restore)
 	}
 	return nil
