@@ -193,3 +193,15 @@ func TestGCPBridgeUpgradeNoop(t *testing.T) {
 	})
 	require.Empty(t, out)
 }
+
+func TestJuniperMistProviderUpgrade(t *testing.T) {
+	name := "pulumi/pulumi-junipermist"
+	folder := tempDir(t, name)
+	version := "0.4.2"
+	runProviderUpgrade(t, folder, name, "dce453fed75d1f57c96813d5e8e47ffeb6613909", version)
+
+	upgradeConfig, err := os.ReadFile(filepath.Join(folder, ".upgrade-config.yml"))
+	require.NoError(t, err)
+
+	require.Contains(t, string(upgradeConfig), fmt.Sprintf("current-upstream-version: %s", version))
+}
