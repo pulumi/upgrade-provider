@@ -729,13 +729,21 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 // That means figuring out the old and the new version, and producing a
 // UpstreamUpgradeTarget.
 var planProviderUpgrade = stepv2.Func51E("Plan Provider Upgrade", func(ctx context.Context,
-	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo, forceLatest bool,
+	repoOrg, repoName string, goMod *GoMod, repo *ProviderRepo, targetUpstreamVersion *semver.Version,
 ) (*UpstreamUpgradeTarget, error) {
 	var upgradeTarget *UpstreamUpgradeTarget
-	if forceLatest {
+	if targetUpstreamVersion == nil {
 		upgradeTarget = getExpectedTargetLatest(ctx)
 	} else {
-		upgradeTarget = getExpectedTarget(ctx, repoOrg+"/"+repoName)
+		name := repoOrg + "/" + repoName
+		upgradeTarget = &UpstreamUpgradeTarget{Version: targetUpstreamVersion}
+		for _, issue := range getIssueList(ctx, name) {
+			if issue.Version != nil &&
+				(issue.Version.LessThan(upgradeTarget.Version) ||
+					issue.Version.Equal(upgradeTarget.Version)) {
+				upgradeTarget.GHIssues = append(upgradeTarget.GHIssues, issue)
+			}
+		}
 	}
 
 	if upgradeTarget == nil {

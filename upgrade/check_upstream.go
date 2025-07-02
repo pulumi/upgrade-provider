@@ -40,7 +40,7 @@ func CheckUpstream(ctx context.Context, repoOrg, repoName string, currentUpstrea
 		goMod = getRepoKind(ctx, repo)
 
 		if GetContext(ctx).UpgradeProviderVersion {
-			upgradeTarget = planProviderUpgrade(ctx, repoOrg, repoName, goMod, &repo, true)
+			upgradeTarget = planProviderUpgrade(ctx, repoOrg, repoName, goMod, &repo, nil)
 		}
 	})
 	if err != nil {

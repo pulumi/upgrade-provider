@@ -21,9 +21,6 @@ type Context struct {
 	// The user's GOPATH env var
 	GoPath string
 
-	TargetVersion *semver.Version
-	InferVersion  bool
-
 	UpgradeBridgeVersion bool
 	TargetBridgeRef      Ref
 
