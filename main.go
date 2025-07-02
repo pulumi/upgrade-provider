@@ -34,6 +34,7 @@ func cmd() *cobra.Command {
 	var parsedCurrentUpstreamVersion *semver.Version
 	var targetVersion string
 	var parsedTargetUpstreamVersion *semver.Version
+	var currentBridgeVersion string
 
 	gopath, ok := os.LookupEnv("GOPATH")
 	if !ok {
@@ -154,9 +155,12 @@ func cmd() *cobra.Command {
 					return fmt.Errorf("--target-version=%s: %w",
 						targetVersion, err)
 				}
-			} else {
-				return fmt.Errorf(
-					"cannot specify the provider version unless the provider will be upgraded")
+			}
+
+			if context.UpgradeBridgeVersion {
+				if currentBridgeVersion == "" {
+					return errors.New("`current-bridge-version` must be provided to upgrade the bridge")
+				}
 			}
 
 			return nil
@@ -168,12 +172,17 @@ func cmd() *cobra.Command {
 			}
 
 			exitOnError(failedPreRun)
-			newVersion, err := upgrade.UpgradeProvider(
-				context.Wrap(ctx), repoOrg, repoName, parsedCurrentUpstreamVersion, parsedTargetUpstreamVersion)
+			resUpgradeResult, err := upgrade.UpgradeProvider(
+				context.Wrap(ctx), repoOrg, repoName, parsedCurrentUpstreamVersion, parsedTargetUpstreamVersion, &currentBridgeVersion)
 			exitOnError(err)
 
-			if newVersion != nil {
-				err := upgrade.BumpRecordedUpstreamVersion(context.Wrap(ctx), newVersion, configFilename+".yml")
+			if resUpgradeResult.NewProviderVersion != nil {
+				err := upgrade.BumpRecordedUpstreamVersion(context.Wrap(ctx), resUpgradeResult.NewProviderVersion, configFilename+".yml")
+				exitOnError(err)
+			}
+
+			if resUpgradeResult.NewBridgeVersion != nil {
+				err := upgrade.BumpRecordedBridgeVersion(context.Wrap(ctx), *resUpgradeResult.NewBridgeVersion, configFilename+".yml")
 				exitOnError(err)
 			}
 		},
@@ -220,6 +229,10 @@ Required unless running from provider root and set in upgrade-config.yml.`)
 
 	cmd.PersistentFlags().StringVar(&currentUpstreamVersion, "current-upstream-version", "",
 		`The current version of the upstream provider. This is used to determine if we need to upgrade the upstream provider.
+	Required unless set in upgrade-config.yml.`)
+
+	cmd.PersistentFlags().StringVar(&currentBridgeVersion, "current-bridge-version", "",
+		`The current version of the bridge. This is used to determine if we need to upgrade the bridge.
 	Required unless set in upgrade-config.yml.`)
 
 	cmd.PersistentFlags().StringVar(&context.PrReviewers, "pr-reviewers", "",
