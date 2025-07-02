@@ -73,14 +73,6 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 		return nil, fmt.Errorf("go.mod: %w", err)
 	}
 
-	bridge, ok, err := originalGoVersionOf(ctx, repo, filepath.Join("provider", "go.mod"), "github.com/pulumi/pulumi-terraform-bridge")
-	bridgeMissingMsg := "Unable to discover pulumi-terraform-bridge version"
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", bridgeMissingMsg, err)
-	} else if !ok {
-		return nil, fmt.Errorf("%s", bridgeMissingMsg)
-	}
-
 	tfProviderRepoName := GetContext(ctx).UpstreamProviderName
 
 	getUpstream := func(file *modfile.File) (*modfile.Require, error) {
@@ -126,7 +118,6 @@ var getRepoKind = stepv2.Func11E("Get Repo Kind", func(ctx context.Context, repo
 
 	out := GoMod{
 		Upstream: upstream.Mod,
-		Bridge:   bridge,
 	}
 
 	out.Kind = Plain
