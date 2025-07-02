@@ -321,6 +321,9 @@ func BumpRecordedUpstreamVersion(ctx context.Context, version *semver.Version, c
 
 		stepv2.Cmd(ctx, "git", "add", configFile)
 		stepv2.Cmd(ctx, "git", "commit", "-m", fmt.Sprintf("Bump recorded upstream version to %s", version.String()))
+		if GetContext(ctx).DryRun {
+			return
+		}
 		stepv2.Cmd(ctx, "git", "push")
 	})
 }
