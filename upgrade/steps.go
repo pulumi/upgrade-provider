@@ -2,7 +2,6 @@
 package upgrade
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 	goSemver "golang.org/x/mod/semver"
-	"gopkg.in/yaml.v3"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 
@@ -453,9 +451,6 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 
 	name := filepath.Base(repo.root)
 
-	nextMajorVersion := stepv2.NamedValue(ctx, "Next major version",
-		repo.currentVersion.IncMajor().String())
-
 	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
 		updateFile(ctx, "Update PROVIDER_PATH", ".ci-mgmt.yaml",
 			"major-version: {}")
@@ -528,8 +523,6 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 		stepv2.SetLabel(ctx, colorize.Bold(colorize.Warn("requires manual update")))
 	})(ctx)
 
-	addVersionPrefixToGHWorkflows(ctx, repo, nextMajorVersion)
-
 	// Remove examples cache
 	stepv2.Cmd(ctx, "rm", "-rf", ".pulumi/examples-cache")
 })
@@ -553,89 +546,6 @@ func buildReplaceInFile(from, to string) func(ctx context.Context, description s
 		})
 	}
 }
-
-var addVersionPrefixToGHWorkflows = stepv2.Func20("Update GitHub Workflows", func(
-	ctx context.Context, repo ProviderRepo, nextMajorVersion string,
-) {
-	addPrefix := func(ctx context.Context, path string) error {
-		_, ok := stepv2.Stat(ctx, path)
-		if !ok {
-			stepv2.SetLabelf(ctx, "%s does not exist", path)
-			return nil
-		}
-
-		b := stepv2.ReadFile(ctx, path)
-		doc := new(yaml.Node)
-		err := yaml.Unmarshal([]byte(b), doc)
-		if err != nil {
-			return err
-		}
-		contract.Assertf(doc.Kind == yaml.DocumentNode, "must be yaml format")
-
-		// We have parsed the document node, now lets find the "env" key under it.
-		var env *yaml.Node
-		for _, child := range doc.Content {
-			if child.Kind != yaml.MappingNode {
-				continue
-			}
-			if child.Content[0].Value != "env" {
-				continue
-			}
-			env = child.Content[1]
-			break
-		}
-		if env == nil {
-			// If the env node doesn't exist, we create it
-			env = &yaml.Node{Kind: yaml.MappingNode}
-			doc.Content = append(doc.Content, &yaml.Node{
-				Kind: yaml.MappingNode,
-				Content: []*yaml.Node{
-					{
-						Kind:  yaml.ScalarNode,
-						Value: "env",
-					},
-					env,
-				},
-			})
-		}
-
-		versionPrefix := nextMajorVersion
-
-		var fixed bool
-		for i, child := range env.Content {
-			if child.Value != "VERSION_PREFIX" {
-				continue
-			}
-			env.Content[i+1].Value = versionPrefix
-			fixed = true
-			break
-		}
-
-		// If we didn't find a VERSION_PREFIX node, we add one.
-		if !fixed {
-			env.Content = append([]*yaml.Node{
-				{Value: "VERSION_PREFIX", Kind: yaml.ScalarNode},
-				{Value: versionPrefix, Kind: yaml.ScalarNode},
-			}, env.Content...)
-		}
-
-		updated := new(bytes.Buffer)
-		enc := yaml.NewEncoder(updated)
-		enc.SetIndent(2) // TODO Round trip correctly
-		if err := enc.Encode(doc); err != nil {
-			return fmt.Errorf("failed to marshal: %w", err)
-		}
-		if err := enc.Close(); err != nil {
-			return fmt.Errorf("failed to flush encoder: %w", err)
-		}
-		stepv2.WriteFile(ctx, path, updated.String())
-		return nil
-	}
-
-	for _, f := range []string{"master.yml", "main.yml", "run-acceptance-tests.yml"} {
-		stepv2.Func10E("update "+f, addPrefix)(ctx, filepath.Join(".github", "workflows", f))
-	}
-})
 
 func updateFile(ctx context.Context, path string, update func(context.Context, string) string) bool {
 	return stepv2.Func01("Update "+path, func(ctx context.Context) bool {
