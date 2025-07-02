@@ -193,6 +193,7 @@ func UpgradeProvider(
 
 	if GetContext(ctx).UpgradeProviderVersion {
 		steps = append(steps, UpgradeProviderVersion(ctx, goMod, upgradeTarget.Version, repo, targetSHA))
+		resUpgradeResult.NewProviderVersion = upgradeTarget.Version
 	} else if goMod.Kind.IsPatched() {
 		// If we are upgrading the provider version, then the upgrade will leave
 		// `upstream` in a usable state. Otherwise, we need to call `make
@@ -254,7 +255,6 @@ func UpgradeProvider(
 		return UpgradeResult{}, err
 	}
 
-	resUpgradeResult.NewProviderVersion = upgradeTarget.Version
 	return resUpgradeResult, nil
 }
 

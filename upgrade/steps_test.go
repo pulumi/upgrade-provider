@@ -14,6 +14,31 @@ import (
 	"github.com/pulumi/upgrade-provider/step/v2"
 )
 
+func testReplay(ctx context.Context, t *testing.T, stepReplay []*step.Step, fName string, f any) {
+	t.Helper()
+	bytes, err := json.Marshal(step.ReplayV1{
+		Pipelines: []step.RecordV1{{
+			Name:  t.Name(),
+			Steps: stepReplay,
+		}},
+	})
+	require.NoError(t, err)
+
+	r := step.NewReplay(t, bytes)
+	ctx = step.WithEnv(ctx, r)
+
+	err = step.CallWithReplay(ctx, t.Name(), fName, f)
+	assert.NoError(t, err)
+}
+
+func jsonMarshal[T any](t *testing.T, content string) T {
+	t.Helper()
+	var dst T
+	err := json.Unmarshal([]byte(content), &dst)
+	require.NoError(t, err)
+	return dst
+}
+
 func TestGetWorkingBranch(t *testing.T) {
 	type test struct {
 		c                   Context
