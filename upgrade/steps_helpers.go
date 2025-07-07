@@ -652,14 +652,14 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 		return err
 	}
 
-	// Write issue_created=true to GITHUB_OUTPUT, if it exists for CI control flow.
+	// Write latest_version=$VERSION to GITHUB_OUTPUT, if it exists for CI control flow.
 	if GITHUB_OUTPUT, found := os.LookupEnv("GITHUB_OUTPUT"); found {
 		f, err := os.OpenFile(GITHUB_OUTPUT, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
 			return err
 		}
 		defer f.Close()
-		if _, err := fmt.Fprintf(f, "issue_created=true\n"); err != nil {
+		if _, err := fmt.Fprintf(f, "latest_version=%s\n", version); err != nil {
 			return err
 		}
 	}
