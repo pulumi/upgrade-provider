@@ -68,6 +68,9 @@ type Context struct {
 
 	PRDescription string
 	PRTitlePrefix string
+
+	// If true, don't actually create any PRs.
+	DryRun bool
 }
 
 func (c *Context) Wrap(ctx context.Context) context.Context {
