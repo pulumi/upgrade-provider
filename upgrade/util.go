@@ -7,6 +7,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/mod/module"
+
+	stepv2 "github.com/pulumi/upgrade-provider/step/v2"
 )
 
 type contextKeyType struct{}
@@ -169,4 +171,16 @@ func latestSemverTag(prefix string, refs gitRepoRefs) *semver.Version {
 	}
 	v, _ := semver.NewVersion(trim(sorted[0]))
 	return v
+}
+
+func readFileWithoutLine(ctx context.Context, path string, lineToSkip string) string {
+	content := stepv2.ReadFile(ctx, path)
+	lines := strings.Split(content, "\n")
+	var newLines []string
+	for _, line := range lines {
+		if line != lineToSkip {
+			newLines = append(newLines, line)
+		}
+	}
+	return strings.Join(newLines, "\n")
 }
