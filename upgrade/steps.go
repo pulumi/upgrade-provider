@@ -202,7 +202,7 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 
 	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs)
 
-	if repo.prAlreadyExists {
+	if hasExistingPr(ctx, repo.workingBranch, repo.Org+"/"+repo.Name) {
 		// Update the description in case anything else was upgraded (or not
 		// upgraded) in this run, compared to the existing PR.
 		stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
