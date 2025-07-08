@@ -30,9 +30,10 @@ const (
 )
 
 func cmd() *cobra.Command {
-	var targetVersion string
 	var currentUpstreamVersion string
 	var parsedCurrentUpstreamVersion *semver.Version
+	var targetVersion string
+	var parsedTargetUpstreamVersion *semver.Version
 
 	gopath, ok := os.LookupEnv("GOPATH")
 	if !ok {
@@ -99,15 +100,6 @@ func cmd() *cobra.Command {
 				return errors.New("`current-upstream-version` must be provided")
 			}
 
-			// Validate that targetVersion is a valid version
-			if targetVersion != "" {
-				context.TargetVersion, err = semver.NewVersion(targetVersion)
-				if err != nil {
-					return fmt.Errorf("--target-version=%s: %w",
-						targetVersion, err)
-				}
-			}
-
 			parsedCurrentUpstreamVersion, err = semver.NewVersion(currentUpstreamVersion)
 			if err != nil {
 				return fmt.Errorf("--current-upstream-version=%s: %w",
@@ -143,11 +135,6 @@ func cmd() *cobra.Command {
 					set(&context.UpgradeProviderVersion)
 				case "pulumi":
 				case "check-upstream-version":
-					if targetVersion != "" {
-						return fmt.Errorf(
-							"--kind check-upstream-version is incompatible with --target-version, cannot set both",
-						)
-					}
 					set(&context.UpgradeProviderVersion)
 
 				default:
@@ -157,10 +144,21 @@ func cmd() *cobra.Command {
 				}
 			}
 
-			if context.TargetVersion != nil && !context.UpgradeProviderVersion {
+			if context.UpgradeProviderVersion {
+				if targetVersion == "" {
+					return errors.New("`target-version` must be provided to upgrade the provider")
+				}
+
+				parsedTargetUpstreamVersion, err = semver.NewVersion(targetVersion)
+				if err != nil {
+					return fmt.Errorf("--target-version=%s: %w",
+						targetVersion, err)
+				}
+			} else {
 				return fmt.Errorf(
 					"cannot specify the provider version unless the provider will be upgraded")
 			}
+
 			return nil
 		},
 		Run: func(_ *cobra.Command, args []string) {
@@ -170,7 +168,8 @@ func cmd() *cobra.Command {
 			}
 
 			exitOnError(failedPreRun)
-			newVersion, err := upgrade.UpgradeProvider(context.Wrap(ctx), repoOrg, repoName, parsedCurrentUpstreamVersion)
+			newVersion, err := upgrade.UpgradeProvider(
+				context.Wrap(ctx), repoOrg, repoName, parsedCurrentUpstreamVersion, parsedTargetUpstreamVersion)
 			exitOnError(err)
 
 			if newVersion != nil {
@@ -196,16 +195,6 @@ If the passed version does not exist, an error is signaled.`)
 		`Upgrade the provider to the passed pulumi/{pkg,sdk} version.
 
 If no version is passed, the pulumi/{pkg,sdk} version will track the bridge`)
-
-	cmd.PersistentFlags().BoolVar(&context.InferVersion, "pulumi-infer-version", false,
-		`Use our GH issues to infer the target upgrade version.
-If both '--target-version' and '--pulumi-infer-version' are passed,
-we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DEV]`)
-
-	if !pulumiDev {
-		err = cmd.PersistentFlags().MarkHidden("pulumi-infer-version")
-		contract.AssertNoErrorf(err, "could not mark `pulumi-infer-version` flag as hidden")
-	}
 
 	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
 		`Upgrade the provider to a new major version.`)

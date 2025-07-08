@@ -118,7 +118,8 @@ func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVer
 
 func prBody(ctx context.Context, repo ProviderRepo,
 	upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
-	targetBridge Ref, tfSDKUpgrade string, osArgs []string) string {
+	targetBridge Ref, tfSDKUpgrade string, osArgs []string,
+) string {
 	b := new(strings.Builder)
 
 	// We strip out --pr-description since it will appear later in the pr body.
@@ -269,37 +270,6 @@ var latestReleaseVersion = stepv2.Func12E("Latest Release Version",
 		return v, true, err
 	})
 
-// Fetch the expected upgrade target from github. Return a list of open upgrade issues,
-// sorted by semantic version. The list may be empty.
-//
-// The second argument represents a message to describe the result. It may be empty.
-var getExpectedTarget = stepv2.Func11("Get Expected Target", func(ctx context.Context,
-	name string) *UpstreamUpgradeTarget {
-	if GetContext(ctx).TargetVersion != nil {
-		target := &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
-
-		// If we are also inferring versions, check if this PR will close any
-		// issues.
-		if GetContext(ctx).InferVersion {
-			if fromIssues := getExpectedTargetFromIssues(ctx, name); fromIssues != nil {
-				for _, issue := range fromIssues.GHIssues {
-					if issue.Version != nil &&
-						(issue.Version.LessThan(target.Version) ||
-							issue.Version.Equal(target.Version)) {
-						target.GHIssues = append(target.GHIssues, issue)
-					}
-				}
-			}
-		}
-		return target
-	}
-	// InferVersion == true: use issue system, with ctx.TargetVersion limiting the version if set
-	if GetContext(ctx).InferVersion {
-		return getExpectedTargetFromIssues(ctx, name)
-	}
-	return getExpectedTargetLatest(ctx)
-})
-
 // getExpectedTargetLatest discovers the latest stable release and sets it on UpstreamUpgradeTarget.Version.
 // There is a lot of human error and differing conventions when discovering and defining the "latest" upstream version.
 // For our purposes, we always want to discover the highest, stable, valid semver, version of the upstream provider.
@@ -308,7 +278,6 @@ var getExpectedTarget = stepv2.Func11("Get Expected Target", func(ctx context.Co
 // and sorting them.
 // This is a best-effort approach. There may be edge cases in which these steps do not yield the correct latest release.
 var getExpectedTargetLatest = stepv2.Func01E("From Upstream Releases", func(ctx context.Context) (*UpstreamUpgradeTarget, error) {
-
 	upstreamRepo := GetContext(ctx).UpstreamProviderOrg + "/" + GetContext(ctx).UpstreamProviderName
 	// TODO: use --json once https://github.com/cli/cli/issues/4572 is fixed
 	releases := stepv2.Cmd(ctx, "gh", "release", "list",
@@ -358,15 +327,10 @@ var getExpectedTargetLatest = stepv2.Func01E("From Upstream Releases", func(ctx 
 	// our target version is the last entry in the sorted versions slice
 	latestVersion := versions[len(versions)-1]
 	return &UpstreamUpgradeTarget{Version: latestVersion}, nil
-
 })
 
-// Figure out what version of upstream to target by looking at specific pulumi-bot
-// issues. These issues are created by other automation in the Pulumi GH org.
-//
-// This method of discovery is assumed to be specific to providers maintained by Pulumi.
-var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context.Context,
-	name string) (*UpstreamUpgradeTarget, error) {
+// Get a list of open issues for a given provider which will be closed by the upgrade PR.
+var getIssueList = stepv2.Func11E("From Issues", func(ctx context.Context, name string) ([]UpgradeTargetIssue, error) {
 	issueList := stepv2.Cmd(ctx, "gh", "issue", "list",
 		"--state=open",
 		"--repo="+name,
@@ -407,24 +371,24 @@ var getExpectedTargetFromIssues = stepv2.Func11E("From Issues", func(ctx context
 		return upgradeTargetIssues[j].Version.LessThan(upgradeTargetIssues[i].Version)
 	})
 
-	return &UpstreamUpgradeTarget{
-		Version:  upgradeTargetIssues[0].Version,
-		GHIssues: upgradeTargetIssues,
-	}, nil
+	return upgradeTargetIssues, nil
 })
 
 // Hide searchable token in the issue body via an HTML comment to help us find this issue later without requiring labels to be set up.
-const upgradeIssueToken = "pulumiupgradeproviderissue"
-const upgradeIssueBodyTemplate = `
+const (
+	upgradeIssueToken        = "pulumiupgradeproviderissue"
+	upgradeIssueBodyTemplate = `
 <!-- for upgrade-provider issue searching: pulumiupgradeproviderissue -->
 
 > [!NOTE]
 > This issue was created automatically by the upgrade-provider tool and should be automatically closed by a subsequent upgrade pull request.
 `
+)
 
 // Create an issue in the provider repo that signals an upgrade
 var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ctx context.Context,
-	repoOrg, repoName, version string) error {
+	repoOrg, repoName, version string,
+) error {
 	upstreamProviderName := GetContext(ctx).UpstreamProviderName
 	upstreamOrg := GetContext(ctx).UpstreamProviderOrg
 	title := fmt.Sprintf("Upgrade %s to v%s", upstreamProviderName, version)
@@ -436,7 +400,7 @@ var createUpstreamUpgradeIssue = stepv2.Func30E("Ensure Upstream Issue", func(ct
 
 	// Write latest_version=$VERSION to GITHUB_OUTPUT, if it exists for CI control flow.
 	if GITHUB_OUTPUT, found := os.LookupEnv("GITHUB_OUTPUT"); found {
-		f, err := os.OpenFile(GITHUB_OUTPUT, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+		f, err := os.OpenFile(GITHUB_OUTPUT, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
 			return err
 		}

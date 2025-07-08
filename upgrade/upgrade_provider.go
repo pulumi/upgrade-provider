@@ -22,7 +22,10 @@ func setEnv(ctx context.Context, k, v string) {
 	})(ctx, k, v)
 }
 
-func UpgradeProvider(ctx context.Context, repoOrg, repoName string, currentUpstreamVersion *semver.Version) (newVersion *semver.Version, err error) {
+func UpgradeProvider(
+	ctx context.Context, repoOrg, repoName string,
+	currentUpstreamVersion, targetUpstreamVersion *semver.Version,
+) (newVersion *semver.Version, err error) {
 	// Setup ctx to enable replay tests with stepv2:
 	if file := os.Getenv("PULUMI_REPLAY"); file != "" {
 		var write io.Closer
@@ -31,8 +34,8 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string, currentUpstr
 	}
 
 	repo := ProviderRepo{
-		Name: repoName,
-		Org:  repoOrg,
+		Name:                   repoName,
+		Org:                    repoOrg,
 		currentUpstreamVersion: currentUpstreamVersion,
 	}
 	var targetBridgeVersion Ref
@@ -62,7 +65,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string, currentUpstr
 		goMod = getRepoKind(ctx, repo)
 
 		if GetContext(ctx).UpgradeProviderVersion {
-			upgradeTarget = planProviderUpgrade(ctx, repoOrg, repoName, goMod, &repo, false)
+			upgradeTarget = planProviderUpgrade(ctx, repoOrg, repoName, goMod, &repo, targetUpstreamVersion)
 		}
 	})
 	if err != nil {
