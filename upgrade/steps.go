@@ -749,50 +749,31 @@ var planProviderUpgrade = stepv2.Func51E("Plan Provider Upgrade", func(ctx conte
 		return nil, nil
 	}
 
-	switch {
-	case goMod.Kind.IsPatched():
-		setCurrentUpstreamFromPatched(ctx, repo)
-	case goMod.Kind.IsShimmed():
-		setCurrentUpstreamFromShimmed(ctx, repo, goMod)
-	case goMod.Kind == Plain:
-		setCurrentUpstreamFromPlain(ctx, repo, goMod)
-	default:
-		return nil, fmt.Errorf("unexpected repo kind: %s", goMod.Kind)
-	}
-
-	// If we have a target version, we need to make sure that
-	// it is valid for an upgrade.
 	var msg string
-	if repo.currentUpstreamVersion != nil {
-		switch goSemver.Compare("v"+repo.currentUpstreamVersion.String(),
-			"v"+upgradeTarget.Version.String()) {
+	switch goSemver.Compare("v"+repo.currentUpstreamVersion.String(),
+		"v"+upgradeTarget.Version.String()) {
 
-		// Target version is less then the current version
-		case 1:
-			// This is a weird situation, so we warn
-			msg = colorize.Warnf(
-				" no upgrade: %s (current) > %s (target)",
-				repo.currentUpstreamVersion,
-				upgradeTarget.Version)
-			GetContext(ctx).UpgradeProviderVersion = false
-			GetContext(ctx).MajorVersionBump = false
+	// Target version is less then the current version
+	case 1:
+		// This is a weird situation, so we warn
+		msg = colorize.Warnf(
+			" no upgrade: %s (current) > %s (target)",
+			repo.currentUpstreamVersion,
+			upgradeTarget.Version)
+		GetContext(ctx).UpgradeProviderVersion = false
+		GetContext(ctx).MajorVersionBump = false
 
-		// Target version is equal to the current version
-		case 0:
-			GetContext(ctx).UpgradeProviderVersion = false
-			GetContext(ctx).MajorVersionBump = false
-			msg = "Up to date"
+	// Target version is equal to the current version
+	case 0:
+		GetContext(ctx).UpgradeProviderVersion = false
+		GetContext(ctx).MajorVersionBump = false
+		msg = "Up to date"
 
-		// Target version is greater than the current version, so upgrade
-		case -1:
-			msg = fmt.Sprintf("%s -> %s",
-				repo.currentUpstreamVersion,
-				upgradeTarget.Version)
-		}
-	} else {
-		// If we don't have an old version, just assume
-		// that we will upgrade.
-		msg = upgradeTarget.Version.String()
+	// Target version is greater than the current version, so upgrade
+	case -1:
+		msg = fmt.Sprintf("%s -> %s",
+			repo.currentUpstreamVersion,
+			upgradeTarget.Version)
 	}
 
 	stepv2.SetLabel(ctx, msg)
