@@ -78,6 +78,15 @@ func runCheckout(t *testing.T, folder string, repo string, sha string) {
 		folder: folder,
 		cmd:    []string{"git", "checkout", "FETCH_HEAD"},
 	})
+
+	runCmdT(t, runArgs{
+		folder: folder,
+		cmd:    []string{"git", "config", "user.email", "bot@pulumi.com"},
+	})
+	runCmdT(t, runArgs{
+		folder: folder,
+		cmd:    []string{"git", "config", "user.name", "Pulumi Bot"},
+	})
 }
 
 func upgradeProvider(t *testing.T, folder string, targetVersion string, name string) {
@@ -119,7 +128,7 @@ func upgradeBridge(t *testing.T, folder string, targetBridgeVersion string, name
 }
 
 func runProviderUpgrade(t *testing.T, folder string, providerName string, sha string, targetVersion string) {
-	repo := fmt.Sprintf("git@github.com:%s.git", providerName)
+	repo := fmt.Sprintf("https://github.com/%s.git", providerName)
 
 	runCheckout(t, folder, repo, sha)
 	upgradeProvider(t, folder, targetVersion, providerName)
