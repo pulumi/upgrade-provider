@@ -81,11 +81,11 @@ func runCheckout(t *testing.T, folder string, repo string, sha string) {
 
 	runCmdT(t, runArgs{
 		folder: folder,
-		cmd:    []string{"git", "config", "user.email", "bot@pulumi.com"},
+		cmd:    []string{"git", "config", "user.name", `"Pulumi Bot"`},
 	})
 	runCmdT(t, runArgs{
 		folder: folder,
-		cmd:    []string{"git", "config", "user.name", "Pulumi Bot"},
+		cmd:    []string{"git", "config", "user.email", `"bot@pulumi.com"`},
 	})
 }
 
