@@ -44,44 +44,12 @@ func runCmdT(t *testing.T, args runArgs) {
 	require.NoError(t, err)
 }
 
-func runCmdErr(t *testing.T, args runArgs) error {
-	t.Logf("Running command: %s in %s", strings.Join(args.cmd, " "), args.folder)
-	err := runCmd(args)
-	return err
-}
-
 func tempDir(t *testing.T, providerName string) string {
 	folder := t.TempDir()
 	providerFolder := filepath.Join(folder, providerName)
 	err := os.MkdirAll(providerFolder, 0o755)
 	require.NoError(t, err)
 	return providerFolder
-}
-
-func setGitConfig(t *testing.T, folder string) {
-	userSetErr := runCmdErr(t, runArgs{
-		folder: folder,
-		cmd:    []string{"git", "config", "user.name"},
-	})
-
-	if userSetErr != nil {
-		runCmdT(t, runArgs{
-			folder: folder,
-			cmd:    []string{"git", "config", "--global", "user.name", `"Pulumi Bot"`},
-		})
-	}
-
-	emailSetErr := runCmdErr(t, runArgs{
-		folder: folder,
-		cmd:    []string{"git", "config", "user.email"},
-	})
-
-	if emailSetErr != nil {
-		runCmdT(t, runArgs{
-			folder: folder,
-			cmd:    []string{"git", "config", "--global", "user.email", `"bot@pulumi.com"`},
-		})
-	}
 }
 
 func runCheckout(t *testing.T, folder string, repo string, sha string) {
@@ -110,8 +78,6 @@ func runCheckout(t *testing.T, folder string, repo string, sha string) {
 		folder: folder,
 		cmd:    []string{"git", "checkout", "FETCH_HEAD"},
 	})
-
-	setGitConfig(t, folder)
 }
 
 func upgradeProvider(t *testing.T, folder string, targetVersion string, name string) {
@@ -172,6 +138,12 @@ func TestMain(m *testing.M) {
 		folder: ".",
 		cmd:    []string{"make", "build"},
 	})
+
+	os.Setenv("GIT_COMMITTER_NAME", "Pulumi Bot")
+	os.Setenv("GIT_COMMITTER_EMAIL", "bot@pulumi.com")
+	os.Setenv("GIT_AUTHOR_NAME", "Pulumi Bot")
+	os.Setenv("GIT_AUTHOR_EMAIL", "bot@pulumi.com")
+
 	if err != nil {
 		fmt.Println("Error building the binary")
 		os.Exit(1)
