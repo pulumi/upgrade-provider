@@ -44,10 +44,10 @@ func runCmdT(t *testing.T, args runArgs) {
 	require.NoError(t, err)
 }
 
-func runCmdErr(t *testing.T, args runArgs) bool {
+func runCmdErr(t *testing.T, args runArgs) error {
 	t.Logf("Running command: %s in %s", strings.Join(args.cmd, " "), args.folder)
 	err := runCmd(args)
-	return err != nil
+	return err
 }
 
 func tempDir(t *testing.T, providerName string) string {
@@ -59,24 +59,24 @@ func tempDir(t *testing.T, providerName string) string {
 }
 
 func setGitConfig(t *testing.T, folder string) {
-	userSet := runCmdErr(t, runArgs{
+	userSetErr := runCmdErr(t, runArgs{
 		folder: folder,
 		cmd:    []string{"git", "config", "user.name"},
 	})
 
-	if !userSet {
+	if userSetErr != nil {
 		runCmdT(t, runArgs{
 			folder: folder,
 			cmd:    []string{"git", "config", "--global", "user.name", `"Pulumi Bot"`},
 		})
 	}
 
-	emailSet := runCmdErr(t, runArgs{
+	emailSetErr := runCmdErr(t, runArgs{
 		folder: folder,
 		cmd:    []string{"git", "config", "user.email"},
 	})
 
-	if !emailSet {
+	if emailSetErr != nil {
 		runCmdT(t, runArgs{
 			folder: folder,
 			cmd:    []string{"git", "config", "--global", "user.email", `"bot@pulumi.com"`},
