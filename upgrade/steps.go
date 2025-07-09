@@ -317,8 +317,9 @@ func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA str
 	}).In(repo.providerDir())
 }
 
-var ensureBranchCheckedOut = stepv2.Func10("Ensure Branch", func(ctx context.Context, branchName string) {
-	branches := stepv2.Cmd(ctx, "git", "branch")
+func ensureBranchCheckedOut(ctx context.Context, branchName string) error {
+	c := GetContext(ctx)
+	branches := c.r.Run([]string{"git", "branch"})
 
 	var alreadyExists bool
 	var alreadyCurrent bool
@@ -343,10 +344,14 @@ var ensureBranchCheckedOut = stepv2.Func10("Ensure Branch", func(ctx context.Con
 	default:
 		stepv2.Cmd(ctx, "git", "checkout", "-b", branchName)
 	}
-})
+	return nil
+}
 
-var hasExistingPr = stepv2.Func21("Has Existing PR", func(ctx context.Context, branchName, repo string) bool {
-	prBytes := []byte(stepv2.Cmd(ctx, "gh", "pr", "list", "--json=title,headRefName", fmt.Sprintf("--repo=%s", repo)))
+func hasExistingPr(ctx context.Context, branchName, repo string) bool {
+	c := GetContext(ctx)
+	prBytes := []byte(c.r.Run([]string{
+		"gh", "pr", "list", "--json=title,headRefName", fmt.Sprintf("--repo=%s", repo),
+	}))
 	prs := []struct {
 		Title       string `json:"title"`
 		HeadRefName string `json:"headRefName"`
@@ -363,7 +368,7 @@ var hasExistingPr = stepv2.Func21("Has Existing PR", func(ctx context.Context, b
 
 	stepv2.SetLabel(ctx, "no")
 	return false
-})
+}
 
 var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Context, c Context,
 	targetBridgeVersion Ref, upgradeTarget *UpstreamUpgradeTarget,
@@ -604,7 +609,11 @@ var planProviderUpgrade = stepv2.Func51E("Plan Provider Upgrade", func(ctx conte
 ) (*UpstreamUpgradeTarget, error) {
 	var upgradeTarget *UpstreamUpgradeTarget
 	if targetUpstreamVersion == nil {
-		upgradeTarget = getExpectedTargetLatest(ctx)
+		var err error
+		upgradeTarget, err = getExpectedTargetLatest(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get expected target latest: %w", err)
+		}
 	} else {
 		name := repoOrg + "/" + repoName
 		upgradeTarget = &UpstreamUpgradeTarget{Version: targetUpstreamVersion}
@@ -702,11 +711,7 @@ var planBridgeUpgrade = stepv2.Func11E("Planning Bridge Upgrade", func(
 	}
 })
 
-var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
-	ctx context.Context, bridgeRef string,
-) (_, display string, _ error) {
-	defer func() { stepv2.SetLabel(ctx, display) }()
-
+func planPluginSDKUpgrade(ctx context.Context, bridgeRef string) (string, string, error) {
 	sdkv2 := "github.com/hashicorp/terraform-plugin-sdk/v2"
 
 	br, err := ParseRef(bridgeRef)
@@ -749,8 +754,10 @@ var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 		return "", "", fmt.Errorf("failed to find %v replace in bridge go.mod", sdkv2)
 	}
 
-	return version, fmt.Sprintf("bridge %s needs terraform-plugin-sdk %s", bridgeRef, version), nil
-})
+	display := fmt.Sprintf("bridge %s needs terraform-plugin-sdk %s", bridgeRef, version)
+	stepv2.SetLabel(ctx, display)
+	return version, display, nil
+}
 
 var fetchLatestJavaGen = stepv2.Func03("Fetching latest Java Gen", func(ctx context.Context) (string, string, bool) {
 	latestJavaGen, foundRelease := latestReleaseVersion(ctx, "pulumi/pulumi-java")

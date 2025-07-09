@@ -2,9 +2,7 @@ package upgrade
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -18,7 +16,6 @@ import (
 
 func setEnv(ctx context.Context, k, v string) {
 	stepv2.Func20E(k+"="+v, func(ctx context.Context, k, v string) error {
-		stepv2.MarkImpure(ctx)
 		return os.Setenv(k, v)
 	})(ctx, k, v)
 }
@@ -33,11 +30,9 @@ func UpgradeProvider(
 	currentUpstreamVersion, targetUpstreamVersion *semver.Version,
 	currentBridgeVersion *string,
 ) (resUpgradeResult UpgradeResult, err error) {
-	// Setup ctx to enable replay tests with stepv2:
-	if file := os.Getenv("PULUMI_REPLAY"); file != "" {
-		var write io.Closer
-		ctx, write = stepv2.WithRecord(ctx, file)
-		defer func() { err = errors.Join(err, write.Close()) }()
+	c := GetContext(ctx)
+	if c.r == nil {
+		c.r = &DefaultRunner{}
 	}
 
 	repo := ProviderRepo{
@@ -87,7 +82,10 @@ func UpgradeProvider(
 			targetBridgeVersion = planBridgeUpgrade(ctx, goMod)
 			if targetBridgeVersion != nil {
 				tbv := targetBridgeVersion.String()
-				tfSDKTargetSHA, tfSDKUpgrade = planPluginSDKUpgrade(ctx, tbv)
+				tfSDKTargetSHA, tfSDKUpgrade, err = planPluginSDKUpgrade(ctx, tbv)
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 
