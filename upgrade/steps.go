@@ -220,72 +220,82 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
 	c := GetContext(ctx)
 
-	// --force:
-	//
-	// If there is no existing branch, then --force doesn't have any effect. It is thus safe.
-	//
-	// If there is an existing branch, then we will want to override it since we don't
-	// attempt to build on existing branches.
-	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch, "--force")
+	// Check if there are any commits between the base branch and the working branch
+	// If there are no commits, skip the entire GitHub interaction
+	commits := stepv2.Cmd(ctx, "git", "rev-list", "--count", "origin/"+repo.defaultBranch+".."+repo.workingBranch)
+	commits = strings.TrimSpace(commits)
+	hasCommits := commits != "0"
 
-	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs)
+	if hasCommits {
 
-	if repo.prAlreadyExists {
-		// Update the description in case anything else was upgraded (or not
-		// upgraded) in this run, compared to the existing PR.
-		stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
-			"--title", repo.prTitle,
-			"--body", prBody)
-	} else {
-		extraOptions := []string{}
+		// --force:
+		//
+		// If there is no existing branch, then --force doesn't have any effect. It is thus safe.
+		//
+		// If there is an existing branch, then we will want to override it since we don't
+		// attempt to build on existing branches.
+		stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch, "--force")
+
+		prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs)
+
+		if repo.prAlreadyExists {
+			// Update the description in case anything else was upgraded (or not
+			// upgraded) in this run, compared to the existing PR.
+			stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
+				"--title", repo.prTitle,
+				"--body", prBody)
+		} else {
+			extraOptions := []string{}
+
+			if c.PrAssign != "" {
+				extraOptions = append(extraOptions, "--assignee", c.PrAssign)
+			}
+
+			switch {
+			// We create release labels when we are running the full pulumi
+			// providers process: i.e. when we discovered issues to close at the
+			// beginning of the pipeline.
+			case c.UpgradeProviderVersion && len(target.GHIssues) > 0:
+				label := upgradeLabel(ctx, repo.currentUpstreamVersion, target.Version)
+				if label != "" {
+					extraOptions = []string{"--label", label}
+				}
+			// On non-upstream upgrades, we will create a patch release label
+			// if the provider hasn't been released in 8 weeks.
+			case c.MaintenancePatch && !c.UpgradeProviderVersion:
+				extraOptions = []string{"--label", "needs-release/patch"}
+			}
+
+			stepv2.Cmd(ctx, "gh",
+				append([]string{
+					"pr", "create",
+					"--base", repo.defaultBranch,
+					"--head", repo.workingBranch,
+					"--reviewer", c.PrReviewers,
+					"--title", repo.prTitle,
+					"--body", prBody,
+				},
+					extraOptions...)...)
+		}
+
+		// If we are only upgrading the bridge, we won't have a list of issues.
+		if !c.UpgradeProviderVersion {
+			return nil
+		}
 
 		if c.PrAssign != "" {
-			extraOptions = append(extraOptions, "--assignee", c.PrAssign)
+			stepv2.Func00("Assign Issues", func(ctx context.Context) {
+				// This PR will close issues, so we assign the issues same assignee as the
+				// PR itself.
+				for _, t := range target.GHIssues {
+					stepv2.Cmd(ctx, "gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
+						"--add-assignee", c.PrAssign)
+				}
+			})(ctx)
 		}
-
-		switch {
-		// We create release labels when we are running the full pulumi
-		// providers process: i.e. when we discovered issues to close at the
-		// beginning of the pipeline.
-		case c.UpgradeProviderVersion && len(target.GHIssues) > 0:
-			label := upgradeLabel(ctx, repo.currentUpstreamVersion, target.Version)
-			if label != "" {
-				extraOptions = []string{"--label", label}
-			}
-		// On non-upstream upgrades, we will create a patch release label
-		// if the provider hasn't been released in 8 weeks.
-		case c.MaintenancePatch && !c.UpgradeProviderVersion:
-			extraOptions = []string{"--label", "needs-release/patch"}
-		}
-
-		stepv2.Cmd(ctx, "gh",
-			append([]string{
-				"pr", "create",
-				"--base", repo.defaultBranch,
-				"--head", repo.workingBranch,
-				"--reviewer", c.PrReviewers,
-				"--title", repo.prTitle,
-				"--body", prBody,
-			},
-				extraOptions...)...)
+	} else {
+		stepv2.SetLabel(ctx, "No new commits to push, skipping GitHub interaction")
 	}
-
-	// If we are only upgrading the bridge, we won't have a list of issues.
-	if !c.UpgradeProviderVersion {
-		return nil
-	}
-
-	if c.PrAssign != "" {
-		stepv2.Func00("Assign Issues", func(ctx context.Context) {
-			// This PR will close issues, so we assign the issues same assignee as the
-			// PR itself.
-			for _, t := range target.GHIssues {
-				stepv2.Cmd(ctx, "gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-					"--add-assignee", c.PrAssign)
-			}
-		})(ctx)
-	}
-
 	return nil
 })
 
