@@ -1,0 +1,360 @@
+{
+  "pipelines": [
+    {
+      "name": "Setup working branch",
+      "steps": [
+        {
+          "name": "Working Branch Name",
+          "inputs": [
+            {
+              "GoPath": "/Users/guin/go",
+              "TargetVersion": null,
+              "InferVersion": true,
+              "OnlyCheckUpstream": false,
+              "UpgradeBridgeVersion": false,
+              "TargetBridgeRef": {},
+              "UpgradeProviderVersion": false,
+              "MajorVersionBump": false,
+              "UpgradeJavaVersion": true,
+              "UpgradeJavaVersionOnly": true,
+              "MaintenancePatch": false,
+              "UpstreamProviderName": "terraform-provider-vsphere",
+              "UpstreamProviderOrg": "vmware",
+              "TargetPulumiVersion": null,
+              "JavaVersion": "1.16.0",
+              "AllowMissingDocs": false,
+              "PrReviewers": "",
+              "PrAssign": "",
+              "PRDescription": "",
+              "PRTitlePrefix": ""
+            },
+            null,
+            null,
+            ""
+          ],
+          "outputs": [
+            "upgrade-java-version-to-1.16.0",
+            null
+          ]
+        },
+        {
+          "name": "GetEnv",
+          "inputs": [
+            "CI"
+          ],
+          "outputs": [
+            "",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "Ensure Branch",
+          "inputs": [
+            "upgrade-java-version-to-1.16.0"
+          ],
+          "outputs": [
+            null
+          ]
+        },
+        {
+          "name": "git",
+          "inputs": [
+            "git",
+            [
+              "branch"
+            ]
+          ],
+          "outputs": [
+            "* master\n  upgrade-java-version-to-1.16.0\n",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "already exists",
+          "inputs": [],
+          "outputs": [
+            true,
+            null
+          ]
+        },
+        {
+          "name": "git",
+          "inputs": [
+            "git",
+            [
+              "checkout",
+              "upgrade-java-version-to-1.16.0"
+            ]
+          ],
+          "outputs": [
+            "",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "Has Existing PR",
+          "inputs": [
+            "upgrade-java-version-to-1.16.0",
+            "pulumi/pulumi-vsphere"
+          ],
+          "outputs": [
+            false,
+            null
+          ]
+        },
+        {
+          "name": "gh",
+          "inputs": [
+            "gh",
+            [
+              "pr",
+              "list",
+              "--json=title,headRefName",
+              "--repo=pulumi/pulumi-vsphere"
+            ]
+          ],
+          "outputs": [
+            "[]\n",
+            null
+          ],
+          "impure": true
+        }
+      ]
+    },
+    {
+      "name": "Tfgen & Build SDKs",
+      "steps": [
+        {
+          "name": "go",
+          "inputs": [
+            "go",
+            [
+              "mod",
+              "tidy"
+            ]
+          ],
+          "outputs": [
+            "",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "go",
+          "inputs": [
+            "go",
+            [
+              "mod",
+              "tidy"
+            ]
+          ],
+          "outputs": [
+            "",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "go",
+          "inputs": [
+            "go",
+            [
+              "mod",
+              "tidy"
+            ]
+          ],
+          "outputs": [
+            "",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "pulumi",
+          "inputs": [
+            "pulumi",
+            [
+              "plugin",
+              "rm",
+              "--all",
+              "--yes"
+            ]
+          ],
+          "outputs": [
+            "no plugins found to uninstall\n",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": ".pulumi-java-gen.version",
+          "inputs": [
+            ".pulumi-java-gen.version",
+            "1.16.0"
+          ],
+          "outputs": [
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "make",
+          "inputs": [
+            "make",
+            [
+              "tfgen"
+            ]
+          ],
+          "outputs": [
+            "make: Nothing to be done for `tfgen'.\n",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "git",
+          "inputs": [
+            "git",
+            [
+              "add",
+              "--all"
+            ]
+          ],
+          "outputs": [
+            "",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "git commit",
+          "inputs": [
+            "make tfgen"
+          ],
+          "outputs": [
+            null
+          ]
+        },
+        {
+          "name": "git",
+          "inputs": [
+            "git",
+            [
+              "status",
+              "--porcelain=1"
+            ]
+          ],
+          "outputs": [
+            "",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "make",
+          "inputs": [
+            "make",
+            [
+              "generate_java"
+            ]
+          ],
+          "outputs": [
+            "make: Nothing to be done for `generate_java'.\n",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "git",
+          "inputs": [
+            "git",
+            [
+              "add",
+              "--all"
+            ]
+          ],
+          "outputs": [
+            "",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "git commit",
+          "inputs": [
+            "make generate_java"
+          ],
+          "outputs": [
+            null
+          ]
+        },
+        {
+          "name": "git",
+          "inputs": [
+            "git",
+            [
+              "status",
+              "--porcelain=1"
+            ]
+          ],
+          "outputs": [
+            "",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "Inform Github",
+          "inputs": [
+            null,
+            {
+              "Name": "pulumi-vsphere",
+              "Org": "pulumi"
+            },
+            {
+              "Kind": "patched",
+              "Upstream": {
+                "Path": "github.com/vmware/terraform-provider-vsphere",
+                "Version": "v2.3.1+incompatible"
+              },
+              "Bridge": {
+                "Path": "github.com/pulumi/pulumi-terraform-bridge/v3",
+                "Version": "v3.111.0"
+              }
+            },
+            null,
+            "",
+            [
+              "upgrade-provider",
+              "pulumi/pulumi-vsphere",
+              "--kind=java",
+              "--java-version=1.16.0"
+            ]
+          ],
+          "outputs": [
+            null
+          ]
+        },
+        {
+          "name": "git",
+          "inputs": [
+            "git",
+            [
+              "rev-list",
+              "--count",
+              "origin/master..upgrade-java-version-to-1.16.0"
+            ]
+          ],
+          "outputs": [
+            "0\n",
+            null
+          ],
+          "impure": true
+        }
+      ]
+    }
+  ]
+}

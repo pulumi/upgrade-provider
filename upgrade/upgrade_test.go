@@ -94,6 +94,54 @@ func TestInformGithubExistingPR(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestInformGithubNoNewCommits(t *testing.T) {
+	ctx := newReplay(t, "vsphere_no_commits")
+
+	ctx = (&Context{
+		PrAssign:               "@me",
+		PrReviewers:            "pulumi/Providers,lukehoban",
+		UpstreamProviderName:   "terraform-provider-vsphere",
+		UpstreamProviderOrg:    "vmware",
+		UpgradeJavaVersion:     true,
+		UpgradeJavaVersionOnly: true,
+		JavaVersion:            "1.16.0",
+	}).Wrap(ctx)
+
+	// Override os.Args to match what the replay expects
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	os.Args = []string{"upgrade-provider", "pulumi/pulumi-vsphere", "--kind=java", "--java-version=1.16.0"}
+
+	err := step.PipelineCtx(ctx, "Tfgen & Build SDKs", func(ctx context.Context) {
+		tfgenAndBuildSDKs(
+			ProviderRepo{
+				workingBranch:   "upgrade-java-version-to-1.16.0",
+				prTitle:         "upgrade-java-version-to-1.16.0",
+				defaultBranch:   "master",
+				Name:            "pulumi-vsphere",
+				Org:             "pulumi",
+				prAlreadyExists: true,
+			},
+			"pulumi-vsphere",
+			nil,
+			&GoMod{
+				Kind: "patched",
+				Upstream: module.Version{
+					Path:    "github.com/vmware/terraform-provider-vsphere",
+					Version: "v2.3.1+incompatible",
+				},
+				Bridge: module.Version{
+					Path:    "github.com/pulumi/pulumi-terraform-bridge/v3",
+					Version: "v3.111.0",
+				},
+			},
+			nil,
+			"",
+		)(ctx)
+	})
+	require.NoError(t, err)
+}
+
 func TestBridgeUpgradeNoop(t *testing.T) {
 	ctx := newReplay(t, "gcp_noop_bridge_update")
 	ctx = (&Context{
