@@ -24,17 +24,6 @@
             null
           ],
           "impure": true
-        },
-        {
-          "name": "PULUMI_EXTRA_MAPPING_ERROR=true",
-          "inputs": [
-            "PULUMI_EXTRA_MAPPING_ERROR",
-            "true"
-          ],
-          "outputs": [
-            null
-          ],
-          "impure": true
         }
       ]
     },
