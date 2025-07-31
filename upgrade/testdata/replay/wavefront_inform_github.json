@@ -45,6 +45,22 @@
           "inputs": [
             "git",
             [
+              "rev-list",
+              "--count",
+              "origin/master..upgrade-terraform-provider-wavefront-to-v5.0.5"
+            ]
+          ],
+          "outputs": [
+            "1",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "git",
+          "inputs": [
+            "git",
+            [
               "push",
               "--set-upstream",
               "origin",
