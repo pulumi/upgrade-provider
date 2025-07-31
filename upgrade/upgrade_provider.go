@@ -47,7 +47,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			}
 			return "true"
 		}())
-		env("PULUMI_EXTRA_MAPPING_ERROR", "true")
 	})
 	if err != nil {
 		return err
