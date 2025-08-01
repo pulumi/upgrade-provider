@@ -142,6 +142,22 @@
           "inputs": [
             "git",
             [
+              "rev-list",
+              "--count",
+              "origin/master..upgrade-pulumi-terraform-bridge-to-v3.62.0"
+            ]
+          ],
+          "outputs": [
+            "1",
+            null
+          ],
+          "impure": true
+        },
+        {
+          "name": "git",
+          "inputs": [
+            "git",
+            [
               "push",
               "--set-upstream",
               "origin",
