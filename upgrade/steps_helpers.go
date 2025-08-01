@@ -452,6 +452,35 @@ var latestReleaseVersion = stepv2.Func12E("Latest Release Version",
 		return v, true, err
 	})
 
+// getRepoExpectedLocation will return one of the following:
+// 1) --repo-path: if set, returns the specified repo path
+// 2) current working directory: returns the path to the cwd if it is a provider directory
+// or subdirectory, i.e. `user/home/pulumi/pulumi-docker/provider` it
+// 3) default: $GOPATH/src/module, i.e. $GOPATH/src/github.com/pulumi/pulumi-datadog
+func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string, error) {
+	// We assume the user passed in a valid path, either absolute or relative.
+	if path := GetContext(ctx).repoPath; path != "" {
+		return path, nil
+	}
+
+	// Strip version
+	repoPath = modPathWithoutVersion(repoPath)
+
+	// from github.com/org/repo to $GOPATH/src/github.com/org
+	expectedLocation := filepath.Join(strings.Split(repoPath, "/")...)
+
+	expectedBase := filepath.Base(expectedLocation)
+
+	for cwd != "" && cwd != string(os.PathSeparator) && cwd != "." {
+		if filepath.Base(cwd) == expectedBase {
+			return cwd, nil
+		}
+		cwd = filepath.Dir(cwd)
+	}
+
+	return filepath.Join(GetContext(ctx).GoPath, "src", expectedLocation), nil
+}
+
 // Fetch the expected upgrade target from github. Return a list of open upgrade issues,
 // sorted by semantic version. The list may be empty.
 //
