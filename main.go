@@ -38,6 +38,7 @@ func cmd() *cobra.Command {
 	var upgradeKind []string
 	var repoName string
 	var repoOrg string
+	var repoPath string
 
 	ctx := context.Background()
 	context := upgrade.Context{GoPath: gopath}
@@ -143,6 +144,8 @@ func cmd() *cobra.Command {
 						upgradeKind)
 				}
 			}
+			// Set repoPath if specified
+			context.SetRepoPath(repoPath)
 
 			if context.TargetVersion != nil && !context.UpgradeProviderVersion {
 				return fmt.Errorf(
@@ -163,6 +166,9 @@ func cmd() *cobra.Command {
 		`Upgrade to the latest Java version`)
 	err := cmd.PersistentFlags().MarkHidden("upgrade-java")
 	contract.AssertNoErrorf(err, "could not mark `upgrade-java` flag as hidden")
+
+	cmd.PersistentFlags().StringVar(&repoPath, "repo-path", "",
+		`Clone the provider repo to the specified path. Skip cloning if set to "."`)
 
 	cmd.PersistentFlags().StringVar(&targetVersion, "target-version", "",
 		`Upgrade the provider to the passed version.

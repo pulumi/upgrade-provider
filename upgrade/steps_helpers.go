@@ -231,6 +231,11 @@ var setCurrentUpstreamFromPatched = stepv2.Func10E("Set Upstream From Patched", 
 		return fmt.Errorf("found empty SHA")
 	}
 
+	// If the user set --repo-path as CWD, do not init the submodules as this is assumed to have been done.
+	if !GetContext(ctx).IsCWD() {
+		stepv2.Cmd(ctx, "git", "submodule", "init")
+	}
+
 	remoteURL := strings.TrimSpace(stepv2.Cmd(ctx,
 		"git", "config", "--get", "submodule.upstream.url"))
 
