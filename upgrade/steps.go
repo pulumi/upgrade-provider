@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -39,19 +40,46 @@ var gitCommit = stepv2.Func10("git commit", func(ctx context.Context, msg string
 	}
 })
 
-var ensureRepoInCWD = stepv2.Func11E("Ensure Repo in CWD", func(ctx context.Context, repoName string) (string, error) {
-	cwd := stepv2.GetCwd(ctx)
+// Ensure that the upstream repo exists.
+//
+// The path that the upstream repo exists at is returned.
+var ensureUpstreamRepo = stepv2.Func11("Ensure Upstream Repo", func(ctx context.Context, repoPath string) string {
+	expectedLocation := stepv2.Func11E("Expected Location",
+		func(ctx context.Context, repoPath string) (string, error) {
+			cwd := stepv2.GetCwd(ctx)
+			loc, err := getRepoExpectedLocation(ctx, cwd, repoPath)
+			if err != nil {
+				return "", err
+			}
+			stepv2.SetLabel(ctx, loc)
+			return loc, nil
+		})(ctx, repoPath)
 
-	if filepath.Base(cwd) != repoName {
-		return "", fmt.Errorf("expected repo name '%s' in current directory, got '%s'", repoName, cwd)
+	repoExists := stepv2.Func11E("Repo Exists", func(ctx context.Context, loc string) (bool, error) {
+		info, exists := stepv2.Stat(ctx, loc)
+		if !exists {
+			return false, nil
+		}
+		if !info.IsDir {
+			return false, fmt.Errorf("'%s' not a directory", loc)
+		}
+		return true, nil
+	})(ctx, expectedLocation)
+
+	if !repoExists {
+		stepv2.Func10("Downloading", func(ctx context.Context, path string) {
+			targetDir := stepv2.NamedValue(ctx, "Target Dir", filepath.Dir(path))
+			stepv2.MkDirAll(ctx, targetDir, 0o700)
+			stepv2.Cmd(ctx, "git", "clone", fmt.Sprintf("https://%s.git", repoPath), path)
+		})(ctx, expectedLocation)
 	}
 
 	stepv2.Func10("Validate Repository", func(ctx context.Context, path string) {
-		ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: cwd})
+		ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: expectedLocation})
 		stepv2.Cmd(ctx, "git", "status", "--short")
-	})(ctx, cwd)
+	})(ctx, expectedLocation)
 
-	return cwd, nil
+	return expectedLocation
 })
 
 func UpgradeProviderVersion(
@@ -445,6 +473,10 @@ var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Co
 	}
 })
 
+func OrgProviderRepos(ctx context.Context, org, repo string) string {
+	return ensureUpstreamRepo(ctx, path.Join("github.com", org, repo))
+}
+
 var findDefaultBranch = stepv2.Func11E("Find default Branch", func(ctx context.Context, remote string) (string, error) {
 	lsRemoteHeads := stepv2.Cmd(ctx, "git", "ls-remote", "--heads", remote)
 	var hasMaster bool
@@ -470,6 +502,16 @@ var findDefaultBranch = stepv2.Func11E("Find default Branch", func(ctx context.C
 		return "master", nil
 	}
 	return "", fmt.Errorf("could not find 'master' or 'main' branch")
+})
+
+var pullDefaultBranch = stepv2.Func11("Pull Default Branch", func(ctx context.Context, remote string) string {
+	defaultBranch := findDefaultBranch(ctx, remote)
+
+	stepv2.Cmd(ctx, "git", "fetch")
+	stepv2.Cmd(ctx, "git", "checkout", defaultBranch)
+	stepv2.Cmd(ctx, "git", "pull", remote)
+
+	return defaultBranch
 })
 
 var majorVersionBump = stepv2.Func30("Increment Major Version", func(
