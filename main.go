@@ -100,7 +100,7 @@ func cmd() *cobra.Command {
 			// This can happen by calling `upgrade-provider --kind=""`
 			if len(upgradeKind) == 0 {
 				return fmt.Errorf("--kind=\"\" is invalid. Must be one of `all`, " +
-					"`bridge`, `provider`, `java`, or `pulumi`")
+					"`bridge`, `provider`, or `pulumi`")
 			}
 
 			// Validate the kind switch
@@ -124,9 +124,6 @@ func cmd() *cobra.Command {
 					set(&context.UpgradeBridgeVersion)
 				case "provider":
 					set(&context.UpgradeProviderVersion)
-				case "java":
-					context.UpgradeJavaVersion = true
-					context.UpgradeJavaVersionOnly = true
 				case "pulumi":
 				case "check-upstream-version":
 					if targetVersion != "" {

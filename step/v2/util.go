@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 // Name a value so it is viable to the user.
@@ -45,12 +44,6 @@ func Cmd(ctx context.Context, name string, args ...string) string {
 		if exit, ok := err.(*exec.ExitError); ok {
 			err = fmt.Errorf("%s:\n%s", err.Error(), string(exit.Stderr))
 		}
-
-		if err != nil {
-			prettyCmd := strings.Join(append([]string{name}, args...), " ")
-			err = fmt.Errorf("upgrade-provider executed `%s` which failed: %w", prettyCmd, err)
-		}
-
 		return string(out), err
 	})(ctx, name, args)
 }

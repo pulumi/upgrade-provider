@@ -289,12 +289,7 @@ func tfgenAndBuildSDKs(
 		stepv2.Cmd(ctx, "git", "add", "--all")
 		gitCommit(ctx, "make tfgen")
 
-		gen := "generate_sdks"
-		if GetContext(ctx).UpgradeJavaVersionOnly {
-			gen = "generate_java"
-		}
-
-		stepv2.Cmd(ctx, "make", gen)
+		stepv2.Cmd(ctx, "make", "generate_sdks")
 
 		// Update sdk/go.mod's module after rebuilding the go SDK
 		if GetContext(ctx).MajorVersionBump {
@@ -316,7 +311,7 @@ func tfgenAndBuildSDKs(
 
 		stepv2.Cmd(ctx, "git", "add", "--all")
 
-		gitCommit(ctx, fmt.Sprintf("make %s", gen))
+		gitCommit(ctx, "make generate_sdks")
 
 		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, tfSDKUpgrade, os.Args)
 	}
