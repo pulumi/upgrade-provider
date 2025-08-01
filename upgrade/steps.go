@@ -472,6 +472,16 @@ var findDefaultBranch = stepv2.Func11E("Find default Branch", func(ctx context.C
 	return "", fmt.Errorf("could not find 'master' or 'main' branch")
 })
 
+var pullDefaultBranch = stepv2.Func11("Pull Default Branch", func(ctx context.Context, remote string) string {
+	defaultBranch := findDefaultBranch(ctx, remote)
+
+	stepv2.Cmd(ctx, "git", "fetch")
+	stepv2.Cmd(ctx, "git", "checkout", defaultBranch)
+	stepv2.Cmd(ctx, "git", "pull", remote)
+
+	return defaultBranch
+})
+
 var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 	ctx context.Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo,
 ) {

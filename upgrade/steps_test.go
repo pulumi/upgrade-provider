@@ -233,6 +233,13 @@ func TestEnsureBranchCheckedOut(t *testing.T) {
 	}
 }
 
+func TestEnsureUpstreamRepo(t *testing.T) {
+	ctx := newReplay(t, "download_aiven")
+	err := step.CallWithReplay((&Context{GoPath: "/goPath"}).Wrap(ctx), "Discover Provider",
+		"Ensure Upstream Repo", ensureUpstreamRepo)
+	require.NoError(t, err)
+}
+
 func TestReleaseLabel(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -54,7 +54,13 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 
 	err = stepv2.PipelineCtx(ctx, "Discover Provider", func(ctx context.Context) {
 		repo.root = ensureRepoInCWD(ctx, repoName)
-		repo.defaultBranch = findDefaultBranch(ctx, "origin")
+		// If the user set --repo-path as CWD, assume all git content is already in-place; simply infer the main
+		// branch without pulling anything. Otherwise, pull.
+		if GetContext(ctx).IsCWD() {
+			repo.defaultBranch = findDefaultBranch(ctx, "origin")
+		} else {
+			repo.defaultBranch = pullDefaultBranch(ctx, "origin")
+		}
 		goMod = getRepoKind(ctx, repo)
 
 		// If we do not have the upstream provider org set in the .upgrade-config.yml, we infer it from the go mod path.
