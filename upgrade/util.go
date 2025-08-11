@@ -87,6 +87,9 @@ type Context struct {
 
 	PRDescription string
 	PRTitlePrefix string
+
+	// If true, don't actually create any PRs.
+	DryRun bool
 }
 
 // Check if the user specified operating in the current working directory (CWD) with `--repo-path=.`. In this case the
