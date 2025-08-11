@@ -91,7 +91,51 @@ func UpgradeProviderVersion(
 		// If the provider is patched, we don't use the go module system at all. Instead
 		// we update the module referenced to the new tag.
 		upstreamDir := filepath.Join(repo.root, "upstream")
-		steps = append(steps, step.Combined("update patched provider",
+
+		// Check if we're in a rebase state (user fixed rebase manually)
+		// This handles the case where `upgrade-provider` fails due to patch conflicts.
+		// In that case the user has to fix them and run `git rebase --continue` themselves.
+		var rebaseInProgress bool
+		var rebaseMergePath string
+		var rebaseApplyPath string
+		var currentBranch string
+		checkRebaseState := step.Combined("Check rebase state",
+			// these two checks are based on the check we have in `scripts/upstream.sh` to check if a rebase is in progress
+			step.Cmd("git", "rev-parse", "--git-path", "rebase-merge").In(&upstreamDir).AssignTo(&rebaseMergePath),
+			step.Cmd("git", "rev-parse", "--git-path", "rebase-apply").In(&upstreamDir).AssignTo(&rebaseApplyPath),
+			// If the user has completed the rebase (i.e. `git rebase --continue`) then we will not be in a rebase
+			// but we can't just start the tool over again because it will reset the submodule. At this point all that's
+			// left is `check_in`. After check_in is run we won't be in a branch.
+			step.Cmd("git", "branch", "--show-current").In(&upstreamDir).AssignTo(&currentBranch),
+			step.F("Check rebase state", func(ctx context.Context) (string, error) {
+				// First check if we have a current branch - if not, we're not in a rebase
+				currentBranchTrimmed := strings.TrimSpace(currentBranch)
+				if currentBranchTrimmed == "" {
+					rebaseInProgress = false
+					return "no current branch - not in rebase", nil
+				}
+
+				// Convert relative paths to absolute paths from upstream directory
+				rebaseMergeDir := filepath.Join(upstreamDir, strings.TrimSpace(rebaseMergePath))
+				rebaseApplyDir := filepath.Join(upstreamDir, strings.TrimSpace(rebaseApplyPath))
+
+				if _, err := os.Stat(rebaseMergeDir); err == nil {
+					rebaseInProgress = true
+					return "rebase-merge directory found", nil
+				}
+				if _, err := os.Stat(rebaseApplyDir); err == nil {
+					rebaseInProgress = true
+					return "rebase-apply directory found", nil
+				}
+
+				// We have a branch but no rebase directories - likely completed rebase needing check_in
+				rebaseInProgress = true
+				return fmt.Sprintf("branch '%s' exists - rebase completed, needs check_in", currentBranchTrimmed), nil
+			}),
+		)
+
+		// Steps to run when no rebase is in progress (normal flow)
+		normalSteps := step.Combined("update patched provider",
 			step.Cmd("git", "submodule", "update", "--force", "--init").In(&upstreamDir),
 			step.Cmd("git", "fetch", "--tags").In(&upstreamDir),
 			// We need to remove any patches to so we can cleanly pull the next upstream version.
@@ -102,7 +146,21 @@ func UpgradeProviderVersion(
 			step.Cmd("./scripts/upstream.sh", "rebase", "-o", "refs/tags/v"+target.String()).In(&repo.root),
 			// Turn the rebased commits back into patches.
 			step.Cmd("./scripts/upstream.sh", "check_in").In(&repo.root),
-		))
+		)
+
+		// Step to run when rebase is in progress (only check_in)
+		checkInOnly := step.Cmd("./scripts/upstream.sh", "check_in").In(&repo.root)
+
+		steps = append(steps,
+			checkRebaseState,
+			step.Computed(func() step.Step {
+				if rebaseInProgress {
+					return step.Combined("complete rebase (check_in only)", checkInOnly)
+				} else {
+					return normalSteps
+				}
+			}),
+		)
 	}
 
 	// We have an upstream we don't control, so we need to get it's SHA. We do this
