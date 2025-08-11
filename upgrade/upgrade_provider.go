@@ -68,30 +68,11 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			GetContext(ctx).UpstreamProviderOrg = parseUpstreamProviderOrg(ctx, goMod.Upstream)
 		}
 		if GetContext(ctx).UpgradeProviderVersion {
-			upgradeTarget = planProviderUpgrade(ctx, repoOrg, repoName, goMod, &repo)
+			upgradeTarget = planProviderUpgrade(ctx, repoOrg, repoName, goMod, &repo, false)
 		}
 	})
 	if err != nil {
 		return err
-	}
-
-	// When we're running a version check, we create the upgrade issue, and then exit.
-	if GetContext(ctx).OnlyCheckUpstream {
-		// UpgradeProviderVersion may be set to False at this point. We check again.
-		if GetContext(ctx).UpgradeProviderVersion {
-			pipelineName := fmt.Sprintf("New upstream version detected: v%s", upgradeTarget.Version)
-			return stepv2.PipelineCtx(ctx, pipelineName, func(ctx context.Context) {
-				createUpstreamUpgradeIssue(ctx,
-					repoOrg,
-					repoName,
-					upgradeTarget.Version.String(),
-				)
-			})
-
-		}
-		fmt.Println(colorize.Bold("No new upstream version detected. Everything up to date."))
-
-		return nil
 	}
 
 	err = stepv2.PipelineCtx(ctx, "Plan Upgrade", func(ctx context.Context) {
