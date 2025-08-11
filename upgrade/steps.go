@@ -220,6 +220,11 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
 	c := GetContext(ctx)
 
+	if c.DryRun {
+		stepv2.SetLabel(ctx, "Dry run: skipping git push and PR creation")
+		return nil
+	}
+
 	// --force:
 	//
 	// If there is no existing branch, then --force doesn't have any effect. It is thus safe.
