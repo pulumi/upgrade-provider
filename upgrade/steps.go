@@ -108,6 +108,12 @@ func UpgradeProviderVersion(
 			// left is `check_in`. After check_in is run we won't be in a branch.
 			step.Cmd("git", "branch", "--show-current").In(&upstreamDir).AssignTo(&currentBranch),
 			step.F("Check rebase state", func(ctx context.Context) (string, error) {
+				// First check if the upstream submodule has been initialized
+				gitModulesDir := filepath.Join(repo.root, ".git", "modules", "upstream")
+				if _, err := os.Stat(gitModulesDir); err != nil {
+					rebaseInProgress = false
+					return "upstream submodule not yet initialized", nil
+				}
 				// First check if we have a current branch - if not, we're not in a rebase
 				currentBranchTrimmed := strings.TrimSpace(currentBranch)
 				if currentBranchTrimmed == "" {
@@ -130,7 +136,7 @@ func UpgradeProviderVersion(
 
 				// We have a branch but no rebase directories - likely completed rebase needing check_in
 				rebaseInProgress = true
-				return fmt.Sprintf("branch '%s' exists - rebase completed, needs check_in", currentBranchTrimmed), nil
+				return fmt.Sprintf("branch '%s' exists in '%s' - rebase completed, needs check_in", currentBranchTrimmed, upstreamDir), nil
 			}),
 		)
 
