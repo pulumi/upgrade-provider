@@ -460,7 +460,8 @@ var latestReleaseVersion = stepv2.Func12E("Latest Release Version",
 func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string, error) {
 	// We assume the user passed in a valid path, either absolute or relative.
 	if path := GetContext(ctx).repoPath; path != "" {
-		return path, nil
+		// just turn it into an absolute path. This allows for "." to be passed
+		return filepath.Abs(path)
 	}
 
 	// Strip version
