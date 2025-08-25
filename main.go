@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/build"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -136,7 +137,6 @@ func cmd() *cobra.Command {
 						)
 					}
 					set(&context.UpgradeProviderVersion)
-					set(&context.OnlyCheckUpstream)
 
 				default:
 					return fmt.Errorf(
@@ -154,6 +154,11 @@ func cmd() *cobra.Command {
 			return nil
 		},
 		Run: func(_ *cobra.Command, args []string) {
+			if slices.Contains(upgradeKind, "check-upstream-version") {
+				exitOnError(upgrade.CheckUpstream(context.Wrap(ctx), repoOrg, repoName))
+				return
+			}
+
 			exitOnError(failedPreRun)
 			err := upgrade.UpgradeProvider(context.Wrap(ctx), repoOrg, repoName)
 			exitOnError(err)

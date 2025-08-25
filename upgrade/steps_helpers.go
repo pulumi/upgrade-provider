@@ -488,12 +488,6 @@ func getRepoExpectedLocation(ctx context.Context, cwd, repoPath string) (string,
 // The second argument represents a message to describe the result. It may be empty.
 var getExpectedTarget = stepv2.Func11("Get Expected Target", func(ctx context.Context,
 	name string) *UpstreamUpgradeTarget {
-
-	// we do not infer version from pulumi issues, or allow a target version when checking for a new upstream release
-	if GetContext(ctx).OnlyCheckUpstream {
-		return getExpectedTargetLatest(ctx)
-	}
-
 	if GetContext(ctx).TargetVersion != nil {
 		target := &UpstreamUpgradeTarget{Version: GetContext(ctx).TargetVersion}
 
