@@ -37,9 +37,6 @@ type Context struct {
 	UpgradeProviderVersion bool
 	MajorVersionBump       bool
 
-	UpgradeJavaVersion     bool
-	UpgradeJavaVersionOnly bool
-
 	// Some providers go for months without an upstream release, but do receive weekly bridge updates.
 	// upgrade-provider will detect if the provider's last release is more than eight weeks old, and if it is,
 	// setting this field to True will trigger a patch release on a non-upstream upgrade.
@@ -75,11 +72,6 @@ type Context struct {
 	//
 	// Otherwise, we will `replace` with TargetPulumiVersion for both pkg and sdk.
 	TargetPulumiVersion Ref
-
-	// The desired java version.
-	JavaVersion string
-	// The old java version we found.
-	oldJavaVersion string
 
 	AllowMissingDocs bool
 	PrReviewers      string
