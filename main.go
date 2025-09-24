@@ -101,7 +101,7 @@ func cmd() *cobra.Command {
 			// This can happen by calling `upgrade-provider --kind=""`
 			if len(upgradeKind) == 0 {
 				return fmt.Errorf("--kind=\"\" is invalid. Must be one of `all`, " +
-					"`bridge`, `provider`, `java`, or `pulumi`")
+					"`bridge`, `provider`, or `pulumi`")
 			}
 
 			// Validate the kind switch
@@ -125,9 +125,6 @@ func cmd() *cobra.Command {
 					set(&context.UpgradeBridgeVersion)
 				case "provider":
 					set(&context.UpgradeProviderVersion)
-				case "java":
-					context.UpgradeJavaVersion = true
-					context.UpgradeJavaVersionOnly = true
 				case "pulumi":
 				case "check-upstream-version":
 					if targetVersion != "" {
@@ -162,11 +159,6 @@ func cmd() *cobra.Command {
 
 	pulumiDev, _ := strconv.ParseBool(os.Getenv("PULUMI_DEV"))
 
-	cmd.PersistentFlags().BoolVar(&context.UpgradeJavaVersion, "upgrade-java", false,
-		`Upgrade to the latest Java version`)
-	err := cmd.PersistentFlags().MarkHidden("upgrade-java")
-	contract.AssertNoErrorf(err, "could not mark `upgrade-java` flag as hidden")
-
 	cmd.PersistentFlags().StringVar(&repoPath, "repo-path", "",
 		`Clone the provider repo to the specified path. Skip cloning if set to "."`)
 
@@ -186,7 +178,7 @@ If both '--target-version' and '--pulumi-infer-version' are passed,
 we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DEV]`)
 
 	if !pulumiDev {
-		err = cmd.PersistentFlags().MarkHidden("pulumi-infer-version")
+		err := cmd.PersistentFlags().MarkHidden("pulumi-infer-version")
 		contract.AssertNoErrorf(err, "could not mark `pulumi-infer-version` flag as hidden")
 	}
 
@@ -221,9 +213,6 @@ Required unless running from provider root and set in upgrade-config.yml.`)
 	cmd.PersistentFlags().BoolVarP(&context.AllowMissingDocs, "allow-missing-docs", "", false,
 		`If true, don't error on missing docs during tfgen.
 This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
-
-	cmd.PersistentFlags().StringVar(&context.JavaVersion, "java-version", "",
-		"The version of pulumi-java-gen to target.")
 
 	context.TargetBridgeRef = &upgrade.Latest{} // Set default
 	cmd.PersistentFlags().VarP(upgrade.RefFlag(&context.TargetBridgeRef), "target-bridge-version", "",

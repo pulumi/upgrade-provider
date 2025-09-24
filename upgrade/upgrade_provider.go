@@ -113,24 +113,6 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return err
 	}
 
-	if GetContext(ctx).UpgradeJavaVersion {
-		err = stepv2.PipelineCtx(ctx, "Planning Java Gen Version Update", func(ctx context.Context) {
-			if GetContext(ctx).JavaVersion != "" {
-				// we are pinning a java gen version via `--java-version`, so we will not query for latest.
-				stepv2.Func00("Explicit Java Gen Version", func(ctx context.Context) {
-					stepv2.SetLabel(ctx, fmt.Sprintf("Pinning Java Gen Version at %s", GetContext(ctx).JavaVersion))
-				})(ctx)
-				return
-			}
-
-			c := GetContext(ctx)
-			c.oldJavaVersion, c.JavaVersion, c.UpgradeJavaVersion = fetchLatestJavaGen(ctx)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
 	if GetContext(ctx).UpgradeProviderVersion {
 		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTarget.Version.Major()
 		if GetContext(ctx).MajorVersionBump && !shouldMajorVersionBump {
@@ -145,7 +127,7 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	// Running the discover steps might have invalidated one or more actions. If there
 	// are no actions remaining, we can exit early.
 	if ctx := GetContext(ctx); !ctx.UpgradeBridgeVersion && !ctx.UpgradeProviderVersion &&
-		ctx.TargetPulumiVersion == nil && !ctx.UpgradeJavaVersion {
+		ctx.TargetPulumiVersion == nil {
 		fmt.Println(colorize.Bold("No actions needed"))
 		return nil
 	}
@@ -285,10 +267,6 @@ func tfgenAndBuildSDKs(
 		})
 
 		stepv2.Cmd(ctx, "pulumi", "plugin", "rm", "--all", "--yes")
-		// Write Java Gen Version file
-		if GetContext(ctx).UpgradeJavaVersion {
-			stepv2.WriteFile(ctx, ".pulumi-java-gen.version", GetContext(ctx).JavaVersion)
-		}
 
 		stepv2.Cmd(ctx, "make", "tfgen")
 
@@ -296,9 +274,6 @@ func tfgenAndBuildSDKs(
 		gitCommit(ctx, "make tfgen")
 
 		gen := "generate_sdks"
-		if GetContext(ctx).UpgradeJavaVersionOnly {
-			gen = "generate_java"
-		}
 
 		stepv2.Cmd(ctx, "make", gen)
 

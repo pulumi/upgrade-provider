@@ -535,8 +535,6 @@ var getWorkingBranch = stepv2.Func41E("Working Branch Name", func(ctx context.Co
 		return ret("upgrade-pulumi-terraform-bridge-to-%s", targetBridgeVersion)
 	case c.TargetPulumiVersion != nil:
 		return ret("upgrade-pulumi-version-to-%s", c.TargetPulumiVersion)
-	case c.UpgradeJavaVersion:
-		return ret("upgrade-java-version-to-%s", c.JavaVersion)
 	default:
 		return "", fmt.Errorf("calculating branch name: unknown action")
 	}
@@ -995,39 +993,6 @@ var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 	}
 
 	return version, fmt.Sprintf("bridge %s needs terraform-plugin-sdk %s", bridgeRef, version), nil
-})
-
-var fetchLatestJavaGen = stepv2.Func03("Fetching latest Java Gen", func(ctx context.Context) (string, string, bool) {
-	latestJavaGen, foundRelease := latestReleaseVersion(ctx, "pulumi/pulumi-java")
-	contract.Assertf(foundRelease,
-		"We could not find a GH release for pulumi/pulumi-java, but we know one exists")
-
-	var currentJavaGen string
-	_, exists := stepv2.Stat(ctx, ".pulumi-java-gen.version")
-	if !exists {
-		// use dummy placeholder in lieu of reading from file
-		currentJavaGen = "0.0.0"
-	} else {
-		currentJavaGen = stepv2.ReadFile(ctx, ".pulumi-java-gen.version")
-	}
-	// we do not upgrade Java if the two versions are the same
-	if latestJavaGen.String() == currentJavaGen {
-		GetContext(ctx).UpgradeJavaVersion = false
-		stepv2.Func00("Up to date at", func(ctx context.Context) {
-			stepv2.SetLabel(ctx, latestJavaGen.String())
-		})(ctx)
-		return "", "", false
-	}
-	// Set latest Java Gen version in the context
-	GetContext(ctx).JavaVersion = latestJavaGen.String()
-	// Also set oldJavaVersion so we can report later when opening the PR
-	GetContext(ctx).oldJavaVersion = currentJavaGen
-	stepv2.Func00("Upgrading Java Gen Version", func(ctx context.Context) {
-		upgrades := fmt.Sprintf("%s -> %s", currentJavaGen, latestJavaGen)
-		stepv2.SetLabel(ctx, upgrades)
-	})(ctx)
-	stepv2.SetLabel(ctx, latestJavaGen.String())
-	return currentJavaGen, latestJavaGen.String(), true
 })
 
 var parseUpstreamProviderOrg = stepv2.Func11E("Get UpstreamOrg from module version", func(ctx context.Context, upstreamMod module.Version) (string, error) {

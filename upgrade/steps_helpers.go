@@ -144,8 +144,6 @@ func prTitle(ctx context.Context, target *UpstreamUpgradeTarget, targetBridgeVer
 		title += "Upgrade pulumi-terraform-bridge to " + targetBridgeVersion.String()
 	case c.TargetPulumiVersion != nil:
 		title += "Test: Upgrade pulumi/{pkg,sdk} to " + c.TargetPulumiVersion.String()
-	case c.UpgradeJavaVersion:
-		title += "Upgrade pulumi-java to " + c.JavaVersion
 	default:
 		return "", fmt.Errorf("unknown action")
 	}
@@ -176,13 +174,6 @@ func prBody(ctx context.Context, repo ProviderRepo,
 
 	if GetContext(ctx).MajorVersionBump {
 		fmt.Fprintf(b, "- Updating major version from %s to %s.\n", repo.currentVersion, repo.currentVersion.IncMajor())
-	}
-	if ctx := GetContext(ctx); ctx.UpgradeJavaVersion && ctx.JavaVersion != "" {
-		var from string
-		if prev := ctx.oldJavaVersion; prev != "" {
-			from = fmt.Sprintf("from %s ", prev)
-		}
-		fmt.Fprintf(b, "- Updating Java Gen version %sto %s.\n", from, ctx.JavaVersion)
 	}
 
 	if GetContext(ctx).UpgradeProviderVersion {
