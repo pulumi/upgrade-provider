@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -584,7 +585,10 @@ var pullDefaultBranch = stepv2.Func11("Pull Default Branch", func(ctx context.Co
 var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 	ctx context.Context, goMod *GoMod, target *UpstreamUpgradeTarget, repo ProviderRepo,
 ) {
-	if repo.currentVersion.Major() == 0 {
+	versionCurrent := repo.currentVersion
+	versionNewMajor := versionCurrent.IncMajor()
+
+	if versionCurrent.Major() == 0 {
 		// None of these steps are necessary or appropriate when moving from
 		// version 0.x to 1.0 because Go modules only require a version suffix for
 		// versions >= 2.0.
@@ -592,20 +596,25 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 	}
 
 	var prev string
-	if repo.currentVersion.Major() > 1 {
-		prev = fmt.Sprintf("/v%d", repo.currentVersion.Major())
+	if versionCurrent.Major() > 1 {
+		prev = fmt.Sprintf("/v%d", versionCurrent.Major())
 	}
-	next := fmt.Sprintf("/v%d", repo.currentVersion.IncMajor().Major())
+	next := fmt.Sprintf("/v%d", versionNewMajor.Major())
+
+	// ci-mgmt.yaml file needs `major-version: 1` to be bumped by number, not with the Go version suffix
+	currentMajor := strconv.FormatUint(versionCurrent.Major(), 10)
+	nextMajor := strconv.FormatUint(versionNewMajor.Major(), 10)
+	updateCiMgmtFile := buildReplaceInFile(currentMajor, nextMajor)
 
 	updateFile := buildReplaceInFile(prev, next)
 
 	name := filepath.Base(repo.root)
 
 	nextMajorVersion := stepv2.NamedValue(ctx, "Next major version",
-		repo.currentVersion.IncMajor().String())
+		versionNewMajor.String())
 
 	stepv2.WithCwd(ctx, repo.root, func(ctx context.Context) {
-		updateFile(ctx, "Update PROVIDER_PATH", ".ci-mgmt.yaml",
+		updateCiMgmtFile(ctx, "Update PROVIDER_PATH", ".ci-mgmt.yaml",
 			"major-version: {}")
 	})
 
