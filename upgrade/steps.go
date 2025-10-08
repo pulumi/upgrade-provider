@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -839,7 +840,31 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 		getNewPulumiVersionStep,
 		goGet("sdk").In(repo.sdkDir()),
 		goGet("sdk").In(repo.examplesDir()),
-		goGet("pkg").In(repo.examplesDir()))
+		goGet("pkg").In(repo.examplesDir()),
+		miseUpgrade(ctx, repo, &newSdkVersion))
+}
+
+// Run "mise upgrade" to upgrade the version in the lockfile.
+// When we upgrade the version of Pulumi in `go.mod` we need to also update the version
+// in the mise.lock file
+func miseUpgrade(ctx context.Context, repo ProviderRepo, pulumiVersion *string) step.Step {
+	var miseAvailable bool
+	checkMiseAvailable := step.F("check mise", func(context.Context) (string, error) {
+		_, err := exec.LookPath("mise")
+		miseAvailable = err == nil
+		return "", nil
+	})
+
+	return step.Computed(func() step.Step {
+		version := strings.TrimPrefix(*pulumiVersion, "v")
+		return step.Combined("mise upgrade",
+			checkMiseAvailable,
+			step.Env("PULUMI_VERSION_MISE", version),
+			step.Env("MISE_TRUSTED_CONFIG_PATHS", repo.root),
+			step.Env("MISE_YES", "1"),
+			step.When(&miseAvailable, step.Cmd("mise", "upgrade", "--raw").In(&repo.root)),
+		)
+	})
 }
 
 // Plan the update for a provider.

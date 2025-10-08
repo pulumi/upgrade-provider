@@ -2,6 +2,7 @@ package upgrade
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -222,10 +223,13 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				step.Cmd("go", "mod", "tidy"))
 		}
 
+		stringRef := ref.String()
 		steps = append(steps, step.Combined("Upgrade Pulumi Version",
 			upgrade("provider").In(repo.providerDir()),
 			upgrade("examples").In(repo.examplesDir()),
-			upgrade("sdk").In(repo.sdkDir())))
+			upgrade("sdk").In(repo.sdkDir()),
+			miseUpgrade(ctx, repo, &stringRef),
+		))
 	}
 
 	if GetContext(ctx).UpgradeBridgeVersion && GetContext(ctx).TargetPulumiVersion == nil {
@@ -252,7 +256,20 @@ func tfgenAndBuildSDKs(
 	targetBridgeVersion Ref, tfSDKUpgrade string,
 ) func(ctx context.Context) {
 	return func(ctx context.Context) {
-		ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
+		env := []stepv2.Env{&stepv2.SetCwd{To: repo.root}}
+		ctx = stepv2.WithEnv(ctx, env...)
+
+		// export the mise env variables (including the updated PATH)
+		// this is needed in case things are updated in process with mise upgrade
+		miseEnvRaw := stepv2.Cmd(ctx, "mise", "env", "--json")
+		var miseEnv map[string]string
+		err := json.Unmarshal([]byte(miseEnvRaw), &miseEnv)
+		stepv2.HaltOnError(ctx, err)
+
+		for key, value := range miseEnv {
+			env = append(env, &stepv2.EnvVar{Key: key, Value: value})
+		}
+		ctx = stepv2.WithEnv(ctx, env...)
 
 		stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
 			stepv2.Cmd(ctx, "go", "mod", "tidy")
