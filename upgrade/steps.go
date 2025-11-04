@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -816,18 +815,6 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 	// When we've updated the bridge version, we need to update the corresponding pulumi version in sdk/go.mod.
 	// It needs to match the version used in provider/go.mod, which is *not* necessarily `latest`.
 	var newSdkVersion string
-	getNewPulumiVersionStep := step.F("Get Pulumi SDK version", func(context.Context) (string, error) {
-		modFile := filepath.Join(repo.root, "provider", "go.mod")
-		lookupModule := "github.com/pulumi/pulumi/sdk/v3"
-		pulumiMod, found, err := currentGoVersionOf(modFile, lookupModule)
-		if err != nil {
-			return "", err
-		}
-		if !found {
-			return "", fmt.Errorf("%s: %s not found", modFile, lookupModule)
-		}
-		return pulumiMod.Version, nil
-	}).AssignTo(&newSdkVersion)
 
 	goGet := func(pack string) step.Step {
 		return step.Computed(func() step.Step {
@@ -837,34 +824,43 @@ func applyPulumiVersion(ctx context.Context, repo ProviderRepo) step.Step {
 	}
 
 	return step.Combined("Upgrade Pulumi version in all places",
-		getNewPulumiVersionStep,
+		getPulumiVersionFromProvider(repo, &newSdkVersion),
 		goGet("sdk").In(repo.sdkDir()),
 		goGet("sdk").In(repo.examplesDir()),
 		goGet("pkg").In(repo.examplesDir()),
-		miseUpgrade(ctx, repo, &newSdkVersion))
+	)
 }
 
-// Run "mise upgrade" to upgrade the version in the lockfile.
-// When we upgrade the version of Pulumi in `go.mod` we need to also update the version
-// in the mise.lock file
-func miseUpgrade(ctx context.Context, repo ProviderRepo, pulumiVersion *string) step.Step {
-	var miseAvailable bool
-	checkMiseAvailable := step.F("check mise", func(context.Context) (string, error) {
-		_, err := exec.LookPath("mise")
-		miseAvailable = err == nil
-		return "", nil
-	})
+func pulumiVersionFromProvider(repo ProviderRepo) (string, error) {
+	modFile := filepath.Join(repo.root, "provider", "go.mod")
+	lookupModule := "github.com/pulumi/pulumi/sdk/v3"
+	pulumiMod, found, err := currentGoVersionOf(modFile, lookupModule)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("%s: %s not found", modFile, lookupModule)
+	}
+	return pulumiMod.Version, nil
+}
 
-	return step.Computed(func() step.Step {
-		version := strings.TrimPrefix(*pulumiVersion, "v")
-		return step.Combined("mise upgrade",
-			checkMiseAvailable,
-			step.Env("PULUMI_VERSION_MISE", version),
-			step.Env("MISE_TRUSTED_CONFIG_PATHS", repo.root),
-			step.Env("MISE_YES", "1"),
-			step.When(&miseAvailable, step.Cmd("mise", "upgrade", "--raw").In(&repo.root)),
-		)
-	})
+func getPulumiVersionFromProvider(repo ProviderRepo, dest *string) step.Step {
+	return step.F("Get Pulumi SDK version", func(context.Context) (string, error) {
+		return pulumiVersionFromProvider(repo)
+	}).AssignTo(dest)
+}
+
+func goVersionFromProvider(repo ProviderRepo) (string, error) {
+	modFile := filepath.Join(repo.root, "provider", "go.mod")
+	version, found, err := currentGoVersion(modFile)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("%s: Go version not found", modFile)
+	}
+	// Toolchain entries are prefixed with "go" (e.g. go1.24.6); remove the prefix for downstream tooling.
+	return strings.TrimPrefix(version, "go"), nil
 }
 
 // Plan the update for a provider.
