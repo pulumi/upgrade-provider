@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/pulumi/upgrade-provider/colorize"
@@ -223,12 +224,10 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				step.Cmd("go", "mod", "tidy"))
 		}
 
-		stringRef := ref.String()
 		steps = append(steps, step.Combined("Upgrade Pulumi Version",
 			upgrade("provider").In(repo.providerDir()),
 			upgrade("examples").In(repo.examplesDir()),
 			upgrade("sdk").In(repo.sdkDir()),
-			miseUpgrade(ctx, repo, &stringRef),
 		))
 	}
 
@@ -259,17 +258,12 @@ func tfgenAndBuildSDKs(
 		env := []stepv2.Env{&stepv2.SetCwd{To: repo.root}}
 		ctx = stepv2.WithEnv(ctx, env...)
 
-		// export the mise env variables (including the updated PATH)
-		// this is needed in case things are updated in process with mise upgrade
-		miseEnvRaw := stepv2.Cmd(ctx, "mise", "env", "--json")
-		var miseEnv map[string]string
-		err := json.Unmarshal([]byte(miseEnvRaw), &miseEnv)
-		stepv2.HaltOnError(ctx, err)
+		miseEnvVars := map[string]*stepv2.EnvVar{}
 
-		for key, value := range miseEnv {
-			env = append(env, &stepv2.EnvVar{Key: key, Value: value})
+		miseAvailable := runMiseUpgrade(ctx, repo)
+		if miseAvailable {
+			ctx = refreshMiseEnv(ctx, &env, miseEnvVars)
 		}
-		ctx = stepv2.WithEnv(ctx, env...)
 
 		stepv2.WithCwd(ctx, *repo.providerDir(), func(ctx context.Context) {
 			stepv2.Cmd(ctx, "go", "mod", "tidy")
@@ -282,6 +276,12 @@ func tfgenAndBuildSDKs(
 		stepv2.WithCwd(ctx, *repo.sdkDir(), func(ctx context.Context) {
 			stepv2.Cmd(ctx, "go", "mod", "tidy")
 		})
+
+		if miseAvailable {
+			if runMiseUpgrade(ctx, repo) {
+				ctx = refreshMiseEnv(ctx, &env, miseEnvVars)
+			}
+		}
 
 		stepv2.Cmd(ctx, "pulumi", "plugin", "rm", "--all", "--yes")
 
@@ -318,4 +318,49 @@ func tfgenAndBuildSDKs(
 
 		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, tfSDKUpgrade, os.Args)
 	}
+}
+
+func runMiseUpgrade(ctx context.Context, repo ProviderRepo) bool {
+	if _, err := exec.LookPath("mise"); err != nil {
+		stepv2.SetLabel(ctx, "mise not found; skipping upgrade")
+		return false
+	}
+
+	pulumiVersion, err := pulumiVersionFromProvider(repo)
+	stepv2.HaltOnError(ctx, err)
+	goVersion, err := goVersionFromProvider(repo)
+	stepv2.HaltOnError(ctx, err)
+
+	version := strings.TrimPrefix(pulumiVersion, "v")
+
+	miseCtx := stepv2.WithEnv(ctx,
+		&stepv2.EnvVar{Key: "PULUMI_VERSION_MISE", Value: version},
+		&stepv2.EnvVar{Key: "GO_VERSION_MISE", Value: goVersion},
+		&stepv2.EnvVar{Key: "MISE_TRUSTED_CONFIG_PATHS", Value: repo.root},
+		&stepv2.EnvVar{Key: "MISE_YES", Value: "1"},
+	)
+
+	stepv2.Cmd(miseCtx, "mise", "upgrade", "--raw")
+	return true
+}
+
+func refreshMiseEnv(ctx context.Context, env *[]stepv2.Env, current map[string]*stepv2.EnvVar) context.Context {
+	miseEnvRaw := stepv2.Cmd(ctx, "mise", "env", "--json")
+	var miseEnv map[string]string
+	err := json.Unmarshal([]byte(miseEnvRaw), &miseEnv)
+	stepv2.HaltOnError(ctx, err)
+
+	for key, value := range miseEnv {
+		if existing, ok := current[key]; ok {
+			existing.Value = value
+			continue
+		}
+
+		envVar := &stepv2.EnvVar{Key: key, Value: value}
+		current[key] = envVar
+		*env = append(*env, envVar)
+		ctx = stepv2.WithEnv(ctx, envVar)
+	}
+
+	return ctx
 }
