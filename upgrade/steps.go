@@ -649,7 +649,7 @@ var majorVersionBump = stepv2.Func30("Increment Major Version", func(
 					goMod.Upstream.Path); ok && major != "" {
 					newUpstream := fmt.Sprintf("%s/v%d",
 						prefix, target.Version.Major())
-					new = strings.ReplaceAll(data,
+					new = strings.ReplaceAll(new,
 						goMod.Upstream.Path,
 						newUpstream)
 				}
