@@ -300,12 +300,19 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 
 	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs)
 
+	var newPrURL string
 	if repo.prAlreadyExists {
 		// Update the description in case anything else was upgraded (or not
 		// upgraded) in this run, compared to the existing PR.
 		stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
 			"--title", repo.prTitle,
 			"--body", prBody)
+		newPrURL = strings.TrimSpace(stepv2.Cmd(ctx, "gh",
+			"pr", "view", repo.workingBranch,
+			"--repo", fmt.Sprintf("%s/%s", repo.Org, repo.Name),
+			"--json", "url",
+			"--jq", ".url",
+		))
 	} else {
 		extraOptions := []string{}
 
@@ -328,7 +335,7 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 			extraOptions = []string{"--label", "needs-release/patch"}
 		}
 
-		stepv2.Cmd(ctx, "gh",
+		newPrURL = strings.TrimSpace(stepv2.Cmd(ctx, "gh",
 			append([]string{
 				"pr", "create",
 				"--base", repo.defaultBranch,
@@ -337,7 +344,15 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 				"--title", repo.prTitle,
 				"--body", prBody,
 			},
-				extraOptions...)...)
+				extraOptions...)...))
+	}
+
+	if c.UpgradeBridgeVersion && newPrURL != "" {
+		closeSupersededBridgePRs(ctx,
+			fmt.Sprintf("%s/%s", repo.Org, repo.Name),
+			repo.workingBranch,
+			newPrURL,
+		)
 	}
 
 	// If we are only upgrading the bridge, we won't have a list of issues.
