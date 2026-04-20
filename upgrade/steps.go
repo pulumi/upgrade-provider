@@ -1041,3 +1041,32 @@ var parseUpstreamProviderOrg = stepv2.Func11E("Get UpstreamOrg from module versi
 	tok := strings.Split(modPathWithoutVersion(upstreamMod.Path), "/")
 	return tok[1], nil
 })
+
+// closeSupersededBridgePRs closes any open "Upgrade pulumi-terraform-bridge" PRs
+// authored by the current user, except the PR on keepBranch (the PR we just created or updated).
+// Each closed PR gets a comment pointing at newPrURL.
+//
+// Best-effort: a failure to close one PR must not abort the upgrade.
+var closeSupersededBridgePRs = stepv2.Func30E("Close superseded bridge PRs", func(
+	ctx context.Context, repo, keepBranch, newPrURL string,
+) error {
+	raw := stepv2.Cmd(ctx, "gh",
+		"pr", "list",
+		"--repo", repo,
+		"--state", "open",
+		"--search", `author:@me in:title "Upgrade pulumi-terraform-bridge"`,
+		"--json", "number,headRefName",
+	)
+
+	var prs []struct {
+		Number      int    `json:"number"`
+		HeadRefName string `json:"headRefName"`
+	}
+	if err := json.Unmarshal([]byte(raw), &prs); err != nil {
+		return fmt.Errorf("parse gh pr list output: %w", err)
+	}
+
+	// Task 2 will add the close loop. For now, just return.
+	_ = prs
+	return nil
+})

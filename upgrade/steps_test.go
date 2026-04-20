@@ -489,3 +489,39 @@ var _ httpHandler = (*simpleHttpHandler)(nil)
 func (sh simpleHttpHandler) getHTTP(url string) ([]byte, error) {
 	return sh(url)
 }
+
+func TestCloseSupersededBridgePRs_ListOnly(t *testing.T) {
+	t.Parallel()
+
+	encode := func(elem any) json.RawMessage {
+		b, err := json.Marshal(elem)
+		require.NoError(t, err)
+		return json.RawMessage(b)
+	}
+
+	repo := "pulumi/pulumi-xyz"
+	keepBranch := "upgrade-pulumi-terraform-bridge-to-v3.99.0-ci"
+	newPrURL := "https://github.com/pulumi/pulumi-xyz/pull/42"
+
+	testReplay(context.Background(), t, []*step.Step{
+		{
+			Name:    "Close superseded bridge PRs",
+			Inputs:  encode([]string{repo, keepBranch, newPrURL}),
+			Outputs: encode([]any{nil}),
+		},
+		{
+			Name: "gh",
+			Inputs: encode([]any{
+				"gh", []string{
+					"pr", "list",
+					"--repo", repo,
+					"--state", "open",
+					"--search", `author:@me in:title "Upgrade pulumi-terraform-bridge"`,
+					"--json", "number,headRefName",
+				},
+			}),
+			Outputs: encode([]any{`[]`, nil}),
+			Impure:  true,
+		},
+	}, "Close superseded bridge PRs", closeSupersededBridgePRs)
+}
