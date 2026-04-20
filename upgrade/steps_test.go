@@ -490,7 +490,7 @@ func (sh simpleHttpHandler) getHTTP(url string) ([]byte, error) {
 	return sh(url)
 }
 
-func TestCloseSupersededBridgePRs_ListOnly(t *testing.T) {
+func TestCloseSupersededBridgePRs_EmptyList(t *testing.T) {
 	t.Parallel()
 
 	encode := func(elem any) json.RawMessage {
