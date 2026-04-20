@@ -347,20 +347,9 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 				extraOptions...)...))
 	}
 
-	if c.UpgradeBridgeVersion && newPrURL != "" {
-		closeSupersededBridgePRs(ctx,
-			fmt.Sprintf("%s/%s", repo.Org, repo.Name),
-			repo.workingBranch,
-			newPrURL,
-		)
-	}
-
-	// If we are only upgrading the bridge, we won't have a list of issues.
-	if !c.UpgradeProviderVersion {
-		return nil
-	}
-
-	if c.PrAssign != "" {
+	// If we are only upgrading the bridge, we won't have a list of issues, so
+	// skip assignee plumbing in that case.
+	if c.UpgradeProviderVersion && c.PrAssign != "" {
 		stepv2.Func00("Assign Issues", func(ctx context.Context) {
 			// This PR will close issues, so we assign the issues same assignee as the
 			// PR itself.
@@ -369,6 +358,16 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 					"--add-assignee", c.PrAssign)
 			}
 		})(ctx)
+	}
+
+	// Close superseded bridge PRs last so a failure here does not skip any
+	// earlier side effects (issue assignment, PR body update, etc.).
+	if c.UpgradeBridgeVersion && newPrURL != "" {
+		closeSupersededBridgePRs(ctx,
+			fmt.Sprintf("%s/%s", repo.Org, repo.Name),
+			repo.workingBranch,
+			newPrURL,
+		)
 	}
 
 	return nil
