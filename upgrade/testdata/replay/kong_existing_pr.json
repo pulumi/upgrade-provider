@@ -109,8 +109,8 @@
           "inputs": [
             null,
             {
-              "Org": "",
-              "Name":"pulumi/pulumi-kong"
+              "Org": "pulumi",
+              "Name":"pulumi-kong"
             },
             {
               "Kind": "plain",
@@ -184,7 +184,7 @@
               "view",
               "upgrade-pulumi-terraform-bridge-to-v3.62.0",
               "--repo",
-              "/pulumi/pulumi-kong",
+              "pulumi/pulumi-kong",
               "--json",
               "url",
               "--jq",
@@ -200,7 +200,7 @@
         {
           "name": "Close superseded bridge PRs",
           "inputs": [
-            "/pulumi/pulumi-kong",
+            "pulumi/pulumi-kong",
             "upgrade-pulumi-terraform-bridge-to-v3.62.0",
             "https://github.com/pulumi/pulumi-kong/pull/228"
           ],
@@ -216,7 +216,7 @@
               "pr",
               "list",
               "--repo",
-              "/pulumi/pulumi-kong",
+              "pulumi/pulumi-kong",
               "--state",
               "open",
               "--search",
