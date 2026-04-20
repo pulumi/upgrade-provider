@@ -525,3 +525,80 @@ func TestCloseSupersededBridgePRs_ListOnly(t *testing.T) {
 		},
 	}, "Close superseded bridge PRs", closeSupersededBridgePRs)
 }
+
+func TestCloseSupersededBridgePRs_Filters(t *testing.T) {
+	t.Parallel()
+
+	encode := func(elem any) json.RawMessage {
+		b, err := json.Marshal(elem)
+		require.NoError(t, err)
+		return json.RawMessage(b)
+	}
+
+	repo := "pulumi/pulumi-xyz"
+	keepBranch := "upgrade-pulumi-terraform-bridge-to-v3.99.0-ci"
+	newPrURL := "https://github.com/pulumi/pulumi-xyz/pull/42"
+
+	listJSON := `[
+		{"number": 10, "headRefName": "upgrade-pulumi-terraform-bridge-to-v3.97.0-ci"},
+		{"number": 11, "headRefName": "upgrade-pulumi-terraform-bridge-to-v3.99.0-ci"},
+		{"number": 12, "headRefName": "upgrade-pulumi-terraform-bridge-to-v3.98.0-ci"}
+	]`
+	comment := "Superseded by " + newPrURL
+
+	testReplay(context.Background(), t, []*step.Step{
+		{
+			Name:    "Close superseded bridge PRs",
+			Inputs:  encode([]string{repo, keepBranch, newPrURL}),
+			Outputs: encode([]any{nil}),
+		},
+		{
+			Name: "gh",
+			Inputs: encode([]any{
+				"gh", []string{
+					"pr", "list",
+					"--repo", repo,
+					"--state", "open",
+					"--search", `author:@me in:title "Upgrade pulumi-terraform-bridge"`,
+					"--json", "number,headRefName",
+				},
+			}),
+			Outputs: encode([]any{listJSON, nil}),
+			Impure:  true,
+		},
+		{
+			Name: "Close #10",
+			Inputs: encode([]string{"10"}),
+			Outputs: encode([]any{nil}),
+		},
+		{
+			Name: "gh",
+			Inputs: encode([]any{
+				"gh", []string{
+					"pr", "close", "10",
+					"--repo", repo,
+					"--comment", comment,
+				},
+			}),
+			Outputs: encode([]any{"", nil}),
+			Impure:  true,
+		},
+		{
+			Name: "Close #12",
+			Inputs: encode([]string{"12"}),
+			Outputs: encode([]any{nil}),
+		},
+		{
+			Name: "gh",
+			Inputs: encode([]any{
+				"gh", []string{
+					"pr", "close", "12",
+					"--repo", repo,
+					"--comment", comment,
+				},
+			}),
+			Outputs: encode([]any{"", nil}),
+			Impure:  true,
+		},
+	}, "Close superseded bridge PRs", closeSupersededBridgePRs)
+}

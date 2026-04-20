@@ -1046,7 +1046,7 @@ var parseUpstreamProviderOrg = stepv2.Func11E("Get UpstreamOrg from module versi
 // authored by the current user, except the PR on keepBranch (the PR we just created or updated).
 // Each closed PR gets a comment pointing at newPrURL.
 //
-// Best-effort: a failure to close one PR must not abort the upgrade.
+// A failing gh call halts the upgrade, matching the style of other gh operations in this file.
 var closeSupersededBridgePRs = stepv2.Func30E("Close superseded bridge PRs", func(
 	ctx context.Context, repo, keepBranch, newPrURL string,
 ) error {
@@ -1066,7 +1066,19 @@ var closeSupersededBridgePRs = stepv2.Func30E("Close superseded bridge PRs", fun
 		return fmt.Errorf("parse gh pr list output: %w", err)
 	}
 
-	// Task 2 will add the close loop. For now, just return.
-	_ = prs
+	for _, pr := range prs {
+		if pr.HeadRefName == keepBranch {
+			continue
+		}
+		pr := pr
+		stepv2.Func10E(fmt.Sprintf("Close #%d", pr.Number), func(ctx context.Context, num string) error {
+			stepv2.Cmd(ctx, "gh",
+				"pr", "close", num,
+				"--repo", repo,
+				"--comment", "Superseded by "+newPrURL,
+			)
+			return nil
+		})(ctx, fmt.Sprintf("%d", pr.Number))
+	}
 	return nil
 })
