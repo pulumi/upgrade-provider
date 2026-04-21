@@ -71,7 +71,8 @@ func TestInformGithubExistingPR(t *testing.T) {
 				workingBranch:   "upgrade-pulumi-terraform-bridge-to-v3.62.0",
 				prTitle:         "Upgrade pulumi-terraform-bridge to v3.62.0",
 				defaultBranch:   "master",
-				Name:            "pulumi/pulumi-kong",
+				Org:             "pulumi",
+				Name:            "pulumi-kong",
 				prAlreadyExists: true,
 			}, &GoMod{
 				Kind: "plain",

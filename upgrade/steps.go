@@ -300,12 +300,19 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 
 	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs)
 
+	var newPrURL string
 	if repo.prAlreadyExists {
 		// Update the description in case anything else was upgraded (or not
 		// upgraded) in this run, compared to the existing PR.
 		stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
 			"--title", repo.prTitle,
 			"--body", prBody)
+		newPrURL = strings.TrimSpace(stepv2.Cmd(ctx, "gh",
+			"pr", "view", repo.workingBranch,
+			"--repo", fmt.Sprintf("%s/%s", repo.Org, repo.Name),
+			"--json", "url",
+			"--jq", ".url",
+		))
 	} else {
 		extraOptions := []string{}
 
@@ -328,7 +335,7 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 			extraOptions = []string{"--label", "needs-release/patch"}
 		}
 
-		stepv2.Cmd(ctx, "gh",
+		newPrURL = strings.TrimSpace(stepv2.Cmd(ctx, "gh",
 			append([]string{
 				"pr", "create",
 				"--base", repo.defaultBranch,
@@ -337,15 +344,12 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 				"--title", repo.prTitle,
 				"--body", prBody,
 			},
-				extraOptions...)...)
+				extraOptions...)...))
 	}
 
-	// If we are only upgrading the bridge, we won't have a list of issues.
-	if !c.UpgradeProviderVersion {
-		return nil
-	}
-
-	if c.PrAssign != "" {
+	// If we are only upgrading the bridge, we won't have a list of issues, so
+	// skip assignee plumbing in that case.
+	if c.UpgradeProviderVersion && c.PrAssign != "" {
 		stepv2.Func00("Assign Issues", func(ctx context.Context) {
 			// This PR will close issues, so we assign the issues same assignee as the
 			// PR itself.
@@ -354,6 +358,16 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 					"--add-assignee", c.PrAssign)
 			}
 		})(ctx)
+	}
+
+	// Close superseded bridge PRs last so a failure here does not skip any
+	// earlier side effects (issue assignment, PR body update, etc.).
+	if c.UpgradeBridgeVersion && newPrURL != "" {
+		closeSupersededBridgePRs(ctx,
+			fmt.Sprintf("%s/%s", repo.Org, repo.Name),
+			repo.workingBranch,
+			newPrURL,
+		)
 	}
 
 	return nil
@@ -1040,4 +1054,45 @@ var parseUpstreamProviderOrg = stepv2.Func11E("Get UpstreamOrg from module versi
 	}
 	tok := strings.Split(modPathWithoutVersion(upstreamMod.Path), "/")
 	return tok[1], nil
+})
+
+// closeSupersededBridgePRs closes any open "Upgrade pulumi-terraform-bridge" PRs
+// authored by the current user, except the PR on keepBranch (the PR we just created or updated).
+// Each closed PR gets a comment pointing at newPrURL.
+//
+// A failing gh call halts the upgrade, matching the style of other gh operations in this file.
+var closeSupersededBridgePRs = stepv2.Func30E("Close superseded bridge PRs", func(
+	ctx context.Context, repo, keepBranch, newPrURL string,
+) error {
+	raw := stepv2.Cmd(ctx, "gh",
+		"pr", "list",
+		"--repo", repo,
+		"--state", "open",
+		"--search", `author:@me in:title "Upgrade pulumi-terraform-bridge"`,
+		"--json", "number,headRefName",
+	)
+
+	var prs []struct {
+		Number      int    `json:"number"`
+		HeadRefName string `json:"headRefName"`
+	}
+	if err := json.Unmarshal([]byte(raw), &prs); err != nil {
+		return fmt.Errorf("parse gh pr list output: %w", err)
+	}
+
+	for _, pr := range prs {
+		if pr.HeadRefName == keepBranch {
+			continue
+		}
+		pr := pr
+		stepv2.Func10E(fmt.Sprintf("Close #%d", pr.Number), func(ctx context.Context, num string) error {
+			stepv2.Cmd(ctx, "gh",
+				"pr", "close", num,
+				"--repo", repo,
+				"--comment", "Superseded by "+newPrURL,
+			)
+			return nil
+		})(ctx, fmt.Sprintf("%d", pr.Number))
+	}
+	return nil
 })
