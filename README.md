@@ -56,6 +56,7 @@ Usage:
 Flags:
       --allow-missing-docs              If true, don't error on missing docs during tfgen.
                                         This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.
+      --allow-major                     Allow the provider to upgrade to a new major version when one is available.
   -h, --help                            help for upgrade-provider
       --java-version string             The version of pulumi-java-gen to target.
       --kind strings                    The kind of upgrade to perform:
@@ -201,6 +202,8 @@ A configuration file `.upgrade-config.{yml/json}` may be defined within the prov
 Values include:
 
 - `upstream-provider-name`: The name of the upstream provider repo, i.e. `terraform-provider-docker`
+- `allow-major`: Allow provider upgrades to proceed through the major-version upgrade path when the target upstream
+  version crosses a major version boundary.
 - `pr-reviewers`: A comma separated list of reviewers to assign the upgrade PR to.
 - `pr-assign`: A user to assign the upgrade PR to (default: `@me`).
 

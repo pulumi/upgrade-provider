@@ -111,6 +111,107 @@ func TestBridgeUpgradeNoop(t *testing.T) {
 	assert.False(t, GetContext(ctx).UpgradeBridgeVersion)
 }
 
+func TestApplyMajorVersionPolicy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		current     string
+		target      string
+		major       bool
+		allowMajor  bool
+		unknown     bool
+		expectMajor bool
+		expectErr   string
+	}{
+		{
+			name:        "minor upgrade without flags proceeds normally",
+			current:     "1.1.0",
+			target:      "1.2.0",
+			expectMajor: false,
+		},
+		{
+			name:        "minor upgrade with allow-major proceeds normally",
+			current:     "1.1.0",
+			target:      "1.2.0",
+			allowMajor:  true,
+			expectMajor: false,
+		},
+		{
+			name:        "minor upgrade with major assertion errors",
+			current:     "1.1.0",
+			target:      "1.2.0",
+			major:       true,
+			expectMajor: true,
+			expectErr:   "--major version update indicated, but no major upgrade available (already on v1)",
+		},
+		{
+			name:        "major upgrade without flags errors",
+			current:     "1.1.0",
+			target:      "2.0.0",
+			expectMajor: false,
+			expectErr:   "this is a major version update (v1 -> v2), but neither --major nor --allow-major was passed",
+		},
+		{
+			name:        "major upgrade with allow-major enables major bump",
+			current:     "1.1.0",
+			target:      "2.0.0",
+			allowMajor:  true,
+			expectMajor: true,
+		},
+		{
+			name:        "major upgrade with major assertion proceeds",
+			current:     "1.1.0",
+			target:      "2.0.0",
+			major:       true,
+			expectMajor: true,
+		},
+		{
+			name:        "major upgrade with both flags proceeds",
+			current:     "1.1.0",
+			target:      "2.0.0",
+			major:       true,
+			allowMajor:  true,
+			expectMajor: true,
+		},
+		{
+			name:      "unknown current upstream version errors",
+			target:    "2.0.0",
+			unknown:   true,
+			expectErr: "could not determine current upstream version; cannot determine whether 2.0.0 is a major version update",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			c := &Context{
+				UpgradeProviderVersion: true,
+				MajorVersionBump:       tt.major,
+				AllowMajorVersionBump:  tt.allowMajor,
+			}
+			ctx := c.Wrap(context.Background())
+			repo := ProviderRepo{}
+			if !tt.unknown {
+				repo.currentUpstreamVersion = semver.MustParse(tt.current)
+			}
+			target := &UpstreamUpgradeTarget{
+				Version: semver.MustParse(tt.target),
+			}
+
+			err := applyMajorVersionPolicy(ctx, &repo, target)
+			if tt.expectErr != "" {
+				require.EqualError(t, err, tt.expectErr)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.expectMajor, c.MajorVersionBump)
+		})
+	}
+}
+
 func newReplay(t *testing.T, name string) context.Context {
 	t.Helper()
 	ctx := context.Background()
