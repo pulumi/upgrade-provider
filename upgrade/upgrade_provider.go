@@ -22,6 +22,34 @@ func setEnv(ctx context.Context, k, v string) {
 	})(ctx, k, v)
 }
 
+func applyMajorVersionPolicy(ctx context.Context, repo *ProviderRepo, upgradeTarget *UpstreamUpgradeTarget) error {
+	c := GetContext(ctx)
+	if !c.UpgradeProviderVersion || upgradeTarget == nil || upgradeTarget.Version == nil {
+		return nil
+	}
+	if repo.currentUpstreamVersion == nil {
+		return fmt.Errorf("could not determine current upstream version; cannot determine whether %s is a major version update",
+			upgradeTarget.Version)
+	}
+
+	shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTarget.Version.Major()
+	if c.MajorVersionBump && !shouldMajorVersionBump {
+		return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
+			repo.currentUpstreamVersion.Major())
+	}
+	if shouldMajorVersionBump {
+		if c.AllowMajorVersionBump {
+			c.MajorVersionBump = true
+			return nil
+		}
+		if !c.MajorVersionBump {
+			return fmt.Errorf("this is a major version update (v%d -> v%d), but neither --major nor --allow-major was passed",
+				repo.currentUpstreamVersion.Major(), upgradeTarget.Version.Major())
+		}
+	}
+	return nil
+}
+
 func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) {
 	// Setup ctx to enable replay tests with stepv2:
 	if file := os.Getenv("PULUMI_REPLAY"); file != "" {
@@ -107,23 +135,17 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 			GetContext(ctx).MaintenancePatch = maintenanceRelease(ctx, repo)
 		}
 
+		if GetContext(ctx).UpgradeProviderVersion {
+			err := applyMajorVersionPolicy(ctx, &repo, upgradeTarget)
+			stepv2.HaltOnError(ctx, err)
+		}
+
 		if GetContext(ctx).MajorVersionBump {
 			repo.currentVersion = findCurrentMajorVersion(ctx, repoOrg, repoName)
 		}
 	})
 	if err != nil {
 		return err
-	}
-
-	if GetContext(ctx).UpgradeProviderVersion {
-		shouldMajorVersionBump := repo.currentUpstreamVersion.Major() != upgradeTarget.Version.Major()
-		if GetContext(ctx).MajorVersionBump && !shouldMajorVersionBump {
-			return fmt.Errorf("--major version update indicated, but no major upgrade available (already on v%d)",
-				repo.currentUpstreamVersion.Major())
-		} else if !GetContext(ctx).MajorVersionBump && shouldMajorVersionBump {
-			return fmt.Errorf("this is a major version update (v%d -> v%d), but --major was not passed",
-				repo.currentUpstreamVersion.Major(), upgradeTarget.Version.Major())
-		}
 	}
 
 	// Running the discover steps might have invalidated one or more actions. If there

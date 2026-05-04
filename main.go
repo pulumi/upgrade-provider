@@ -185,6 +185,9 @@ we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DE
 	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
 		`Upgrade the provider to a new major version.`)
 
+	cmd.PersistentFlags().BoolVar(&context.AllowMajorVersionBump, "allow-major", false,
+		`Allow the provider to upgrade to a new major version when one is available.`)
+
 	kindMsg := `The kind of upgrade to perform:
 
 - "all": Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider".
@@ -281,12 +284,16 @@ func initializeConfig(cmd *cobra.Command) error {
 
 // Bind each cobra flag to its associated viper configuration (config file and environment variable)
 func bindFlags(cmd *cobra.Command, v *viper.Viper) {
-	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		// Apply the viper config value to the flag when the flag is not set and viper has a value
-		if !f.Changed && v.IsSet(f.Name) {
-			val := v.Get(f.Name)
-			err := cmd.Flags().Set(f.Name, fmt.Sprintf("%v", val))
-			contract.AssertNoErrorf(err, "error setting flag")
-		}
-	})
+	bindFlagSet := func(flags *pflag.FlagSet) {
+		flags.VisitAll(func(f *pflag.Flag) {
+			// Apply the viper config value to the flag when the flag is not set and viper has a value
+			if !f.Changed && v.IsSet(f.Name) {
+				val := v.Get(f.Name)
+				err := flags.Set(f.Name, fmt.Sprintf("%v", val))
+				contract.AssertNoErrorf(err, "error setting flag")
+			}
+		})
+	}
+	bindFlagSet(cmd.Flags())
+	bindFlagSet(cmd.PersistentFlags())
 }
