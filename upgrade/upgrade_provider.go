@@ -228,6 +228,15 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 				"github.com/pulumi/pulumi-terraform-bridge/v3@"+targetBridgeVersion.String()),
 			step.Cmd("go", "get", "github.com/hashicorp/terraform-plugin-framework"),
 			step.Cmd("go", "get", "github.com/hashicorp/terraform-plugin-mux"),
+			// pulumi-java was renamed from pulumi-java/pkg to pulumi-java in
+			// pulumi-java#2121. The legacy module's last release (v1.22.0) is
+			// incompatible with pulumi/pulumi v3.232.0+. Go resolves the import
+			// path github.com/pulumi/pulumi-java/pkg/codegen/java to whichever
+			// module has the longest matching prefix, so as long as a stale
+			// `pulumi-java/pkg` require remains, it shadows the new module.
+			// No-op once the require is gone.
+			step.Cmd("go", "mod", "edit",
+				"-droprequire", "github.com/pulumi/pulumi-java/pkg"),
 			step.Cmd("go", "mod", "tidy"),
 		).In(repo.providerDir()))
 	}
