@@ -291,7 +291,8 @@ func tfgenAndBuildSDKs(
 
 		miseEnvVars := map[string]*stepv2.EnvVar{}
 
-		miseAvailable := runMiseUpgrade(ctx, repo)
+		miseAvailable := false
+		ctx, miseAvailable = runMiseUpgrade(ctx, repo, &env, miseEnvVars)
 		if miseAvailable {
 			ctx = refreshMiseEnv(ctx, &env, miseEnvVars)
 		}
@@ -309,7 +310,8 @@ func tfgenAndBuildSDKs(
 		})
 
 		if miseAvailable {
-			if runMiseUpgrade(ctx, repo) {
+			if updatedCtx, ok := runMiseUpgrade(ctx, repo, &env, miseEnvVars); ok {
+				ctx = updatedCtx
 				ctx = refreshMiseEnv(ctx, &env, miseEnvVars)
 			}
 		}
@@ -351,10 +353,12 @@ func tfgenAndBuildSDKs(
 	}
 }
 
-func runMiseUpgrade(ctx context.Context, repo ProviderRepo) bool {
+func runMiseUpgrade(
+	ctx context.Context, repo ProviderRepo, env *[]stepv2.Env, current map[string]*stepv2.EnvVar,
+) (context.Context, bool) {
 	if _, err := exec.LookPath("mise"); err != nil {
 		stepv2.SetLabel(ctx, "mise not found; skipping upgrade")
-		return false
+		return ctx, false
 	}
 
 	pulumiVersion, err := pulumiVersionFromProvider(repo)
@@ -364,15 +368,27 @@ func runMiseUpgrade(ctx context.Context, repo ProviderRepo) bool {
 
 	version := strings.TrimPrefix(pulumiVersion, "v")
 
-	miseCtx := stepv2.WithEnv(ctx,
-		&stepv2.EnvVar{Key: "PULUMI_VERSION_MISE", Value: version},
-		&stepv2.EnvVar{Key: "GO_VERSION_MISE", Value: goVersion},
-		&stepv2.EnvVar{Key: "MISE_TRUSTED_CONFIG_PATHS", Value: repo.root},
-		&stepv2.EnvVar{Key: "MISE_YES", Value: "1"},
-	)
+	ctx = setMiseEnv(ctx, env, current, "PULUMI_VERSION_MISE", version)
+	ctx = setMiseEnv(ctx, env, current, "GO_VERSION_MISE", goVersion)
+	ctx = setMiseEnv(ctx, env, current, "MISE_TRUSTED_CONFIG_PATHS", repo.root)
+	ctx = setMiseEnv(ctx, env, current, "MISE_YES", "1")
 
-	stepv2.Cmd(miseCtx, "mise", "upgrade", "--raw")
-	return true
+	stepv2.Cmd(ctx, "mise", "upgrade", "--raw")
+	return ctx, true
+}
+
+func setMiseEnv(
+	ctx context.Context, env *[]stepv2.Env, current map[string]*stepv2.EnvVar, key, value string,
+) context.Context {
+	if existing, ok := current[key]; ok {
+		existing.Value = value
+		return ctx
+	}
+
+	envVar := &stepv2.EnvVar{Key: key, Value: value}
+	current[key] = envVar
+	*env = append(*env, envVar)
+	return stepv2.WithEnv(ctx, envVar)
 }
 
 func refreshMiseEnv(ctx context.Context, env *[]stepv2.Env, current map[string]*stepv2.EnvVar) context.Context {
