@@ -368,12 +368,31 @@ func runMiseUpgrade(
 
 	version := strings.TrimPrefix(pulumiVersion, "v")
 
+	// Capture the previous (pre-bump) versions before setMiseEnv overrides
+	// them. We uninstall them after the new versions are installed so that
+	// PATH lookup doesn't shadow the new install dir with the stale one.
+	oldPulumi := os.Getenv("PULUMI_VERSION_MISE")
+	oldGo := os.Getenv("GO_VERSION_MISE")
+
 	ctx = setMiseEnv(ctx, env, current, "PULUMI_VERSION_MISE", version)
 	ctx = setMiseEnv(ctx, env, current, "GO_VERSION_MISE", goVersion)
 	ctx = setMiseEnv(ctx, env, current, "MISE_TRUSTED_CONFIG_PATHS", repo.root)
 	ctx = setMiseEnv(ctx, env, current, "MISE_YES", "1")
 
+	stepv2.Cmd(ctx, "mise", "install")
 	stepv2.Cmd(ctx, "mise", "upgrade", "--raw")
+
+	// Remove the stale pre-bump install dirs from disk. `mise install` adds
+	// the new install dirs to PATH but does not remove the old ones, and the
+	// old entries appear ahead of the new ones, so without this PATH lookup
+	// keeps finding the stale binary.
+	if oldPulumi != "" && oldPulumi != version {
+		stepv2.Cmd(ctx, "mise", "uninstall", "github:pulumi/pulumi@"+oldPulumi)
+	}
+	if oldGo != "" && oldGo != goVersion {
+		stepv2.Cmd(ctx, "mise", "uninstall", "go@"+oldGo)
+	}
+
 	return ctx, true
 }
 
