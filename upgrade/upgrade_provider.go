@@ -276,14 +276,24 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return ErrHandled
 	}
 
-	return stepv2.PipelineCtx(ctx, "Tfgen & Build SDKs",
+	var newPrURL string
+	err = stepv2.PipelineCtx(ctx, "Tfgen & Build SDKs",
 		tfgenAndBuildSDKs(repo, repoName, upgradeTarget, goMod,
-			targetBridgeVersion, tfSDKUpgrade))
+			targetBridgeVersion, tfSDKUpgrade, &newPrURL))
+	if err != nil {
+		return err
+	}
+
+	if newPrURL != "" {
+		fmt.Printf("Link to PR created: %s\n", newPrURL)
+	}
+
+	return nil
 }
 
 func tfgenAndBuildSDKs(
 	repo ProviderRepo, repoName string, upgradeTarget *UpstreamUpgradeTarget, goMod *GoMod,
-	targetBridgeVersion Ref, tfSDKUpgrade string,
+	targetBridgeVersion Ref, tfSDKUpgrade string, newPrURL *string,
 ) func(ctx context.Context) {
 	return func(ctx context.Context) {
 		env := []stepv2.Env{&stepv2.SetCwd{To: repo.root}}
@@ -349,7 +359,7 @@ func tfgenAndBuildSDKs(
 
 		gitCommit(ctx, fmt.Sprintf("make %s", gen))
 
-		InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, tfSDKUpgrade, os.Args)
+		*newPrURL = InformGitHub(ctx, upgradeTarget, repo, goMod, targetBridgeVersion, tfSDKUpgrade, os.Args)
 	}
 }
 

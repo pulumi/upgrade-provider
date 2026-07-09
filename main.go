@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/build"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -27,6 +28,54 @@ const (
 	// For example, --number is bound to UPGRADE_NUMBER.
 	envPrefix = "UPGRADE"
 )
+
+// version and commit are set via `-ldflags` at build time, e.g.:
+//
+//	go build -ldflags "-X main.version=v1.2.3 -X main.commit=abc1234"
+//
+// When they are not set (as with `go build`/`go run` without ldflags), we fall
+// back to the module version and VCS revision embedded by the Go toolchain via
+// `runtime/debug.ReadBuildInfo`, which covers `go install` from a tagged/pseudo
+// version.
+var (
+	version = ""
+	commit  = ""
+)
+
+// buildVersion returns a human readable version string of the form
+// "<version>-<commit>", falling back to information embedded by the Go
+// toolchain when ldflags were not supplied at build time.
+func buildVersion() string {
+	v, c := version, commit
+
+	if v == "" || c == "" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			if v == "" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+				v = info.Main.Version
+			}
+			for _, s := range info.Settings {
+				if s.Key == "vcs.revision" && c == "" {
+					c = s.Value
+				}
+			}
+		}
+	}
+
+	if len(c) > 8 {
+		c = c[:8]
+	}
+
+	switch {
+	case v == "" && c == "":
+		return "unknown"
+	case v == "":
+		return c
+	case c == "":
+		return v
+	default:
+		return fmt.Sprintf("%s-%s", v, c)
+	}
+}
 
 func cmd() *cobra.Command {
 	var targetVersion string
@@ -61,7 +110,11 @@ func cmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upgrade-provider <provider>",
 		Short: "upgrade-provider automates the process of upgrading a TF-bridged provider",
-		Args:  cobra.ExactArgs(1),
+		Long: fmt.Sprintf(
+			"upgrade-provider automates the process of upgrading a TF-bridged provider\n\nVersion: %s",
+			buildVersion()),
+		Version: buildVersion(),
+		Args:    cobra.ExactArgs(1),
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			err := initializeConfig(cmd)
 			if err != nil {
@@ -229,9 +282,13 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 
 	cmd.PersistentFlags().BoolVar(&context.DryRun, "dry-run", false,
 		`If true, don't actually create any PRs`)
+  
+	// Print just the version string for `--version`/`-v`, matching the format
+	// shown in `--help` (e.g. "v0.0.1-3212adb3").
+	cmd.SetVersionTemplate("{{.Version}}\n")
 
-	installDefaultValueHelp(cmd)
-
+  installDefaultValueHelp(cmd)
+  
 	return cmd
 }
 

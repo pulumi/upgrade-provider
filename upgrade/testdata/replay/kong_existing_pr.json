@@ -134,6 +134,7 @@
             ]
           ],
           "outputs": [
+            "https://github.com/pulumi/pulumi-kong/pull/228",
             null
           ]
         },

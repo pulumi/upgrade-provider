@@ -277,17 +277,17 @@ var maintenanceRelease = stepv2.Func11E("Check if we should release a maintenanc
 	return false, nil
 })
 
-var InformGitHub = stepv2.Func60E("Inform Github", func(
+var InformGitHub = stepv2.Func61E("Inform Github", func(
 	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion Ref, tfSDKUpgrade string,
 	osArgs []string,
-) error {
+) (string, error) {
 	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
 	c := GetContext(ctx)
 
 	if c.DryRun {
 		stepv2.SetLabel(ctx, "Dry run: skipping git push and PR creation")
-		return nil
+		return "", nil
 	}
 
 	// --force:
@@ -370,7 +370,7 @@ var InformGitHub = stepv2.Func60E("Inform Github", func(
 		)
 	}
 
-	return nil
+	return newPrURL, nil
 })
 
 var upgradeLabel = stepv2.Func21("Release Label", func(ctx context.Context, from, to *semver.Version) string {

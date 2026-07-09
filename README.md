@@ -42,6 +42,13 @@ go install github.com/pulumi/upgrade-provider@main
 Additionally, `upgrade-provider` relies on all tools necessary for a manual provider upgrade.
 That generally means `pulumi`, `make`, and the build toolchain for each released SDK.
 
+## Version
+
+`upgrade-provider --version` prints the version (and, when available, the commit) that the
+binary was built from. The same information is shown at the top of `upgrade-provider --help`.
+Binaries built with `make build`/`make install` embed the version from `git describe` and the
+current commit hash via `-ldflags`.
+
 ## Usage
 
 ### From the command line
