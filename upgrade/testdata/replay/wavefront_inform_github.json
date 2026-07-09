@@ -37,6 +37,7 @@
             ]
           ],
           "outputs": [
+            "https://github.com/pulumi/pulumi-wavefront/pull/239",
             null
           ]
         },
