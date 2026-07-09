@@ -1,12 +1,48 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestHelpShowsDefaultFlagValues(t *testing.T) {
+	command := cmd()
+
+	buf := new(bytes.Buffer)
+	command.SetOut(buf)
+	command.SetErr(buf)
+	command.SetArgs([]string{"--help"})
+
+	require.NoError(t, command.Execute())
+
+	help := buf.String()
+
+	// Boolean flags should show their default value, even though `false`
+	// is the zero value, so users can tell what the default behavior is
+	// without reading the source.
+	require.Contains(t, help, "--allow-major=false")
+	require.Contains(t, help, "--allow-missing-docs=false")
+	require.Contains(t, help, "--dry-run=false")
+	require.Contains(t, help, "--major=false")
+
+	// String/slice flags with a non-zero default should still show it
+	// inline.
+	require.Contains(t, help, "--kind strings=all")
+	require.Contains(t, help, "--target-bridge-version ref=<latest>")
+
+	// Flags with an empty/zero default should not have a `=` suffix.
+	require.Contains(t, help, "--pr-assign string ")
+	require.False(t, strings.Contains(help, "--pr-assign string="))
+
+	// Cobra's own `--help` flag should be untouched.
+	require.Contains(t, help, "-h, --help ")
+	require.False(t, strings.Contains(help, "--help=false"))
+}
 
 func TestInitializeConfigBindsAllowMajor(t *testing.T) {
 	dir := t.TempDir()

@@ -54,31 +54,32 @@ Usage:
   upgrade-provider <provider> [flags]
 
 Flags:
-      --allow-missing-docs              If true, don't error on missing docs during tfgen.
-                                        This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.
-      --allow-major                     Allow the provider to upgrade to a new major version when one is available.
-  -h, --help                            help for upgrade-provider
-      --java-version string             The version of pulumi-java-gen to target.
-      --kind strings                    The kind of upgrade to perform:
-                                        - "all":     Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider,code".
-                                        - "bridge":  Upgrade the bridge only.
-                                        - "provider": Upgrade the upstream provider only.
-                                        - "check-upstream-version": Determine if we need to upgrade the upstream provider. For use in CI only." (default [all])
-      --major                           Upgrade the provider to a new major version.
-      --pr-assign string                A user to assign the upgrade PR to. (default "@me")
-      --pr-description string           Extra text to insert in the generated pull request description.
-      --pr-reviewers string             A comma separated list of reviewers to assign the upgrade PR to.
-      --repo-path string                Clone the provider repo to the specified path.
-      --target-bridge-version ref       The desired bridge version to upgrade to. Git hash references permitted. (default <latest>)
-      --target-pulumi-version ref       Upgrade the provider to the passed pulumi/{pkg,sdk} version.
+      --allow-major=false                    Allow the provider to upgrade to a new major version when one is available.
+      --allow-missing-docs=false             If true, don't error on missing docs during tfgen.
+                                             This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.
+      --dry-run=false                        If true, don't actually create any PRs
+  -h, --help                                 help for upgrade-provider
+      --kind strings=all                     The kind of upgrade to perform:
 
-                                        If no version is passed, the pulumi/{pkg,sdk} version will track the bridge
-      --target-version string           Upgrade the provider to the passed version.
+                                             - "all": Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider".
+                                             - "bridge": Upgrade the bridge only.
+                                             - "provider": Upgrade the upstream provider only.
+      --major=false                          Upgrade the provider to a new major version.
+      --pr-assign string                     A user to assign the upgrade PR to.
+      --pr-description string                Extra text to insert in the generated pull request description.
+      --pr-reviewers string                  A comma separated list of reviewers to assign the upgrade PR to.
+      --pr-title-prefix string               The prefix to insert in the generated pull request title.
+      --repo-path string                     Clone the provider repo to the specified path. Skip cloning if set to "."
+      --target-bridge-version ref=<latest>   The desired bridge version to upgrade to. Git hash references permitted.
+      --target-pulumi-version ref            Upgrade the provider to the passed pulumi/{pkg,sdk} version.
 
-                                        If the passed version does not exist, an error is signaled.
-      --upstream-provider-name string   The name of the upstream provider.
-                                        Required unless running from provider root and set in upgrade-config.yml.
-      --upstream-provider-org string    The name of the upstream provider's GitHub organization'.
+                                             If no version is passed, the pulumi/{pkg,sdk} version will track the bridge
+      --target-version string                Upgrade the provider to the passed version.
+
+                                             If the passed version does not exist, an error is signaled.
+      --upstream-provider-name string        The name of the upstream provider.
+                                             Required unless running from provider root and set in upgrade-config.yml.
+      --upstream-provider-org string         The name of the upstream provider's GitHub organization'.
 ```
 
 A typical run for a patched provider with an upgrade configuration file will look like this:

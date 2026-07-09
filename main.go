@@ -230,6 +230,8 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 	cmd.PersistentFlags().BoolVar(&context.DryRun, "dry-run", false,
 		`If true, don't actually create any PRs`)
 
+	installDefaultValueHelp(cmd)
+
 	return cmd
 }
 
