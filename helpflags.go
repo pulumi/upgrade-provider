@@ -27,22 +27,6 @@ func installDefaultValueHelp(cmd *cobra.Command) {
 	cmd.SetUsageTemplate(usageTemplate)
 }
 
-// sliceFlagTypes are the pflag value types whose DefValue is rendered as a
-// bracketed, comma separated list, e.g. "[all]".
-var sliceFlagTypes = map[string]bool{
-	"stringSlice":   true,
-	"stringArray":   true,
-	"intSlice":      true,
-	"uintSlice":     true,
-	"int32Slice":    true,
-	"int64Slice":    true,
-	"float32Slice":  true,
-	"float64Slice":  true,
-	"durationSlice": true,
-	"ipSlice":       true,
-	"boolSlice":     true,
-}
-
 // isCobraOwnedFlag reports whether flag was implicitly added by cobra itself
 // (namely `--help`/`-h` and `--version`), as opposed to a flag declared by
 // upgrade-provider. Cobra's own flags are left in their standard format,
@@ -51,33 +35,40 @@ func isCobraOwnedFlag(flag *pflag.Flag) bool {
 	return len(flag.Annotations[cobra.FlagSetByCobraAnnotation]) > 0
 }
 
+// boolFlagValue matches pflag's own (unexported) interface for detecting
+// boolean flags, letting us identify them the same way pflag does instead of
+// comparing flag.Value.Type() to the magic string "bool".
+type boolFlagValue interface {
+	IsBoolFlag() bool
+}
+
 // flagDefaultIsZero reports whether flag's default value is its type's zero
 // value. Unlike pflag's internal (unexported) equivalent, boolean flags are
 // never considered zero here so that their default is always displayed.
 func flagDefaultIsZero(flag *pflag.Flag) bool {
-	switch flag.Value.Type() {
-	case "bool":
-		return false
-	case "duration":
+	switch {
+	case flag.Value.Type() == "duration":
+		// Beginning in Go 1.7, duration zero values are "0s" rather than "0".
 		return flag.DefValue == "0" || flag.DefValue == "0s"
-	case "int", "int8", "int16", "int32", "int64",
-		"uint", "uint8", "uint16", "uint32", "uint64",
-		"count", "float32", "float64":
-		return flag.DefValue == "0"
-	case "string":
-		return flag.DefValue == ""
-	case "ip", "ipMask", "ipNet":
-		return flag.DefValue == "<nil>"
-	default:
-		if sliceFlagTypes[flag.Value.Type()] {
-			return flag.DefValue == "[]"
-		}
-		switch flag.DefValue {
-		case "false", "<nil>", "", "0":
+	case flag.DefValue == "[]":
+		// Every pflag slice type (stringSlice, intSlice, etc.) implements
+		// this public interface and renders its default as "[]" when empty.
+		if _, ok := flag.Value.(pflag.SliceValue); ok {
 			return true
 		}
+	}
+
+	if _, ok := flag.Value.(boolFlagValue); ok {
 		return false
 	}
+
+	// Every other pflag type (string, numeric, ip, etc.) renders its zero
+	// value using one of these strings.
+	switch flag.DefValue {
+	case "false", "<nil>", "", "0":
+		return true
+	}
+	return false
 }
 
 // formatFlagDefault returns the default value to display for flag, along
@@ -87,7 +78,7 @@ func formatFlagDefault(flag *pflag.Flag) (string, bool) {
 		return "", false
 	}
 	def := flag.DefValue
-	if sliceFlagTypes[flag.Value.Type()] {
+	if _, ok := flag.Value.(pflag.SliceValue); ok {
 		def = strings.TrimSuffix(strings.TrimPrefix(def, "["), "]")
 	}
 	if def == "" {
