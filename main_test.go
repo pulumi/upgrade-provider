@@ -22,26 +22,30 @@ func TestHelpShowsDefaultFlagValues(t *testing.T) {
 
 	help := buf.String()
 
-	// Boolean flags should show their default value, even though `false`
-	// is the zero value, so users can tell what the default behavior is
-	// without reading the source.
-	require.Contains(t, help, "--allow-major=false")
-	require.Contains(t, help, "--allow-missing-docs=false")
-	require.Contains(t, help, "--dry-run=false")
-	require.Contains(t, help, "--major=false")
+	// Boolean flags should document their default value, even though
+	// `false` is the zero value, so users can tell what the default
+	// behavior is without reading the source.
+	for _, name := range []string{"allow-major", "allow-missing-docs", "dry-run", "major"} {
+		flag := command.PersistentFlags().Lookup(name)
+		require.NotNil(t, flag, "flag %q not found", name)
+		require.Contains(t, flag.Usage, "(default: false)",
+			"flag %q usage should document its default value", name)
+	}
 
-	// String/slice flags with a non-zero default should still show it
-	// inline.
-	require.Contains(t, help, "--kind strings=all")
-	require.Contains(t, help, "--target-bridge-version ref=<latest>")
+	// String/slice flags already have their non-zero default shown by
+	// Cobra's standard formatting, unaffected by the change above.
+	require.Contains(t, help, "--kind strings")
+	require.Contains(t, help, "(default [all])")
+	require.Contains(t, help, "--target-bridge-version ref")
+	require.Contains(t, help, "(default <latest>)")
 
-	// Flags with an empty/zero default should not have a `=` suffix.
+	// Flags with an empty/zero default should still show no default at all.
 	require.Contains(t, help, "--pr-assign string ")
-	require.False(t, strings.Contains(help, "--pr-assign string="))
+	require.False(t, strings.Contains(help, "--pr-assign string (default"))
 
 	// Cobra's own `--help` flag should be untouched.
 	require.Contains(t, help, "-h, --help ")
-	require.False(t, strings.Contains(help, "--help=false"))
+	require.False(t, strings.Contains(help, "--help (default"))
 }
 
 func TestInitializeConfigBindsAllowMajor(t *testing.T) {
