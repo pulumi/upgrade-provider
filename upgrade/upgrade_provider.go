@@ -284,11 +284,161 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		return err
 	}
 
-	if newPrURL != "" {
+	if GetContext(ctx).NoSubmit {
+		// Build the same plan used by InformGitHub, but render it only after the
+		// pipeline and spinner have completed.
+		plan := newGitHubSubmissionPlan(
+			ctx, upgradeTarget, repo, goMod, targetBridgeVersion, tfSDKUpgrade, os.Args,
+		)
+		fmt.Print(noSubmitOutput(repo, plan, inspectLocalUpgrade(ctx, repo)))
+	} else if newPrURL != "" {
 		fmt.Printf("Link to PR created: %s\n", newPrURL)
 	}
 
 	return nil
+}
+
+// localUpgradeState contains measured Git state used in the no-submit report.
+// String fields allow inspection failures to be represented as "unknown"
+// without turning an otherwise successful local upgrade into a failure.
+type localUpgradeState struct {
+	// BaseRef is the remote-tracking ref used by the review commands.
+	BaseRef string
+	// WorkingTree is "clean", "dirty", or "unknown".
+	WorkingTree string
+	// CommitsAhead is the number of commits in HEAD but not BaseRef, or "unknown".
+	CommitsAhead string
+}
+
+// inspectLocalUpgrade measures the final checkout without mutating it. Git
+// inspection is best-effort because failure to produce advisory output should
+// not fail a completed upgrade.
+func inspectLocalUpgrade(ctx context.Context, repo ProviderRepo) localUpgradeState {
+	state := localUpgradeState{
+		BaseRef:      "origin/" + repo.defaultBranch,
+		WorkingTree:  "unknown",
+		CommitsAhead: "unknown",
+	}
+
+	// -C avoids changing the process working directory after the pipeline has
+	// restored it.
+	gitOutput := func(args ...string) (string, error) {
+		cmdArgs := append([]string{"-C", repo.root}, args...)
+		out, err := exec.CommandContext(ctx, "git", cmdArgs...).Output()
+		return strings.TrimSpace(string(out)), err
+	}
+
+	if status, err := gitOutput("status", "--porcelain=1"); err == nil {
+		if status == "" {
+			state.WorkingTree = "clean"
+		} else {
+			state.WorkingTree = "dirty"
+		}
+	}
+	if count, err := gitOutput("rev-list", "--count", state.BaseRef+"..HEAD"); err == nil {
+		state.CommitsAhead = count
+	}
+
+	return state
+}
+
+// noSubmitOutput renders a complete, copyable review and submission checklist.
+// The PR body is emitted verbatim so it matches normal GitHub submission.
+func noSubmitOutput(repo ProviderRepo, plan githubSubmissionPlan, state localUpgradeState) string {
+	var b strings.Builder
+	fmt.Fprintln(&b, "Upgrade completed locally; no branch was pushed and no PR was created or updated.")
+	fmt.Fprintln(&b)
+
+	// field keeps summary and PR metadata aligned while making absent optional
+	// values explicit to an agent reading the report.
+	field := func(name, value string) {
+		if value == "" {
+			value = "(none)"
+		}
+		fmt.Fprintf(&b, "  %-22s %s\n", name+":", value)
+	}
+	field("Repository", plan.Repository)
+	field("Local path", repo.root)
+	field("Base branch", plan.BaseBranch)
+	field("Working branch", plan.WorkingBranch)
+	field("Working tree", state.WorkingTree)
+	field("Commits ahead", fmt.Sprintf("%s (%s)", state.CommitsAhead, state.BaseRef))
+	// Combined upgrades can have more than one target, so render one transition
+	// per dependency rather than a misleading singular target version.
+	if len(plan.Targets) > 0 {
+		fmt.Fprintln(&b, "  Upgrade targets:")
+		for _, target := range plan.Targets {
+			fmt.Fprintf(&b, "    - %s\n", target)
+		}
+	}
+
+	// Everything in this section comes from the same plan consumed by gh.
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "Proposed PR")
+	fmt.Fprintln(&b, "-----------")
+	if plan.ExistingPR {
+		field("Action", "Update existing PR")
+	} else {
+		field("Action", "Create PR")
+	}
+	field("Title", plan.Title)
+	field("Labels", plan.Label)
+	field("Reviewers", plan.Reviewers)
+	field("Assignee", plan.Assignee)
+	if len(plan.IssueAssignments) == 0 {
+		field("Issue assignments", "(none)")
+	} else {
+		issues := make([]string, len(plan.IssueAssignments))
+		for i, issue := range plan.IssueAssignments {
+			issues[i] = fmt.Sprintf("#%d -> %s", issue, plan.Assignee)
+		}
+		field("Issue assignments", strings.Join(issues, ", "))
+	}
+	if plan.CloseSupersededBridgePRs {
+		field("Superseded bridge PRs", "close open bridge upgrade PRs authored by @me, except this branch")
+	} else {
+		field("Superseded bridge PRs", "(none)")
+	}
+	// Do not indent or otherwise transform the body: users should be able to
+	// compare or copy the exact text that gh would receive.
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "Body:")
+	fmt.Fprint(&b, plan.Body)
+	if !strings.HasSuffix(plan.Body, "\n") {
+		fmt.Fprintln(&b)
+	}
+
+	// Review commands use the same remote base used for the measured commit count.
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "Review with:")
+	fmt.Fprintf(&b, "  git log --oneline %s..HEAD\n", state.BaseRef)
+	fmt.Fprintf(&b, "  git diff --stat %s...HEAD\n", state.BaseRef)
+	fmt.Fprintf(&b, "  git diff %s...HEAD\n", state.BaseRef)
+
+	// Spell out non-PR side effects as a checklist so an agent does not stop
+	// after merely creating or updating the PR.
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "Default submission actions skipped:")
+	fmt.Fprintf(&b, "  1. git push --set-upstream origin %s --force\n", plan.WorkingBranch)
+	if plan.ExistingPR {
+		fmt.Fprintln(&b, "  2. Update the existing PR with the title, body, labels, reviewers, and assignee above.")
+	} else {
+		fmt.Fprintln(&b, "  2. Create the PR with the base, head, title, body, labels, reviewers, and assignee above.")
+	}
+	nextAction := 3
+	if len(plan.IssueAssignments) > 0 {
+		fmt.Fprintf(&b, "  %d. Assign the listed issues to the PR assignee.\n", nextAction)
+		nextAction++
+	}
+	if plan.CloseSupersededBridgePRs {
+		fmt.Fprintf(&b,
+			"  %d. Close open bridge upgrade PRs authored by @me, except this branch, and comment with the replacement PR URL.\n",
+			nextAction,
+		)
+	}
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "Submit manually with Git and GitHub CLI after review.")
+	return b.String()
 }
 
 func tfgenAndBuildSDKs(

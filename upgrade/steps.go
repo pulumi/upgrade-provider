@@ -277,6 +277,178 @@ var maintenanceRelease = stepv2.Func11E("Check if we should release a maintenanc
 	return false, nil
 })
 
+// submissionSkippedMessage is the concise pipeline label shown when remote
+// submission is disabled. The detailed submission plan is printed after the
+// pipeline finishes so multiline output does not interfere with the spinner.
+func submissionSkippedMessage(branch string) string {
+	return fmt.Sprintf(
+		"Submission skipped: upgrade completed locally; branch %q and its commits are ready for review. "+
+			"Use git push and gh to create or update the PR",
+		branch,
+	)
+}
+
+// githubSubmissionPlan is the single source of truth for both the GitHub
+// mutations performed by a normal run and the preview printed by --no-submit.
+type githubSubmissionPlan struct {
+	// Repository is the owner/name passed to GitHub CLI commands.
+	Repository string
+	// BaseBranch and WorkingBranch identify the two sides of the proposed PR.
+	BaseBranch    string
+	WorkingBranch string
+	// ExistingPR selects between creating a PR and updating the PR already open
+	// for WorkingBranch.
+	ExistingPR bool
+	// Title and Body are passed verbatim to GitHub and printed verbatim in the
+	// no-submit report.
+	Title string
+	Body  string
+	// Label, Reviewers, and Assignee are optional PR metadata. Empty values are
+	// omitted from GitHub CLI commands.
+	Label     string
+	Reviewers string
+	Assignee  string
+	// IssueAssignments lists upgrade issues that the normal submission path
+	// assigns to Assignee after the PR is created or updated.
+	IssueAssignments []int
+	// CloseSupersededBridgePRs records the post-submit cleanup required for a
+	// bridge upgrade.
+	CloseSupersededBridgePRs bool
+	// Targets is display-only context describing each dependency upgrade in a
+	// combined run.
+	Targets []string
+}
+
+// newGitHubSubmissionPlan derives all PR metadata and post-submit actions once
+// so execution and no-submit output cannot drift apart.
+func newGitHubSubmissionPlan(
+	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
+	goMod *GoMod, targetBridgeVersion Ref, tfSDKUpgrade string, osArgs []string,
+) githubSubmissionPlan {
+	c := GetContext(ctx)
+
+	// ProviderRepo stores the owner separately in normal runs, while some replay
+	// fixtures already contain an owner-qualified Name.
+	repository := repo.Name
+	if repo.Org != "" {
+		repository = repo.Org + "/" + repo.Name
+	}
+
+	plan := githubSubmissionPlan{
+		Repository:               repository,
+		BaseBranch:               repo.defaultBranch,
+		WorkingBranch:            repo.workingBranch,
+		ExistingPR:               repo.prAlreadyExists,
+		Title:                    repo.prTitle,
+		Body:                     prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs),
+		Label:                    proposedPRLabel(c, repo, target),
+		Reviewers:                c.PrReviewers,
+		Assignee:                 c.PrAssign,
+		CloseSupersededBridgePRs: c.UpgradeBridgeVersion,
+		Targets:                  proposedUpgradeTargets(c, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade),
+	}
+
+	// Issue assignment is a post-PR side effect and only applies when both an
+	// upstream upgrade and an assignee are configured.
+	if c.UpgradeProviderVersion && c.PrAssign != "" && target != nil {
+		for _, issue := range target.GHIssues {
+			if issue.Number > 0 {
+				plan.IssueAssignments = append(plan.IssueAssignments, issue.Number)
+			}
+		}
+	}
+
+	return plan
+}
+
+// proposedPRLabel reproduces the release-label policy used for submitted PRs.
+func proposedPRLabel(c *Context, repo ProviderRepo, target *UpstreamUpgradeTarget) string {
+	switch {
+	// Provider upgrades use the semantic version delta to choose the release label.
+	case c.UpgradeProviderVersion && target != nil && len(target.GHIssues) > 0:
+		return upgradeLabel(repo.currentUpstreamVersion, target.Version)
+	// Bridge-only maintenance upgrades request a patch release when the release
+	// cadence check marked one as necessary.
+	case c.MaintenancePatch && !c.UpgradeProviderVersion:
+		return "needs-release/patch"
+	default:
+		return ""
+	}
+}
+
+// proposedUpgradeTargets builds human-readable dependency transitions for the
+// no-submit report. These values do not affect GitHub submission.
+func proposedUpgradeTargets(
+	c *Context, repo ProviderRepo, target *UpstreamUpgradeTarget,
+	goMod *GoMod, targetBridgeVersion Ref, tfSDKUpgrade string,
+) []string {
+	var targets []string
+	if c.UpgradeProviderVersion && target != nil && target.Version != nil {
+		from := "unknown"
+		if repo.currentUpstreamVersion != nil {
+			from = repo.currentUpstreamVersion.String()
+		}
+		targets = append(targets, fmt.Sprintf("%s: %s -> %s", c.UpstreamProviderName, from, target.Version))
+	}
+	if c.UpgradeBridgeVersion && targetBridgeVersion != nil {
+		from := "unknown"
+		if goMod != nil {
+			from = goMod.Bridge.Version
+		}
+		targets = append(targets, fmt.Sprintf("pulumi-terraform-bridge: %s -> %s", from, targetBridgeVersion))
+	}
+	if c.TargetPulumiVersion != nil {
+		targets = append(targets, "pulumi/{pkg,sdk}: "+c.TargetPulumiVersion.String())
+	}
+	if parts := strings.Split(tfSDKUpgrade, " -> "); len(parts) == 2 {
+		targets = append(targets, fmt.Sprintf("terraform-plugin-sdk: %s -> %s", parts[0], parts[1]))
+	}
+	return targets
+}
+
+// createPRArgs translates a submission plan into gh pr create arguments.
+func createPRArgs(plan githubSubmissionPlan) []string {
+	args := []string{
+		"pr", "create",
+		"--base", plan.BaseBranch,
+		"--head", plan.WorkingBranch,
+	}
+	if plan.Reviewers != "" {
+		args = append(args, "--reviewer", plan.Reviewers)
+	}
+	args = append(args,
+		"--title", plan.Title,
+		"--body", plan.Body,
+	)
+	if plan.Assignee != "" {
+		args = append(args, "--assignee", plan.Assignee)
+	}
+	if plan.Label != "" {
+		args = append(args, "--label", plan.Label)
+	}
+	return args
+}
+
+// editPRArgs translates a submission plan into gh pr edit arguments. Existing
+// PRs receive the same configured metadata as newly created PRs.
+func editPRArgs(plan githubSubmissionPlan) []string {
+	args := []string{
+		"pr", "edit", plan.WorkingBranch,
+		"--title", plan.Title,
+		"--body", plan.Body,
+	}
+	if plan.Reviewers != "" {
+		args = append(args, "--add-reviewer", plan.Reviewers)
+	}
+	if plan.Assignee != "" {
+		args = append(args, "--add-assignee", plan.Assignee)
+	}
+	if plan.Label != "" {
+		args = append(args, "--add-label", plan.Label)
+	}
+	return args
+}
+
 var InformGitHub = stepv2.Func61E("Inform Github", func(
 	ctx context.Context, target *UpstreamUpgradeTarget, repo ProviderRepo,
 	goMod *GoMod, targetBridgeVersion Ref, tfSDKUpgrade string,
@@ -285,10 +457,14 @@ var InformGitHub = stepv2.Func61E("Inform Github", func(
 	ctx = stepv2.WithEnv(ctx, &stepv2.SetCwd{To: repo.root})
 	c := GetContext(ctx)
 
-	if c.DryRun {
-		stepv2.SetLabel(ctx, "Dry run: skipping git push and PR creation")
+	if c.NoSubmit {
+		// Return before constructing or executing any mutating GitHub commands.
+		// UpgradeProvider prints the complete plan after the spinner has stopped.
+		stepv2.SetLabel(ctx, submissionSkippedMessage(repo.workingBranch))
 		return "", nil
 	}
+
+	plan := newGitHubSubmissionPlan(ctx, target, repo, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs)
 
 	// --force:
 	//
@@ -296,84 +472,45 @@ var InformGitHub = stepv2.Func61E("Inform Github", func(
 	//
 	// If there is an existing branch, then we will want to override it since we don't
 	// attempt to build on existing branches.
-	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", repo.workingBranch, "--force")
-
-	prBody := prBody(ctx, repo, target, goMod, targetBridgeVersion, tfSDKUpgrade, osArgs)
+	stepv2.Cmd(ctx, "git", "push", "--set-upstream", "origin", plan.WorkingBranch, "--force")
 
 	var newPrURL string
-	if repo.prAlreadyExists {
-		// Update the description in case anything else was upgraded (or not
-		// upgraded) in this run, compared to the existing PR.
-		stepv2.Cmd(ctx, "gh", "pr", "edit", repo.workingBranch,
-			"--title", repo.prTitle,
-			"--body", prBody)
+	if plan.ExistingPR {
+		// Update all configured PR metadata so rerunning an upgrade repairs an
+		// existing PR as well as refreshing its title and body.
+		stepv2.Cmd(ctx, "gh", editPRArgs(plan)...)
 		newPrURL = strings.TrimSpace(stepv2.Cmd(ctx, "gh",
-			"pr", "view", repo.workingBranch,
-			"--repo", fmt.Sprintf("%s/%s", repo.Org, repo.Name),
+			"pr", "view", plan.WorkingBranch,
+			"--repo", plan.Repository,
 			"--json", "url",
 			"--jq", ".url",
 		))
 	} else {
-		extraOptions := []string{}
-
-		if c.PrAssign != "" {
-			extraOptions = append(extraOptions, "--assignee", c.PrAssign)
-		}
-
-		switch {
-		// We create release labels when we are running the full pulumi
-		// providers process: i.e. when we discovered issues to close at the
-		// beginning of the pipeline.
-		case c.UpgradeProviderVersion && len(target.GHIssues) > 0:
-			label := upgradeLabel(ctx, repo.currentUpstreamVersion, target.Version)
-			if label != "" {
-				extraOptions = []string{"--label", label}
-			}
-		// On non-upstream upgrades, we will create a patch release label
-		// if the provider hasn't been released in 8 weeks.
-		case c.MaintenancePatch && !c.UpgradeProviderVersion:
-			extraOptions = []string{"--label", "needs-release/patch"}
-		}
-
-		newPrURL = strings.TrimSpace(stepv2.Cmd(ctx, "gh",
-			append([]string{
-				"pr", "create",
-				"--base", repo.defaultBranch,
-				"--head", repo.workingBranch,
-				"--reviewer", c.PrReviewers,
-				"--title", repo.prTitle,
-				"--body", prBody,
-			},
-				extraOptions...)...))
+		newPrURL = strings.TrimSpace(stepv2.Cmd(ctx, "gh", createPRArgs(plan)...))
 	}
 
-	// If we are only upgrading the bridge, we won't have a list of issues, so
-	// skip assignee plumbing in that case.
-	if c.UpgradeProviderVersion && c.PrAssign != "" {
+	if len(plan.IssueAssignments) > 0 {
 		stepv2.Func00("Assign Issues", func(ctx context.Context) {
-			// This PR will close issues, so we assign the issues same assignee as the
-			// PR itself.
-			for _, t := range target.GHIssues {
-				stepv2.Cmd(ctx, "gh", "issue", "edit", fmt.Sprintf("%d", t.Number),
-					"--add-assignee", c.PrAssign)
+			// This PR will close issues, so assign them to the same assignee as the PR.
+			for _, issue := range plan.IssueAssignments {
+				stepv2.Cmd(ctx, "gh", "issue", "edit", fmt.Sprintf("%d", issue),
+					"--add-assignee", plan.Assignee)
 			}
 		})(ctx)
 	}
 
 	// Close superseded bridge PRs last so a failure here does not skip any
 	// earlier side effects (issue assignment, PR body update, etc.).
-	if c.UpgradeBridgeVersion && newPrURL != "" {
-		closeSupersededBridgePRs(ctx,
-			fmt.Sprintf("%s/%s", repo.Org, repo.Name),
-			repo.workingBranch,
-			newPrURL,
-		)
+	if plan.CloseSupersededBridgePRs && newPrURL != "" {
+		closeSupersededBridgePRs(ctx, plan.Repository, plan.WorkingBranch, newPrURL)
 	}
 
 	return newPrURL, nil
 })
 
-var upgradeLabel = stepv2.Func21("Release Label", func(ctx context.Context, from, to *semver.Version) string {
+// upgradeLabel returns the release label implied by the highest-order semantic
+// version difference, or no label when that difference is not an upgrade.
+func upgradeLabel(from, to *semver.Version) string {
 	if to == nil || from == nil {
 		return ""
 	}
@@ -382,9 +519,7 @@ var upgradeLabel = stepv2.Func21("Release Label", func(ctx context.Context, from
 		to, from := toF(), fromF()
 		switch {
 		case to > from:
-			l := "needs-release/" + name
-			stepv2.SetLabel(ctx, l)
-			return l, true
+			return "needs-release/" + name, true
 		case to < from:
 			return "", true
 		default:
@@ -402,7 +537,7 @@ var upgradeLabel = stepv2.Func21("Release Label", func(ctx context.Context, from
 		return l
 	}
 	return ""
-})
+}
 
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
