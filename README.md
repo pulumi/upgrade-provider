@@ -49,7 +49,11 @@ the Git author and committer identity from, in order:
 1. Non-empty `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and
    `GIT_COMMITTER_EMAIL` environment variables. Partial environment identity is
    completed from the following sources without replacing its non-empty values.
-2. The effective `user.name` and `user.email` configuration of the provider repository.
+2. The effective `author.name`/`author.email` and `committer.name`/`committer.email`
+   configuration of the provider repository, applied to the author and committer
+   identities respectively.
+3. The effective `user.name` and `user.email` configuration of the provider repository,
+   for any author or committer fields still missing.
 
 The resolved identity is passed to the patch workflow and subsequent Git commands
 without writing global configuration. If no identity can be resolved, the tool stops

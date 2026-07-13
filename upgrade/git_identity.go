@@ -102,27 +102,35 @@ func (systemGitIdentitySource) GitConfig(ctx context.Context, repoRoot, key stri
 	return "", fmt.Errorf("read effective Git configuration %q in %q: %w", key, repoRoot, err)
 }
 
-// fillMissingIdentity applies one name/email source without replacing fields
-// supplied by a higher-precedence source.
-func fillMissingIdentity(identity *gitIdentity, name, email string) {
-	if identity.AuthorName == "" {
-		identity.AuthorName = name
+// fillMissingPair applies a single name/email source to a pair of fields
+// without replacing values supplied by a higher-precedence source.
+func fillMissingPair(name, email *string, sourceName, sourceEmail string) {
+	if *name == "" {
+		*name = sourceName
 	}
-	if identity.AuthorEmail == "" {
-		identity.AuthorEmail = email
-	}
-	if identity.CommitterName == "" {
-		identity.CommitterName = name
-	}
-	if identity.CommitterEmail == "" {
-		identity.CommitterEmail = email
+	if *email == "" {
+		*email = sourceEmail
 	}
 }
 
+// configPair reads a name/email pair from Git config, trimming whitespace.
+func configPair(ctx context.Context, repoRoot, nameKey, emailKey string, source gitIdentitySource) (name, email string, err error) {
+	name, err = source.GitConfig(ctx, repoRoot, nameKey)
+	if err != nil {
+		return "", "", err
+	}
+	email, err = source.GitConfig(ctx, repoRoot, emailKey)
+	if err != nil {
+		return "", "", err
+	}
+	return strings.TrimSpace(name), strings.TrimSpace(email), nil
+}
+
 // resolveGitIdentity resolves each identity field in precedence order from
-// explicit Git environment and effective provider-repository config. It
-// returns an actionable error unless all four author and committer fields can
-// be resolved.
+// explicit Git environment, then the effective provider-repository
+// author.*/committer.* config (which Git honors when it differs from
+// user.*), then the effective user.* config. It returns an actionable error
+// unless all four author and committer fields can be resolved.
 func resolveGitIdentity(ctx context.Context, repoRoot string, source gitIdentitySource) (gitIdentity, error) {
 	identity := gitIdentity{}
 	explicit := map[string]*string{
@@ -140,15 +148,28 @@ func resolveGitIdentity(ctx context.Context, repoRoot string, source gitIdentity
 		return identity, nil
 	}
 
-	name, err := source.GitConfig(ctx, repoRoot, "user.name")
+	authorName, authorEmail, err := configPair(ctx, repoRoot, "author.name", "author.email", source)
 	if err != nil {
 		return gitIdentity{}, err
 	}
-	email, err := source.GitConfig(ctx, repoRoot, "user.email")
+	fillMissingPair(&identity.AuthorName, &identity.AuthorEmail, authorName, authorEmail)
+
+	committerName, committerEmail, err := configPair(ctx, repoRoot, "committer.name", "committer.email", source)
 	if err != nil {
 		return gitIdentity{}, err
 	}
-	fillMissingIdentity(&identity, strings.TrimSpace(name), strings.TrimSpace(email))
+	fillMissingPair(&identity.CommitterName, &identity.CommitterEmail, committerName, committerEmail)
+
+	if identity.complete() {
+		return identity, nil
+	}
+
+	userName, userEmail, err := configPair(ctx, repoRoot, "user.name", "user.email", source)
+	if err != nil {
+		return gitIdentity{}, err
+	}
+	fillMissingPair(&identity.AuthorName, &identity.AuthorEmail, userName, userEmail)
+	fillMissingPair(&identity.CommitterName, &identity.CommitterEmail, userName, userEmail)
 	if identity.complete() {
 		return identity, nil
 	}

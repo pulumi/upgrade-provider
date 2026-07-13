@@ -49,7 +49,51 @@ func TestResolveGitIdentityFromRepositoryConfig(t *testing.T) {
 		CommitterName:  "Configured User",
 		CommitterEmail: "configured@example.com",
 	}, identity)
-	assert.Equal(t, 2, source.configCalls)
+	assert.Equal(t, 6, source.configCalls)
+}
+
+func TestResolveGitIdentityHonorsAuthorAndCommitterConfigOverUser(t *testing.T) {
+	source := &fakeGitIdentitySource{
+		config: map[string]string{
+			"user.name":       "Fallback User",
+			"user.email":      "fallback@example.com",
+			"author.name":     "Author Config",
+			"author.email":    "author-config@example.com",
+			"committer.name":  "Committer Config",
+			"committer.email": "committer-config@example.com",
+		},
+	}
+
+	identity, err := resolveGitIdentity(context.Background(), "/provider", source)
+
+	require.NoError(t, err)
+	assert.Equal(t, gitIdentity{
+		AuthorName:     "Author Config",
+		AuthorEmail:    "author-config@example.com",
+		CommitterName:  "Committer Config",
+		CommitterEmail: "committer-config@example.com",
+	}, identity)
+}
+
+func TestResolveGitIdentityFillsMissingAuthorOrCommitterFieldsFromUser(t *testing.T) {
+	source := &fakeGitIdentitySource{
+		config: map[string]string{
+			"user.name":    "Fallback User",
+			"user.email":   "fallback@example.com",
+			"author.name":  "Author Config",
+			"author.email": "author-config@example.com",
+		},
+	}
+
+	identity, err := resolveGitIdentity(context.Background(), "/provider", source)
+
+	require.NoError(t, err)
+	assert.Equal(t, gitIdentity{
+		AuthorName:     "Author Config",
+		AuthorEmail:    "author-config@example.com",
+		CommitterName:  "Fallback User",
+		CommitterEmail: "fallback@example.com",
+	}, identity)
 }
 
 func TestResolveGitIdentityExplicitEnvironmentTakesPrecedence(t *testing.T) {
