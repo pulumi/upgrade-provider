@@ -70,7 +70,8 @@ Flags:
 
                                         - "all": Upgrade the upstream provider and the bridge. Shorthand for "bridge,provider".
                                         - "bridge": Upgrade the bridge only.
-                                        - "provider": Upgrade the upstream provider only. (default [all])
+                                        - "provider": Upgrade the upstream provider only.
+                                        - "check-upstream-version": Determine if we need to upgrade the upstream provider. For use in CI only." (default [all])
       --major                           Upgrade the provider to a new major version. (default: false)
       --pr-assign string                A user to assign the upgrade PR to.
       --pr-description string           Extra text to insert in the generated pull request description.
