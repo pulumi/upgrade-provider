@@ -77,6 +77,16 @@ func buildVersion() string {
 	}
 }
 
+// boolFlag defines a boolean persistent flag on cmd, appending the flag's
+// default value to its usage text (e.g. "... (default: false)"). Cobra/pflag
+// only show a flag's default in `--help` when it differs from the type's
+// zero value, so a boolean flag defaulting to `false` would otherwise never
+// have its default documented. Deriving the annotation from defaultValue
+// keeps it from drifting out of sync with the actual default.
+func boolFlag(flags *pflag.FlagSet, target *bool, name string, defaultValue bool, usage string) {
+	flags.BoolVar(target, name, defaultValue, fmt.Sprintf("%s (default: %t)", usage, defaultValue))
+}
+
 func cmd() *cobra.Command {
 	var targetVersion string
 
@@ -225,7 +235,7 @@ If the passed version does not exist, an error is signaled.`)
 
 If no version is passed, the pulumi/{pkg,sdk} version will track the bridge`)
 
-	cmd.PersistentFlags().BoolVar(&context.InferVersion, "pulumi-infer-version", false,
+	boolFlag(cmd.PersistentFlags(), &context.InferVersion, "pulumi-infer-version", false,
 		`Use our GH issues to infer the target upgrade version.
 If both '--target-version' and '--pulumi-infer-version' are passed,
 we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DEV]`)
@@ -235,10 +245,10 @@ we take '--target-version' to cap the inferred version. [Hidden behind PULUMI_DE
 		contract.AssertNoErrorf(err, "could not mark `pulumi-infer-version` flag as hidden")
 	}
 
-	cmd.PersistentFlags().BoolVar(&context.MajorVersionBump, "major", false,
+	boolFlag(cmd.PersistentFlags(), &context.MajorVersionBump, "major", false,
 		`Upgrade the provider to a new major version.`)
 
-	cmd.PersistentFlags().BoolVar(&context.AllowMajorVersionBump, "allow-major", false,
+	boolFlag(cmd.PersistentFlags(), &context.AllowMajorVersionBump, "allow-major", false,
 		`Allow the provider to upgrade to a new major version when one is available.`)
 
 	kindMsg := `The kind of upgrade to perform:
@@ -266,7 +276,7 @@ Required unless running from provider root and set in upgrade-config.yml.`)
 	cmd.PersistentFlags().StringVar(&context.PrAssign, "pr-assign", "",
 		`A user to assign the upgrade PR to.`)
 
-	cmd.PersistentFlags().BoolVarP(&context.AllowMissingDocs, "allow-missing-docs", "", false,
+	boolFlag(cmd.PersistentFlags(), &context.AllowMissingDocs, "allow-missing-docs", false,
 		`If true, don't error on missing docs during tfgen.
 This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 
@@ -280,7 +290,7 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 	cmd.PersistentFlags().StringVar(&context.PRTitlePrefix, "pr-title-prefix", "",
 		`The prefix to insert in the generated pull request title.`)
 
-	cmd.PersistentFlags().BoolVar(&context.DryRun, "dry-run", false,
+	boolFlag(cmd.PersistentFlags(), &context.DryRun, "dry-run", false,
 		`If true, don't actually create any PRs`)
 
 	// Print just the version string for `--version`/`-v`, matching the format
