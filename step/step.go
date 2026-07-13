@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,6 +33,50 @@ type step struct {
 	f           func(context.Context) (string, error)
 	path        *string
 	rvalue      *string
+}
+
+type commandEnvKey struct{}
+
+// WithCommandEnv returns a context whose command steps receive the supplied
+// environment variables without modifying the current process environment.
+func WithCommandEnv(ctx context.Context, values map[string]string) context.Context {
+	merged := make(map[string]string)
+	if existing, ok := ctx.Value(commandEnvKey{}).(map[string]string); ok {
+		for key, value := range existing {
+			merged[key] = value
+		}
+	}
+	for key, value := range values {
+		merged[key] = value
+	}
+	return context.WithValue(ctx, commandEnvKey{}, merged)
+}
+
+func commandEnv(ctx context.Context) []string {
+	values, ok := ctx.Value(commandEnvKey{}).(map[string]string)
+	if !ok || len(values) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	env := os.Environ()
+	for _, key := range keys {
+		prefix := key + "="
+		for i := 0; i < len(env); {
+			if strings.HasPrefix(env[i], prefix) {
+				env = append(env[:i], env[i+1:]...)
+				continue
+			}
+			i++
+		}
+		env = append(env, prefix+values[key])
+	}
+	return env
 }
 
 func (ds step) run(ctx context.Context, prefix string) bool {
@@ -80,6 +125,9 @@ func Cmd(name string, args ...string) Step {
 	}
 	return F(description, func(ctx context.Context) (string, error) {
 		command := exec.CommandContext(ctx, name, args...)
+		if env := commandEnv(ctx); env != nil {
+			command.Env = env
+		}
 		out, err := command.Output()
 		output = string(out)
 		if exit, ok := err.(*exec.ExitError); ok {

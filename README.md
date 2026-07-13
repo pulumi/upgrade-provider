@@ -42,6 +42,20 @@ go install github.com/pulumi/upgrade-provider@main
 Additionally, `upgrade-provider` relies on all tools necessary for a manual provider upgrade.
 That generally means `pulumi`, `make`, and the build toolchain for each released SDK.
 
+Global Git configuration is not required for patched-provider upgrades. Immediately
+before running the `scripts/upstream.sh` patch workflow, `upgrade-provider` resolves
+the Git author and committer identity from, in order:
+
+1. Non-empty `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and
+   `GIT_COMMITTER_EMAIL` environment variables. Partial environment identity is
+   completed from the following sources without replacing its non-empty values.
+2. The effective `user.name` and `user.email` configuration of the provider repository.
+
+The resolved identity is passed to the patch workflow and subsequent Git commands
+without writing global configuration. If no identity can be resolved, the tool stops
+before `scripts/upstream.sh` runs and explains how to set the standard Git environment
+variables or repository-local configuration.
+
 ## Version
 
 `upgrade-provider --version` prints the version (and, when available, the commit) that the
