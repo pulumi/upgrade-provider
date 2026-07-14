@@ -16,6 +16,8 @@ func TestPatchedProviderUpgradeCommands(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, [][]string{
+		{"git", "submodule", "update", "--force", "--init", "--", "upstream"},
+		{"git", "-C", "upstream", "fetch", "--tags"},
 		{"./scripts/upstream.sh", "checkout"},
 		{"./scripts/upstream.sh", "rebase", "-o", "refs/tags/v1.2.3"},
 		{"./scripts/upstream.sh", "check_in"},

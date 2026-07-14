@@ -29,6 +29,10 @@ func patchedProviderUpgradeStep(repo ProviderRepo, targetRef string) step.Step {
 
 func patchedProviderUpgradeCommands(targetRef string) [][]string {
 	return [][]string{
+		// Initialize before fetching so a fresh clone can resolve the target.
+		{"git", "submodule", "update", "--force", "--init", "--", "upstream"},
+		// Preserve an explicit tag fetch because rebase names the target tag directly.
+		{"git", "-C", "upstream", "fetch", "--tags"},
 		{"./scripts/upstream.sh", "checkout"},
 		{"./scripts/upstream.sh", "rebase", "-o", targetRef},
 		{"./scripts/upstream.sh", "check_in"},
