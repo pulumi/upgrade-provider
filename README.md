@@ -82,7 +82,8 @@ Flags:
       --allow-major                     Allow the provider to upgrade to a new major version when one is available. (default: false)
       --allow-missing-docs              If true, don't error on missing docs during tfgen.
                                         This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}. (default: false)
-      --dry-run                         If true, don't actually create any PRs (default: false)
+      --dry-run                         Alias for --no-submit. This still modifies the local checkout and creates commits;
+                                        it only skips remote submission. (default: false)
   -h, --help                            help for upgrade-provider
       --kind strings                    The kind of upgrade to perform:
 
@@ -91,6 +92,8 @@ Flags:
                                         - "provider": Upgrade the upstream provider only.
                                         - "check-upstream-version": Determine if we need to upgrade the upstream provider. For use in CI only." (default [all])
       --major                           Upgrade the provider to a new major version. (default: false)
+      --no-submit                       Complete the upgrade locally without pushing the branch or changing GitHub.
+                                        This still modifies the local checkout, creates commits, and prints proposed submission details. (default: false)
       --pr-assign string                A user to assign the upgrade PR to.
       --pr-description string           Extra text to insert in the generated pull request description.
       --pr-reviewers string             A comma separated list of reviewers to assign the upgrade PR to.
@@ -107,6 +110,12 @@ Flags:
                                         Required unless running from provider root and set in upgrade-config.yml.
       --upstream-provider-org string    The name of the upstream provider's GitHub organization'.
 ```
+
+Use `--no-submit` to complete the full upgrade locally for review without submitting it remotely. This mode still
+creates and checks out the upgrade branch, updates the local checkout, runs code generation, stages changes, and
+creates local commits. It only skips `git push` and GitHub changes such as creating or updating the pull request,
+assigning issues, and closing superseded pull requests. `--dry-run` remains available as a backward-compatible alias
+with the same locally mutating behavior.
 
 A typical run for a patched provider with an upgrade configuration file will look like this:
 
@@ -150,7 +159,11 @@ A typical run for a patched provider with an upgrade configuration file will loo
     - ✓ /usr/local/bin/gh issue edit 181 --add-assignee @me: done
 ```
 
-If the process succeeds, you can go to GitHub and find a pull request opened on your behalf.
+If the process succeeds without `--no-submit`, you can go to GitHub and find a pull request opened on your behalf.
+With `--no-submit`, the tool instead reports the completed local branch, measured working-tree state, commits ahead
+of the base, and the exact proposed pull request metadata. The report includes title, body, label, reviewers, assignee,
+issue assignments, superseded-PR cleanup, review commands, and the remote actions that were skipped. You can review
+that local result before reproducing those actions with ordinary `git` and `gh` commands.
 
 ### Dealing with manual steps
 
@@ -231,8 +244,9 @@ Values include:
 - `upstream-provider-name`: The name of the upstream provider repo, i.e. `terraform-provider-docker`
 - `allow-major`: Allow provider upgrades to proceed through the major-version upgrade path when the target upstream
   version crosses a major version boundary.
+- `no-submit`: Complete the upgrade locally while skipping `git push` and all GitHub mutations.
 - `pr-reviewers`: A comma separated list of reviewers to assign the upgrade PR to.
-- `pr-assign`: A user to assign the upgrade PR to (default: `@me`).
+- `pr-assign`: A user to assign the upgrade PR to.
 
 ## Writing tests
 Use `PULUMI_REPLAY=logs.json upgrade-provider...` to record logs to use in replay tests like [this](https://github.com/pulumi/upgrade-provider/blob/2b3682f894e0b8d85673cee0c0f50fb25ad067b6/upgrade/steps_test.go#L287).

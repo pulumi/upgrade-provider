@@ -277,12 +277,8 @@ func TestReleaseLabel(t *testing.T) {
 			}
 
 			from, to := parse(tt.from), parse(tt.to)
-
-			err := step.Pipeline("test", func(ctx context.Context) {
-				actual := upgradeLabel(ctx, from, to)
-				assert.Equal(t, tt.expect, actual)
-			})
-			assert.NoError(t, err)
+			// Label selection is pure so both preview and submission can share it.
+			assert.Equal(t, tt.expect, upgradeLabel(from, to))
 		})
 	}
 }
@@ -567,8 +563,8 @@ func TestCloseSupersededBridgePRs_Filters(t *testing.T) {
 			Impure:  true,
 		},
 		{
-			Name: "Close #10",
-			Inputs: encode([]string{"10"}),
+			Name:    "Close #10",
+			Inputs:  encode([]string{"10"}),
 			Outputs: encode([]any{nil}),
 		},
 		{
@@ -584,8 +580,8 @@ func TestCloseSupersededBridgePRs_Filters(t *testing.T) {
 			Impure:  true,
 		},
 		{
-			Name: "Close #12",
-			Inputs: encode([]string{"12"}),
+			Name:    "Close #12",
+			Inputs:  encode([]string{"12"}),
 			Outputs: encode([]any{nil}),
 		},
 		{

@@ -167,7 +167,11 @@
               "--title",
               "Upgrade pulumi-terraform-bridge to v3.62.0",
               "--body",
-              "This PR was generated via `$ upgrade-provider pulumi/pulumi-kong --kind=bridge`.\n\n---\n\n- Upgrading pulumi-terraform-bridge from v3.60.0 to v3.62.0.\n"
+              "This PR was generated via `$ upgrade-provider pulumi/pulumi-kong --kind=bridge`.\n\n---\n\n- Upgrading pulumi-terraform-bridge from v3.60.0 to v3.62.0.\n",
+              "--add-reviewer",
+              "pulumi/Providers,lukehoban",
+              "--add-assignee",
+              "@me"
             ]
           ],
           "outputs": [

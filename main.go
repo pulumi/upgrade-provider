@@ -290,8 +290,15 @@ This is equivalent to setting PULUMI_MISSING_DOCS_ERROR=${! VALUE}.`)
 	cmd.PersistentFlags().StringVar(&context.PRTitlePrefix, "pr-title-prefix", "",
 		`The prefix to insert in the generated pull request title.`)
 
-	boolFlag(cmd.PersistentFlags(), &context.DryRun, "dry-run", false,
-		`If true, don't actually create any PRs`)
+	// Both names write to the same field so the legacy alias cannot diverge from
+	// the canonical no-submit behavior.
+	boolFlag(cmd.PersistentFlags(), &context.NoSubmit, "no-submit", false,
+		`Complete the upgrade locally without pushing the branch or changing GitHub.
+This still modifies the local checkout, creates commits, and prints proposed submission details.`)
+
+	boolFlag(cmd.PersistentFlags(), &context.NoSubmit, "dry-run", false,
+		`Alias for --no-submit. This still modifies the local checkout and creates commits;
+it only skips remote submission.`)
 
 	// Print just the version string for `--version`/`-v`, matching the format
 	// shown in `--help` (e.g. "v0.0.1-3212adb3").

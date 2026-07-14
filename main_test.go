@@ -25,7 +25,7 @@ func TestHelpShowsDefaultFlagValues(t *testing.T) {
 	// Boolean flags should document their default value, even though
 	// `false` is the zero value, so users can tell what the default
 	// behavior is without reading the source.
-	for _, name := range []string{"allow-major", "allow-missing-docs", "dry-run", "major"} {
+	for _, name := range []string{"allow-major", "allow-missing-docs", "dry-run", "major", "no-submit"} {
 		flag := command.PersistentFlags().Lookup(name)
 		require.NotNil(t, flag, "flag %q not found", name)
 		require.Contains(t, flag.Usage, "(default: false)",
@@ -65,6 +65,25 @@ func TestInitializeConfigBindsAllowMajor(t *testing.T) {
 	flag := command.PersistentFlags().Lookup("allow-major")
 	require.NotNil(t, flag)
 	require.Equal(t, "true", flag.Value.String())
+}
+
+func TestNoSubmitFlagsAreAliases(t *testing.T) {
+	t.Parallel()
+
+	for _, flagName := range []string{"--no-submit", "--dry-run"} {
+		flagName := flagName
+		t.Run(flagName, func(t *testing.T) {
+			t.Parallel()
+
+			command := cmd()
+			require.NoError(t, command.ParseFlags([]string{flagName}))
+
+			// Both flag values reflect the shared destination, regardless of which
+			// spelling the caller used.
+			require.Equal(t, "true", command.PersistentFlags().Lookup("no-submit").Value.String())
+			require.Equal(t, "true", command.PersistentFlags().Lookup("dry-run").Value.String())
+		})
+	}
 }
 
 func TestBuildVersion(t *testing.T) {
