@@ -271,6 +271,16 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 		steps = append(steps, applyPulumiVersion(ctx, repo))
 	}
 
+	// Patched-provider upgrades run scripts/upstream.sh, whose checkout command
+	// creates commits inside the upstream submodule. Resolve identity immediately
+	// before entering that flow so git am and the later Git commands can commit.
+	if GetContext(ctx).UpgradeProviderVersion && goMod.Kind.IsPatched() {
+		ctx, err = applyGitIdentityPreflight(ctx, repo.root)
+		if err != nil {
+			return err
+		}
+	}
+
 	ok := step.Run(ctx, step.Combined("Update Repository", steps...))
 	if !ok {
 		return ErrHandled
