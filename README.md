@@ -179,6 +179,39 @@ To fix an error:
 
 Repeat as necessary for a working upgrade.
 
+#### Recovering patched-provider upgrades
+
+Patched providers use `./scripts/upstream.sh` to check patches out as commits,
+rebase them onto the requested upstream version, and write them back to
+`patches/`. If this workflow is interrupted, `upgrade-provider` stops without
+trying to infer or modify the partial Git state.
+
+To preserve the work:
+
+1. Complete any active `git am` or rebase inside `upstream`.
+2. Ensure every patch has been applied and the target rebase has completed.
+3. From the provider repository, run:
+
+   ```sh
+   ./scripts/upstream.sh check_in
+   ```
+
+4. Rerun `upgrade-provider`.
+
+A checkout applies each `patches/*.patch` file with a separate `git am`. After
+`git am --continue`, apply any later patch files that the interrupted checkout
+had not reached before starting the target rebase. Do not run `check_in` on a
+partial patch stack.
+
+To intentionally discard the interrupted work, run:
+
+```sh
+./scripts/upstream.sh init -f
+```
+
+This is **destructive** and can discard conflict resolution and patch commits.
+It is an explicit discard option, not a normal preflight or recovery step.
+
 ### In a GitHub Action (experimental)
 
 1. Ensure you have an [`upgrade-config.yml`](#Configuration) set in the root of your provider:
