@@ -40,6 +40,9 @@ func Cmd(ctx context.Context, name string, args ...string) string {
 	return Func21E(name, func(ctx context.Context, _ string, _ []string) (string, error) {
 		MarkImpure(ctx)
 		cmd := exec.CommandContext(ctx, name, args...)
+		if name == "git" {
+			cmd.Env = gitNonInteractiveEnv()
+		}
 		SetLabel(ctx, cmd.String())
 		out, err := cmd.Output()
 		if exit, ok := err.(*exec.ExitError); ok {
@@ -53,6 +56,45 @@ func Cmd(ctx context.Context, name string, args ...string) string {
 
 		return string(out), err
 	})(ctx, name, args)
+}
+
+// gitNonInteractiveEnv returns the current process environment augmented so
+// that `git` fails fast instead of hanging forever when it would otherwise
+// block on an interactive prompt (e.g. an SSH key passphrase, an SSH host key
+// confirmation, or HTTPS credentials).
+//
+// upgrade-provider has no terminal session available to answer such prompts,
+// so a hang here previously looked like the tool freezing indefinitely with
+// no explanation. See https://github.com/pulumi/upgrade-provider/issues/138.
+//
+// Both `GIT_TERMINAL_PROMPT` and SSH's `BatchMode` option are the standard,
+// git/ssh-provided ways to opt out of interactive prompts, so we set them
+// unless the caller has already configured them explicitly.
+func gitNonInteractiveEnv() []string {
+	env := os.Environ()
+
+	var hasTerminalPrompt, hasSSHCommand bool
+	for _, kv := range env {
+		switch {
+		case strings.HasPrefix(kv, "GIT_TERMINAL_PROMPT="):
+			hasTerminalPrompt = true
+		case strings.HasPrefix(kv, "GIT_SSH_COMMAND="):
+			hasSSHCommand = true
+		}
+	}
+
+	if !hasTerminalPrompt {
+		// Disable git's own prompts for usernames/passwords (e.g. over HTTPS).
+		env = append(env, "GIT_TERMINAL_PROMPT=0")
+	}
+	if !hasSSHCommand {
+		// Disable ssh's prompts for passphrases, host key confirmation, etc.
+		// so that authentication failures return immediately instead of
+		// blocking on input that will never come.
+		env = append(env, "GIT_SSH_COMMAND=ssh -oBatchMode=yes")
+	}
+
+	return env
 }
 
 // Halt the pipeline if err is non-nil.
