@@ -68,7 +68,7 @@ go 1.24.6
 require github.com/pulumi/pulumi/sdk/v3 v3.187.0
 `
 
-func TestRunMiseUpgradeScopesToGoAndPulumi(t *testing.T) {
+func TestRunMiseUpgradeScopesInstallAndUpgradeToGoAndPulumi(t *testing.T) {
 	logFile := filepath.Join(t.TempDir(), "mise-invocations.json")
 	writeFakeMise(t, logFile)
 
@@ -83,7 +83,7 @@ func TestRunMiseUpgradeScopesToGoAndPulumi(t *testing.T) {
 	// The repository's Mise config also manages an unrelated tool with a
 	// floating version constraint (e.g. Node.js, as in
 	// https://github.com/pulumi/upgrade-provider/issues/386). It must never
-	// be passed to `mise upgrade`.
+	// be passed to `mise install` or `mise upgrade`.
 	require.NoError(t, os.WriteFile(
 		filepath.Join(root, "mise.toml"),
 		[]byte("[tools]\nnodejs = \"22\"\n"),
@@ -104,15 +104,26 @@ func TestRunMiseUpgradeScopesToGoAndPulumi(t *testing.T) {
 
 	invocations := readMiseInvocations(t, logFile)
 
-	var upgradeArgs []string
+	var installArgs, upgradeArgs []string
 	for _, argv := range invocations {
-		if len(argv) > 0 && argv[0] == "upgrade" {
+		if len(argv) == 0 {
+			continue
+		}
+		switch argv[0] {
+		case "install":
+			installArgs = argv
+		case "upgrade":
 			upgradeArgs = argv
 		}
 	}
+	require.NotEmpty(t, installArgs, "expected a `mise install` invocation, got: %v", invocations)
 	require.NotEmpty(t, upgradeArgs, "expected a `mise upgrade` invocation, got: %v", invocations)
 
+	assert.Equal(t, []string{"install", "go", "github:pulumi/pulumi"}, installArgs)
 	assert.Equal(t, []string{"upgrade", "--raw", "go", "github:pulumi/pulumi"}, upgradeArgs)
-	assert.NotContains(t, upgradeArgs, "nodejs")
-	assert.NotContains(t, upgradeArgs, "node")
+
+	for _, argv := range [][]string{installArgs, upgradeArgs} {
+		assert.NotContains(t, argv, "nodejs")
+		assert.NotContains(t, argv, "node")
+	}
 }

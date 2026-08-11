@@ -529,8 +529,9 @@ func tfgenAndBuildSDKs(
 // to build a provider. Other tools declared in a repository's Mise config
 // (Node.js, Python, Java, etc.) are owned by the provider repository itself,
 // and their floating version constraints must not be touched by a provider
-// upgrade. `mise upgrade --raw` with no tool arguments upgrades every active
-// tool, so the tool selectors below must always be passed explicitly.
+// upgrade. Both `mise install` and `mise upgrade --raw`, with no tool
+// arguments, act on every active tool, so the tool selectors below must
+// always be passed explicitly to each.
 //
 // These selectors match the ones used to uninstall the stale pre-bump
 // versions below.
@@ -562,7 +563,12 @@ func runMiseUpgrade(
 	ctx = setMiseEnv(ctx, env, current, "MISE_TRUSTED_CONFIG_PATHS", repo.root)
 	ctx = setMiseEnv(ctx, env, current, "MISE_YES", "1")
 
-	stepv2.Cmd(ctx, "mise", "install")
+	// `mise install` with no arguments installs everything declared in the
+	// repository's Mise config, not just the tools upgrade-provider owns.
+	// Scope it the same way as the upgrade below so an unrelated floating
+	// tool (e.g. Node.js) can't fail to install/verify and abort the
+	// provider upgrade.
+	stepv2.Cmd(ctx, "mise", append([]string{"install"}, miseManagedTools...)...)
 	stepv2.Cmd(ctx, "mise", append([]string{"upgrade", "--raw"}, miseManagedTools...)...)
 
 	// Remove the stale pre-bump install dirs from disk. `mise install` adds
