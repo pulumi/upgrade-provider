@@ -34,56 +34,54 @@ func TestWithCwd(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestCmdGitNonInteractive is an integration-level check that step.Cmd wires
+// gitenv.NonInteractive into `git` invocations specifically (not other
+// commands). The exhaustive behavior of gitenv.NonInteractive itself
+// (defaults, per-variable overrides, legacy GIT_SSH, core.sshCommand, etc.)
+// is covered by TestNonInteractive in package gitenv, which tests that logic
+// directly against explicit env slices instead of spawning subprocesses.
 func TestCmdGitNonInteractive(t *testing.T) {
 	// git is not guaranteed to exist in every test environment, but we only
 	// need a program that prints its environment, so fall back to invoking
 	// the shell's `env` builtin under the "git" name via a wrapper on PATH.
 	dir := t.TempDir()
+	// Fail `git config ...` (as real git does when a key is unset) so that
+	// gitenv's own `git config --get core.sshCommand` lookup doesn't
+	// recursively invoke this same stub and misinterpret its env dump as a
+	// configured core.sshCommand value.
 	gitStub := filepath.Join(dir, "git")
-	err := os.WriteFile(gitStub, []byte("#!/bin/sh\nenv\n"), 0700)
+	err := os.WriteFile(gitStub,
+		[]byte("#!/bin/sh\ncase \"$1\" in\nconfig) exit 1 ;;\nesac\nenv\n"), 0700)
 	require.NoError(t, err)
 
-	withStubOnPath := func(t *testing.T, extraEnv ...string) string {
-		t.Helper()
-		origPath := os.Getenv("PATH")
-		require.NoError(t, os.Setenv("PATH", dir+string(os.PathListSeparator)+origPath))
-		t.Cleanup(func() { require.NoError(t, os.Setenv("PATH", origPath)) })
+	// Ensure the ambient environment doesn't already define these, so the
+	// presence of the defaults below is actually due to step.Cmd and not
+	// coincidental to the environment the test happens to run in.
+	unsetenv(t, "GIT_TERMINAL_PROMPT")
+	unsetenv(t, "GIT_SSH_COMMAND")
 
-		for _, kv := range extraEnv {
-			key, value, _ := strings.Cut(kv, "=")
-			orig, had := os.LookupEnv(key)
-			require.NoError(t, os.Setenv(key, value))
-			t.Cleanup(func() {
-				if had {
-					require.NoError(t, os.Setenv(key, orig))
-				} else {
-					require.NoError(t, os.Unsetenv(key))
-				}
-			})
-		}
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
 
-		var out string
-		err := step.Pipeline("test", func(ctx context.Context) {
-			out = step.Cmd(ctx, "git", "status")
-		})
-		require.NoError(t, err)
-		return out
+	var out string
+	err = step.Pipeline("test", func(ctx context.Context) {
+		out = step.Cmd(ctx, "git", "status")
+	})
+	require.NoError(t, err)
+	assert.Contains(t, out, "GIT_TERMINAL_PROMPT=0\n")
+	assert.Contains(t, out, "GIT_SSH_COMMAND=ssh -oBatchMode=yes\n")
+}
+
+// unsetenv unsets the named environment variable for the duration of the
+// test, restoring its original value (or absence) afterwards. It exists
+// because t.Setenv can only assign a value, not remove one.
+func unsetenv(t *testing.T, key string) {
+	t.Helper()
+	orig, had := os.LookupEnv(key)
+	require.NoError(t, os.Unsetenv(key))
+	if had {
+		t.Cleanup(func() { require.NoError(t, os.Setenv(key, orig)) })
 	}
-
-	t.Run("sets non-interactive defaults", func(t *testing.T) {
-		out := withStubOnPath(t)
-		assert.Contains(t, out, "GIT_TERMINAL_PROMPT=0\n")
-		assert.Contains(t, out, "GIT_SSH_COMMAND=ssh -oBatchMode=yes\n")
-	})
-
-	t.Run("respects caller-provided overrides", func(t *testing.T) {
-		out := withStubOnPath(t,
-			"GIT_TERMINAL_PROMPT=1",
-			"GIT_SSH_COMMAND=ssh -vvv",
-		)
-		assert.Contains(t, out, "GIT_TERMINAL_PROMPT=1\n")
-		assert.Contains(t, out, "GIT_SSH_COMMAND=ssh -vvv\n")
-	})
 }
 
 func TestEnvScoping(t *testing.T) {
