@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
+
+	"github.com/pulumi/upgrade-provider/step/gitenv"
 )
 
 // A Step represents an atomic (pass/fail) piece of computation that should be displayed
@@ -125,7 +127,15 @@ func Cmd(name string, args ...string) Step {
 	}
 	return F(description, func(ctx context.Context) (string, error) {
 		command := exec.CommandContext(ctx, name, args...)
-		if env := commandEnv(ctx); env != nil {
+		env := commandEnv(ctx)
+		if name == "git" {
+			// Network-touching git commands (e.g. fetch, submodule update)
+			// can otherwise hang forever on an interactive SSH/credential
+			// prompt with no terminal available to answer it. See
+			// https://github.com/pulumi/upgrade-provider/issues/138.
+			env = gitenv.NonInteractive(ctx, env)
+		}
+		if env != nil {
 			command.Env = env
 		}
 		out, err := command.Output()

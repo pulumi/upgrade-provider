@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/pulumi/upgrade-provider/step/gitenv"
 )
 
 // Name a value so it is viable to the user.
@@ -40,6 +42,9 @@ func Cmd(ctx context.Context, name string, args ...string) string {
 	return Func21E(name, func(ctx context.Context, _ string, _ []string) (string, error) {
 		MarkImpure(ctx)
 		cmd := exec.CommandContext(ctx, name, args...)
+		if name == "git" {
+			cmd.Env = gitenv.NonInteractive(ctx, nil)
+		}
 		SetLabel(ctx, cmd.String())
 		out, err := cmd.Output()
 		if exit, ok := err.(*exec.ExitError); ok {
