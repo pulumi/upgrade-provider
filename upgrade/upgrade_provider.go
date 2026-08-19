@@ -523,6 +523,20 @@ func tfgenAndBuildSDKs(
 	}
 }
 
+// miseManagedTools lists the Mise tool selectors that upgrade-provider owns.
+//
+// upgrade-provider only manages the Go toolchain and Pulumi CLI versions used
+// to build a provider. Other tools declared in a repository's Mise config
+// (Node.js, Python, Java, etc.) are owned by the provider repository itself,
+// and their floating version constraints must not be touched by a provider
+// upgrade. Both `mise install` and `mise upgrade --raw`, with no tool
+// arguments, act on every active tool, so the tool selectors below must
+// always be passed explicitly to each.
+//
+// These selectors match the ones used to uninstall the stale pre-bump
+// versions below.
+var miseManagedTools = []string{"go", "github:pulumi/pulumi"}
+
 func runMiseUpgrade(
 	ctx context.Context, repo ProviderRepo, env *[]stepv2.Env, current map[string]*stepv2.EnvVar,
 ) (context.Context, bool) {
@@ -549,8 +563,13 @@ func runMiseUpgrade(
 	ctx = setMiseEnv(ctx, env, current, "MISE_TRUSTED_CONFIG_PATHS", repo.root)
 	ctx = setMiseEnv(ctx, env, current, "MISE_YES", "1")
 
-	stepv2.Cmd(ctx, "mise", "install")
-	stepv2.Cmd(ctx, "mise", "upgrade", "--raw")
+	// `mise install` with no arguments installs everything declared in the
+	// repository's Mise config, not just the tools upgrade-provider owns.
+	// Scope it the same way as the upgrade below so an unrelated floating
+	// tool (e.g. Node.js) can't fail to install/verify and abort the
+	// provider upgrade.
+	stepv2.Cmd(ctx, "mise", append([]string{"install"}, miseManagedTools...)...)
+	stepv2.Cmd(ctx, "mise", append([]string{"upgrade", "--raw"}, miseManagedTools...)...)
 
 	// Remove the stale pre-bump install dirs from disk. `mise install` adds
 	// the new install dirs to PATH but does not remove the old ones, and the
