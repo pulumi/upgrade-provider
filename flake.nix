@@ -2,19 +2,19 @@
   description = "A flake defining upgrade-provider build-from-source package";
 
   inputs = {
-    nixpkgs.url = github:NixOS/nixpkgs/nixos-24.05;
+    nixpkgs.url = github:NixOS/nixpkgs/nixos-26.05;
   };
 
   outputs = { self, nixpkgs }: let
 
     package = { system }: let
       pkgs = import nixpkgs { system = system; };
-    in pkgs.buildGo123Module rec {
+    in pkgs.buildGo127Module rec {
       name = "upgrade-provider";
       version = ''${self.rev or "dirty"}'';
       src = ./.;
       doCheck = false;
-      vendorHash = "sha256-hllbzbfy1xa6q/3YXJOiDERsy8ELJlA/wwrrpsQ7r1k=";
+      vendorHash = "sha256-/Lhvgg6SwL7lTD/+I5Vk6PRsuXy0AUpKP3WFPKI7EDE=";
       ldflags = [];
       postInstall = ''
         rm -rf $out/bin/generate
