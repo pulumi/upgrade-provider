@@ -474,15 +474,36 @@ func fileExists(path string) bool {
 	return true
 }
 
-// Most if not all of our TF SDK based providers use a "replace" based version of
-// github.com/hashicorp/terraform-plugin-sdk/v2. To avoid compile errors, we want
-// to be using the most up to date version of this plugin.
+const (
+	tfPluginSDK     = "github.com/hashicorp/terraform-plugin-sdk/v2"
+	tfPluginSDKFork = "github.com/pulumi/terraform-plugin-sdk/v2"
+)
+
+// syncTFPluginSDKReplace makes goMod use the same build of tfPluginSDK as the bridge.
 //
-// This is predicated on updating to the latest version being safe. We will need to
-// revisit this when a new major version of the plugin SDK is released.
-func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA string) step.Step {
-	// We do discover in a step.Computed so if the fork isn't present, it isn't
-	// displayed to the user.
+// A bridge that replaces tfPluginSDK with tfPluginSDKFork calls functions that only the
+// fork has, so the provider must replace tfPluginSDK with the same forkVersion. An empty
+// forkVersion means that the bridge does not replace tfPluginSDK. The provider must then
+// drop its replace on the fork, or it pins a fork that the bridge no longer tests against.
+func syncTFPluginSDKReplace(goMod *modfile.File, forkVersion string) error {
+	if forkVersion != "" {
+		// AddReplace overwrites an existing replace of tfPluginSDK.
+		return goMod.AddReplace(tfPluginSDK, "", tfPluginSDKFork, forkVersion)
+	}
+	for _, r := range goMod.Replace {
+		if r.Old.Path != tfPluginSDK || r.New.Path != tfPluginSDKFork {
+			continue
+		}
+		if err := goMod.DropReplace(r.Old.Path, r.Old.Version); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// setTFPluginSDKReplace applies [syncTFPluginSDKReplace] to each go.mod in repo that can
+// replace tfPluginSDK.
+func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, forkVersion string) step.Step {
 	updateModReplace := func(path string) error {
 		goModFile, err := os.ReadFile(path)
 		if err != nil {
@@ -493,12 +514,9 @@ func setTFPluginSDKReplace(ctx context.Context, repo ProviderRepo, targetSHA str
 			return fmt.Errorf("failed to parse go.mod: %w", err)
 		}
 
-		// Otherwise, we need to replace the old version. goMod.AddReplace
-		// will handle replacing existing `replace` directives.
-		err = goMod.AddReplace("github.com/hashicorp/terraform-plugin-sdk/v2", "",
-			"github.com/pulumi/terraform-plugin-sdk/v2", targetSHA)
+		err = syncTFPluginSDKReplace(goMod, forkVersion)
 		if err != nil {
-			return fmt.Errorf("failed to update version: %w", err)
+			return fmt.Errorf("failed to update replace: %w", err)
 		}
 
 		// We now write out the new file over the old file.
@@ -1049,12 +1067,12 @@ var planBridgeUpgrade = stepv2.Func11E("Planning Bridge Upgrade", func(
 	}
 })
 
+// planPluginSDKUpgrade returns the version of tfPluginSDKFork that the bridge at bridgeRef
+// replaces tfPluginSDK with. The version is empty if the bridge does not use the fork.
 var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 	ctx context.Context, bridgeRef string,
 ) (_, display string, _ error) {
 	defer func() { stepv2.SetLabel(ctx, display) }()
-
-	sdkv2 := "github.com/hashicorp/terraform-plugin-sdk/v2"
 
 	br, err := ParseRef(bridgeRef)
 	if err != nil {
@@ -1085,18 +1103,14 @@ var planPluginSDKUpgrade = stepv2.Func12E("Planning Plugin SDK Upgrade", func(
 		return "", "", fmt.Errorf("failed parse go.mod: %w", err)
 	}
 
-	version := ""
 	for _, re := range goMod.Replace {
-		if re.Old.Path == sdkv2 {
-			version = re.New.Version
+		if re.Old.Path == tfPluginSDK && re.New.Path == tfPluginSDKFork {
+			return re.New.Version, fmt.Sprintf("bridge %s needs terraform-plugin-sdk %s",
+				bridgeRef, re.New.Version), nil
 		}
 	}
 
-	if version == "" {
-		return "", "", fmt.Errorf("failed to find %v replace in bridge go.mod", sdkv2)
-	}
-
-	return version, fmt.Sprintf("bridge %s needs terraform-plugin-sdk %s", bridgeRef, version), nil
+	return "", fmt.Sprintf("bridge %s does not replace terraform-plugin-sdk", bridgeRef), nil
 })
 
 var parseUpstreamProviderOrg = stepv2.Func11E("Get UpstreamOrg from module version", func(ctx context.Context, upstreamMod module.Version) (string, error) {
