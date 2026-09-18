@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 
 	"github.com/pulumi/upgrade-provider/step/v2"
@@ -476,6 +478,116 @@ replace github.com/hashicorp/terraform-plugin-sdk/v2 => github.com/pulumi/terraf
 	    ]
 	  }
 	]`), "Planning Plugin SDK Upgrade", planPluginSDKUpgrade)
+}
+
+func TestPluginSDKUpgradeWithoutFork(t *testing.T) {
+	ctx := context.WithValue(context.Background(), httpHandlerKey, simpleHttpHandler(func(url string) ([]byte, error) {
+		if url == "https://raw.githubusercontent.com/pulumi/pulumi-terraform-bridge/v3.130.0/go.mod" {
+			return []byte(`
+module github.com/pulumi/pulumi-terraform-bridge/v3
+
+go 1.25
+
+require github.com/hashicorp/terraform-plugin-sdk/v2 v2.40.1
+
+replace github.com/pulumi/pulumi-terraform-bridge/x/muxer => ./x/muxer
+`), nil
+		}
+		return nil, fmt.Errorf("not found")
+	}))
+	testReplay((&Context{GoPath: "/Users/myuser/go"}).Wrap(ctx), t, jsonMarshal[[]*step.Step](t, `
+	[
+	  {
+	    "name": "Planning Plugin SDK Upgrade",
+	    "inputs": [
+	      "3.130.0"
+	    ],
+	    "outputs": [
+	      "",
+	      "bridge 3.130.0 does not replace terraform-plugin-sdk",
+	      null
+	    ]
+	  }
+	]`), "Planning Plugin SDK Upgrade", planPluginSDKUpgrade)
+}
+
+func TestSyncTFPluginSDKReplace(t *testing.T) {
+	t.Parallel()
+
+	const withFork = `module github.com/pulumi/pulumi-xyz/provider
+
+go 1.25
+
+require github.com/hashicorp/terraform-plugin-sdk/v2 v2.40.1
+
+replace (
+	github.com/hashicorp/terraform-plugin-sdk/v2 => github.com/pulumi/terraform-plugin-sdk/v2 v2.0.0-20240129205329-74776a5cd5f9
+	github.com/hashicorp/vault => github.com/hashicorp/vault v1.2.0
+)
+`
+
+	const withoutFork = `module github.com/pulumi/pulumi-xyz/provider
+
+go 1.25
+
+require github.com/hashicorp/terraform-plugin-sdk/v2 v2.40.1
+
+replace github.com/hashicorp/vault => github.com/hashicorp/vault v1.2.0
+`
+
+	const withOtherFork = `module github.com/pulumi/pulumi-xyz/provider
+
+go 1.25
+
+require github.com/hashicorp/terraform-plugin-sdk/v2 v2.40.1
+
+replace github.com/hashicorp/terraform-plugin-sdk/v2 => github.com/example/terraform-plugin-sdk/v2 v2.40.1
+`
+
+	tests := []struct {
+		name        string
+		goMod       string
+		forkVersion string
+		expected    string
+	}{
+		{
+			name:        "bridge fork version replaces provider fork version",
+			goMod:       withFork,
+			forkVersion: "v2.0.0-20250530111747-935112552988",
+			expected: strings.ReplaceAll(withFork,
+				"v2.0.0-20240129205329-74776a5cd5f9", "v2.0.0-20250530111747-935112552988"),
+		},
+		{
+			name:     "bridge without fork removes provider fork",
+			goMod:    withFork,
+			expected: withoutFork,
+		},
+		{
+			name:     "bridge without fork leaves provider without fork unchanged",
+			goMod:    withoutFork,
+			expected: withoutFork,
+		},
+		{
+			name:     "bridge without fork keeps a replace that is not the pulumi fork",
+			goMod:    withOtherFork,
+			expected: withOtherFork,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			goMod, err := modfile.Parse("go.mod", []byte(tt.goMod), nil)
+			require.NoError(t, err)
+
+			require.NoError(t, syncTFPluginSDKReplace(goMod, tt.forkVersion))
+
+			goMod.Cleanup()
+			actual, err := goMod.Format()
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, string(actual))
+		})
+	}
 }
 
 type simpleHttpHandler func(string) ([]byte, error)

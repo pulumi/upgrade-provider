@@ -193,8 +193,10 @@ func UpgradeProvider(ctx context.Context, repoOrg, repoName string) (err error) 
 	var steps []step.Step
 
 	steps = append(steps, step.Computed(func() step.Step {
-		// No upgrade was planned, so exit
-		if tfSDKTargetSHA == "" {
+		// The plugin SDK follows the bridge, so there is no work without a
+		// bridge upgrade. An empty tfSDKTargetSHA is not a signal to exit: it
+		// tells setTFPluginSDKReplace to remove the fork.
+		if targetBridgeVersion == nil {
 			return nil
 		}
 		steps := []step.Step{}
