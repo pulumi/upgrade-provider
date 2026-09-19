@@ -35,7 +35,7 @@ go install github.com/pulumi/upgrade-provider@main
 
 ## Requirements
 
-- Go version `1.23`
+- Go version `1.27`
 - `git` version `>=2.36.0`
 - [GitHub CLI](https://cli.github.com/)
 
