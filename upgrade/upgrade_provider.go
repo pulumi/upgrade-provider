@@ -577,14 +577,82 @@ func runMiseUpgrade(
 	// the new install dirs to PATH but does not remove the old ones, and the
 	// old entries appear ahead of the new ones, so without this PATH lookup
 	// keeps finding the stale binary.
-	if oldPulumi != "" && oldPulumi != version {
-		stepv2.Cmd(ctx, "mise", "uninstall", "github:pulumi/pulumi@"+oldPulumi)
-	}
-	if oldGo != "" && oldGo != goVersion {
-		stepv2.Cmd(ctx, "mise", "uninstall", "go@"+oldGo)
-	}
+	uninstallStaleMiseVersions(ctx, "github:pulumi/pulumi", oldPulumi, version)
+	uninstallStaleMiseVersions(ctx, "go", oldGo, goVersion)
 
 	return ctx, true
+}
+
+// uninstallStaleMiseVersions removes the installed versions of tool that
+// matched the previous (pre-bump) version selector oldSelector but do not
+// match the new selector newSelector.
+//
+// The selectors may be version prefixes (e.g. "1.26" from a `go 1.26`
+// directive), and `mise uninstall tool@<prefix>` fails with "multiple tools
+// specified" when more than one installed version matches the prefix. It
+// could also remove the version that was just installed for the new selector
+// (e.g. old "1.26" and new "1.26.2"). To avoid both problems, resolve the
+// installed versions ourselves and uninstall each stale one by its exact
+// version.
+func uninstallStaleMiseVersions(ctx context.Context, tool, oldSelector, newSelector string) {
+	if oldSelector == "" || oldSelector == newSelector {
+		return
+	}
+
+	out := stepv2.Cmd(ctx, "mise", "ls", "--installed", "--json", tool)
+	installed, err := parseMiseInstalledVersions(out)
+	stepv2.HaltOnError(ctx, err)
+
+	for _, v := range staleMiseVersions(installed, oldSelector, newSelector) {
+		stepv2.Cmd(ctx, "mise", "uninstall", tool+"@"+v)
+	}
+}
+
+// parseMiseInstalledVersions parses the output of
+// `mise ls --installed --json <tool>` into a list of installed versions.
+func parseMiseInstalledVersions(out string) ([]string, error) {
+	if strings.TrimSpace(out) == "" {
+		return nil, nil
+	}
+	var entries []struct {
+		Version   string `json:"version"`
+		Installed *bool  `json:"installed"`
+	}
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		return nil, fmt.Errorf("parsing `mise ls --installed --json` output: %w", err)
+	}
+	versions := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.Version == "" || (e.Installed != nil && !*e.Installed) {
+			continue
+		}
+		versions = append(versions, e.Version)
+	}
+	return versions, nil
+}
+
+// staleMiseVersions returns the versions in installed that match oldSelector
+// but not newSelector, in the order they appear in installed.
+func staleMiseVersions(installed []string, oldSelector, newSelector string) []string {
+	var stale []string
+	for _, v := range installed {
+		if miseVersionMatches(v, oldSelector) && !miseVersionMatches(v, newSelector) {
+			stale = append(stale, v)
+		}
+	}
+	return stale
+}
+
+// miseVersionMatches reports whether version is selected by the mise version
+// selector, which is either an exact version or a version prefix (e.g.
+// "1.26" selects "1.26.0" and "1.26.3" but not "1.260.0").
+func miseVersionMatches(version, selector string) bool {
+	version = strings.TrimPrefix(version, "v")
+	selector = strings.TrimPrefix(selector, "v")
+	if selector == "" {
+		return false
+	}
+	return version == selector || strings.HasPrefix(version, selector+".")
 }
 
 func setMiseEnv(
