@@ -555,6 +555,10 @@ func runMiseUpgrade(
 
 	version := strings.TrimPrefix(pulumiVersion, "v")
 
+	// Trust templated config before querying it, while preserving the old selectors.
+	ctx = setMiseEnv(ctx, env, current, "MISE_TRUSTED_CONFIG_PATHS", repo.root)
+	ctx = setMiseEnv(ctx, env, current, "MISE_YES", "1")
+
 	// Resolve the current project's installed versions before overriding its
 	// selectors. A prefix such as "1.26" can match other projects' installs,
 	// which must not be removed by this upgrade.
@@ -563,8 +567,6 @@ func runMiseUpgrade(
 
 	ctx = setMiseEnv(ctx, env, current, "PULUMI_VERSION_MISE", version)
 	ctx = setMiseEnv(ctx, env, current, "GO_VERSION_MISE", goVersion)
-	ctx = setMiseEnv(ctx, env, current, "MISE_TRUSTED_CONFIG_PATHS", repo.root)
-	ctx = setMiseEnv(ctx, env, current, "MISE_YES", "1")
 
 	// `mise install` with no arguments installs everything declared in the
 	// repository's Mise config, not just the tools upgrade-provider owns.

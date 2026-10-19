@@ -22,6 +22,7 @@ import (
 //
 // Current versions are read from $FAKE_MISE_CURRENT_DIR/<tool>-<selector>.json.
 // An unfiltered Go listing returns $FAKE_MISE_LS_GO, the shared inventory.
+// Queries require $FAKE_MISE_REQUIRED_TRUST to be trusted when it is set.
 func writeFakeMise(t *testing.T, logFile string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -38,6 +39,10 @@ for a in "$@"; do
 done
 printf '[%s]\n' "$args" >> "` + logFile + `"
 if [ "$1" = "ls" ]; then
+  if [ -n "$FAKE_MISE_REQUIRED_TRUST" ] && [ "$MISE_TRUSTED_CONFIG_PATHS" != "$FAKE_MISE_REQUIRED_TRUST" ]; then
+    echo 'mise config is not trusted' >&2
+    exit 1
+  fi
   for a in "$@"; do tool="$a"; done
   if [ "$2" = "--current" ]; then
     case "$tool" in
@@ -191,6 +196,9 @@ func TestRunMiseUpgradeOnlyUninstallsPreviouslySelectedVersions(t *testing.T) {
 			require.NoError(t, os.MkdirAll(filepath.Join(root, "provider"), 0o755))
 			modFile := filepath.Join(root, "provider", "go.mod")
 			require.NoError(t, os.WriteFile(modFile, []byte(providerGoModWithGoAndPulumi), 0o600))
+			// Fresh checkouts need trust before templated configs can be queried.
+			t.Setenv("MISE_TRUSTED_CONFIG_PATHS", "")
+			t.Setenv("FAKE_MISE_REQUIRED_TRUST", root)
 
 			// Prefix selectors may resolve to only one of several shared installs.
 			t.Setenv("GO_VERSION_MISE", "1.24")
