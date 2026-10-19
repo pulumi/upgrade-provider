@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,6 +19,10 @@ import (
 // writeFakeMise installs a fake "mise" executable on PATH that records every
 // invocation (as a JSON array of argv slices) to logFile. It exits
 // successfully for every subcommand it needs to support in these tests.
+//
+// Current versions are read from $FAKE_MISE_CURRENT_DIR/<tool>-<selector>.json.
+// An unfiltered Go listing returns $FAKE_MISE_LS_GO, the shared inventory.
+// Queries require $FAKE_MISE_REQUIRED_TRUST to be trusted when it is set.
 func writeFakeMise(t *testing.T, logFile string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -33,6 +38,27 @@ for a in "$@"; do
   sep=","
 done
 printf '[%s]\n' "$args" >> "` + logFile + `"
+if [ "$1" = "ls" ]; then
+  if [ -n "$FAKE_MISE_REQUIRED_TRUST" ] && [ "$MISE_TRUSTED_CONFIG_PATHS" != "$FAKE_MISE_REQUIRED_TRUST" ]; then
+    echo 'mise config is not trusted' >&2
+    exit 1
+  fi
+  for a in "$@"; do tool="$a"; done
+  if [ "$2" = "--current" ]; then
+    case "$tool" in
+      go) selector="$GO_VERSION_MISE" ;;
+      github:pulumi/pulumi) tool="pulumi"; selector="$PULUMI_VERSION_MISE" ;;
+    esac
+    fixture="$FAKE_MISE_CURRENT_DIR/$tool-$selector.json"
+    if [ -f "$fixture" ]; then
+      cat "$fixture"
+    else
+      printf '[]'
+    fi
+  elif [ "$tool" = "go" ] && [ -n "$FAKE_MISE_LS_GO" ]; then
+    printf '%s' "$FAKE_MISE_LS_GO"
+  fi
+fi
 exit 0
 `
 	misePath := filepath.Join(binDir, "mise")
@@ -126,4 +152,128 @@ func TestRunMiseUpgradeScopesInstallAndUpgradeToGoAndPulumi(t *testing.T) {
 		assert.NotContains(t, argv, "nodejs")
 		assert.NotContains(t, argv, "node")
 	}
+}
+
+func TestRunMiseUpgradeOnlyUninstallsPreviouslySelectedVersions(t *testing.T) {
+	tests := []struct {
+		name         string
+		oldGo        string
+		oldPulumi    string
+		secondPass   bool
+		missingNewGo bool
+		expected     [][]string
+	}{
+		{
+			name:  "preserve unrelated installed versions",
+			oldGo: "1.24.10", oldPulumi: "3.186.2",
+			expected: [][]string{{"uninstall", "github:pulumi/pulumi@3.186.2"}, {"uninstall", "go@1.24.10"}},
+		},
+		{
+			name:  "selectors resolve to the same installations",
+			oldGo: "1.24.6", oldPulumi: "3.187.0",
+		},
+		{
+			name: "old versions are not installed",
+		},
+		{
+			name:  "do not remove old Go when the new installation cannot be resolved",
+			oldGo: "1.24.10", oldPulumi: "3.187.0", missingNewGo: true,
+		},
+		{
+			name:  "second pass cleans up the first pass versions",
+			oldGo: "1.24.10", oldPulumi: "3.186.2", secondPass: true,
+			expected: [][]string{
+				{"uninstall", "github:pulumi/pulumi@3.186.2"}, {"uninstall", "go@1.24.10"},
+				{"uninstall", "github:pulumi/pulumi@3.187.0"}, {"uninstall", "go@1.24.6"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logFile := filepath.Join(t.TempDir(), "mise-invocations.json")
+			writeFakeMise(t, logFile)
+			root := t.TempDir()
+			require.NoError(t, os.MkdirAll(filepath.Join(root, "provider"), 0o755))
+			modFile := filepath.Join(root, "provider", "go.mod")
+			require.NoError(t, os.WriteFile(modFile, []byte(providerGoModWithGoAndPulumi), 0o600))
+			// Fresh checkouts need trust before templated configs can be queried.
+			t.Setenv("MISE_TRUSTED_CONFIG_PATHS", "")
+			t.Setenv("FAKE_MISE_REQUIRED_TRUST", root)
+
+			// Prefix selectors may resolve to only one of several shared installs.
+			t.Setenv("GO_VERSION_MISE", "1.24")
+			t.Setenv("PULUMI_VERSION_MISE", "3.186")
+			t.Setenv("FAKE_MISE_LS_GO", `[
+  {"version":"1.24.2","installed":true},
+  {"version":"1.24.6","installed":true},
+  {"version":"1.24.10","installed":true},
+  {"version":"1.25.0","installed":true}
+]`)
+			fixtures := t.TempDir()
+			t.Setenv("FAKE_MISE_CURRENT_DIR", fixtures)
+			for name, version := range map[string]string{
+				"go-1.24": tt.oldGo, "go-1.24.6": "1.24.6", "go-1.25.1": "1.25.1",
+				"pulumi-3.186": tt.oldPulumi, "pulumi-3.187.0": "3.187.0", "pulumi-3.188.0": "3.188.0",
+			} {
+				if tt.missingNewGo && name == "go-1.24.6" {
+					version = ""
+				}
+				entries := []map[string]any{}
+				if version != "" {
+					entries = append(entries, map[string]any{"version": version, "installed": true})
+				}
+				data, err := json.Marshal(entries)
+				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(filepath.Join(fixtures, name+".json"), data, 0o600))
+			}
+
+			repo := ProviderRepo{root: root}
+			err := stepv2.PipelineCtx(context.Background(), "test", func(ctx context.Context) {
+				env := []stepv2.Env{&stepv2.SetCwd{To: root}}
+				ctx = stepv2.WithEnv(ctx, env...)
+				current := map[string]*stepv2.EnvVar{}
+				ctx, _ = runMiseUpgrade(ctx, repo, &env, current)
+				if tt.secondPass {
+					// Tidy can raise the versions required by provider/go.mod.
+					updated := strings.ReplaceAll(providerGoModWithGoAndPulumi, "1.24.6", "1.25.1")
+					updated = strings.ReplaceAll(updated, "3.187.0", "3.188.0")
+					require.NoError(t, os.WriteFile(modFile, []byte(updated), 0o600))
+					runMiseUpgrade(ctx, repo, &env, current)
+				}
+			})
+			if tt.missingNewGo {
+				require.ErrorContains(t, err, "mise did not resolve an installed current version of go")
+			} else {
+				require.NoError(t, err)
+			}
+
+			var uninstalls [][]string
+			for _, argv := range readMiseInvocations(t, logFile) {
+				if argv[0] == "ls" {
+					assert.Equal(t, []string{"--current", "--installed", "--json"}, argv[1:len(argv)-1])
+				}
+				if argv[0] == "uninstall" {
+					uninstalls = append(uninstalls, argv)
+				}
+			}
+			assert.Equal(t, tt.expected, uninstalls)
+		})
+	}
+}
+
+func TestParseMiseInstalledVersions(t *testing.T) {
+	versions, err := parseMiseInstalledVersions("")
+	require.NoError(t, err)
+	assert.Empty(t, versions)
+
+	versions, err = parseMiseInstalledVersions(`[
+  {"version": "1.25.1", "install_path": "/x/1.25.1", "installed": true, "active": false},
+  {"version": "1.25.2", "install_path": "/x/1.25.2", "installed": false, "active": false},
+  {"version": "1.25.3", "install_path": "/x/1.25.3"}
+]`)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1.25.1", "1.25.3"}, versions)
+
+	_, err = parseMiseInstalledVersions("not json")
+	assert.Error(t, err)
 }

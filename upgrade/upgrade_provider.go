@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/pulumi/upgrade-provider/colorize"
@@ -554,16 +555,18 @@ func runMiseUpgrade(
 
 	version := strings.TrimPrefix(pulumiVersion, "v")
 
-	// Capture the previous (pre-bump) versions before setMiseEnv overrides
-	// them. We uninstall them after the new versions are installed so that
-	// PATH lookup doesn't shadow the new install dir with the stale one.
-	oldPulumi := os.Getenv("PULUMI_VERSION_MISE")
-	oldGo := os.Getenv("GO_VERSION_MISE")
+	// Trust templated config before querying it, while preserving the old selectors.
+	ctx = setMiseEnv(ctx, env, current, "MISE_TRUSTED_CONFIG_PATHS", repo.root)
+	ctx = setMiseEnv(ctx, env, current, "MISE_YES", "1")
+
+	// Resolve the current project's installed versions before overriding its
+	// selectors. A prefix such as "1.26" can match other projects' installs,
+	// which must not be removed by this upgrade.
+	oldPulumi := currentMiseVersions(ctx, "github:pulumi/pulumi")
+	oldGo := currentMiseVersions(ctx, "go")
 
 	ctx = setMiseEnv(ctx, env, current, "PULUMI_VERSION_MISE", version)
 	ctx = setMiseEnv(ctx, env, current, "GO_VERSION_MISE", goVersion)
-	ctx = setMiseEnv(ctx, env, current, "MISE_TRUSTED_CONFIG_PATHS", repo.root)
-	ctx = setMiseEnv(ctx, env, current, "MISE_YES", "1")
 
 	// `mise install` with no arguments installs everything declared in the
 	// repository's Mise config, not just the tools upgrade-provider owns.
@@ -577,14 +580,59 @@ func runMiseUpgrade(
 	// the new install dirs to PATH but does not remove the old ones, and the
 	// old entries appear ahead of the new ones, so without this PATH lookup
 	// keeps finding the stale binary.
-	if oldPulumi != "" && oldPulumi != version {
-		stepv2.Cmd(ctx, "mise", "uninstall", "github:pulumi/pulumi@"+oldPulumi)
-	}
-	if oldGo != "" && oldGo != goVersion {
-		stepv2.Cmd(ctx, "mise", "uninstall", "go@"+oldGo)
-	}
+	uninstallStaleMiseVersions(ctx, "github:pulumi/pulumi", oldPulumi)
+	uninstallStaleMiseVersions(ctx, "go", oldGo)
 
 	return ctx, true
+}
+
+// currentMiseVersions resolves only the installed versions selected by the
+// current project's effective Mise configuration, not the shared inventory.
+func currentMiseVersions(ctx context.Context, tool string) []string {
+	out := stepv2.Cmd(ctx, "mise", "ls", "--current", "--installed", "--json", tool)
+	versions, err := parseMiseInstalledVersions(out)
+	stepv2.HaltOnError(ctx, err)
+	return versions
+}
+
+// uninstallStaleMiseVersions removes only the project's previously selected
+// installations, preserving any that are still selected after the upgrade.
+func uninstallStaleMiseVersions(ctx context.Context, tool string, oldVersions []string) {
+	if len(oldVersions) == 0 {
+		return
+	}
+	newVersions := currentMiseVersions(ctx, tool)
+	if len(newVersions) == 0 {
+		stepv2.HaltOnError(ctx, fmt.Errorf("mise did not resolve an installed current version of %s after upgrade", tool))
+	}
+	for _, version := range oldVersions {
+		if !slices.Contains(newVersions, version) {
+			stepv2.Cmd(ctx, "mise", "uninstall", tool+"@"+version)
+		}
+	}
+}
+
+// parseMiseInstalledVersions parses the output of
+// `mise ls --installed --json <tool>` into a list of installed versions.
+func parseMiseInstalledVersions(out string) ([]string, error) {
+	if strings.TrimSpace(out) == "" {
+		return nil, nil
+	}
+	var entries []struct {
+		Version   string `json:"version"`
+		Installed *bool  `json:"installed"`
+	}
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		return nil, fmt.Errorf("parsing `mise ls --installed --json` output: %w", err)
+	}
+	versions := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.Version == "" || (e.Installed != nil && !*e.Installed) {
+			continue
+		}
+		versions = append(versions, e.Version)
+	}
+	return versions, nil
 }
 
 func setMiseEnv(
