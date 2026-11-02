@@ -261,6 +261,81 @@ func TestRunMiseUpgradeOnlyUninstallsPreviouslySelectedVersions(t *testing.T) {
 	}
 }
 
+// Exercise the generation workflow with an isolated plugin cache and executable
+// stubs. Both generation targets must be able to run a preinstalled language
+// plugin, even when the workflow refreshes its toolchain through mise.
+func TestTfgenAndBuildSDKsPreservesInstalledPlugins(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable stubs require a POSIX shell")
+	}
+	for _, withMise := range []bool{false, true} {
+		name := "without mise"
+		if withMise {
+			name = "with mise"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Chdir(root)
+			bin := t.TempDir()
+			home := t.TempDir()
+			t.Setenv("PATH", bin)
+			t.Setenv("PULUMI_HOME", home)
+			log := filepath.Join(root, "generation.log")
+			t.Setenv("GENERATION_LOG", log)
+			pluginDir := filepath.Join(home, "plugins", "language-java-v1.0.0")
+			require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+			plugin := filepath.Join(pluginDir, "pulumi-language-java")
+			pluginScript := "#!/bin/sh\nprintf 'java plugin available\\n'\n"
+			require.NoError(t, os.WriteFile(plugin, []byte(pluginScript), 0o755))
+			for _, dir := range []string{"provider", "examples", "sdk"} {
+				require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(root, "provider", "go.mod"),
+				[]byte(providerGoModWithGoAndPulumi), 0o600))
+
+			scripts := map[string]string{
+				"go":  "exit 0\n",
+				"git": "exit 0\n",
+				// Model the destructive effect of plugin removal only in the test cache.
+				"pulumi": `if [ "$1" = plugin ] && [ "$2" = rm ]; then
+  /bin/rm -rf "$PULUMI_HOME/plugins"
+else
+  exit 1
+fi
+`,
+				"make": `set -eu
+output=$("$PULUMI_HOME/plugins/language-java-v1.0.0/pulumi-language-java")
+[ "$output" = 'java plugin available' ]
+printf '%s\n' "$1" >> "$GENERATION_LOG"
+`,
+			}
+			if withMise {
+				scripts["mise"] = `case "$1" in
+  ls) printf '[]' ;;
+  env) printf '{}' ;;
+esac
+`
+			}
+			for command, script := range scripts {
+				require.NoError(t, os.WriteFile(filepath.Join(bin, command),
+					[]byte("#!/bin/sh\n"+script), 0o755))
+			}
+
+			ctx := (&Context{NoSubmit: true}).Wrap(context.Background())
+			var prURL string
+			err := stepv2.PipelineCtx(ctx, "generation", stepv2.Func00("Tfgen & Build SDKs", tfgenAndBuildSDKs(
+				ProviderRepo{root: root}, "pulumi/pulumi-fake", nil, nil, nil, "", &prURL)), stepv2.NullDisplay)
+			require.NoError(t, err)
+			generated, err := os.ReadFile(log)
+			require.NoError(t, err)
+			assert.Equal(t, "tfgen\ngenerate_sdks\n", string(generated))
+			preserved, err := os.ReadFile(plugin)
+			require.NoError(t, err)
+			assert.Equal(t, pluginScript, string(preserved))
+		})
+	}
+}
+
 func TestParseMiseInstalledVersions(t *testing.T) {
 	versions, err := parseMiseInstalledVersions("")
 	require.NoError(t, err)

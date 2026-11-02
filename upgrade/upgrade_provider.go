@@ -489,8 +489,6 @@ func tfgenAndBuildSDKs(
 			}
 		}
 
-		stepv2.Cmd(ctx, "pulumi", "plugin", "rm", "--all", "--yes")
-
 		stepv2.Cmd(ctx, "make", "tfgen")
 
 		stepv2.Cmd(ctx, "git", "add", "--all")

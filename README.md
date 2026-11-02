@@ -41,6 +41,10 @@ go install github.com/pulumi/upgrade-provider@main
 
 Additionally, `upgrade-provider` relies on all tools necessary for a manual provider upgrade.
 That generally means `pulumi`, `make`, and the build toolchain for each released SDK.
+Provider repositories are responsible for installing and selecting the plugin versions
+needed for generation, for example through mise configuration and install hooks.
+`upgrade-provider` preserves installed Pulumi plugins, including language plugins in
+`PULUMI_HOME/plugins`, when running `make tfgen` and `make generate_sdks`.
 
 Global Git configuration is not required for patched-provider upgrades. Immediately
 before running the `scripts/upstream.sh` patch workflow, `upgrade-provider` resolves
@@ -143,7 +147,6 @@ A typical run for a patched provider with an upgrade configuration file will loo
 - ✓ Lookup Tag SHA: 9c69643a31d91d0f3d249f7aea3beeefc53880ae
 - ✓ /usr/local/bin/go get github.com/Snowflake-Labs/terraform-provider-snowflake@9c6...: done
 - ✓ /usr/local/bin/go mod tidy: done
-- ✓ /Users/ianwahbe/go/bin/pulumi plugin rm --all --yes: done
 - ✓ /usr/bin/make tfgen: done
 - ✓ /usr/local/bin/git add --all: done
 - ✓ /usr/local/bin/git commit -m make tfgen: done
@@ -239,7 +242,6 @@ already applies:
 ok = step.Run(step.Combined("Upgrading Provider",
 		append(steps,
 			step.Cmd(exec.CommandContext(ctx, "go", "mod", "tidy")).In(&providerPath),
-			step.Cmd(exec.CommandContext(ctx, "pulumi", "plugin", "rm", "--all", "--yes")),
 			step.Cmd(exec.CommandContext(ctx, "make", "tfgen")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "add", "--all")).In(&path),
 			step.Cmd(exec.CommandContext(ctx, "git", "commit", "-m", "make tfgen")).In(&path),
